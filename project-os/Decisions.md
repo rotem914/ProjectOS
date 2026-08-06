@@ -14,6 +14,11 @@ chosen, so nobody re-argues it in six months and nobody quietly undoes it.
 - **A changed decision is superseded, not edited.** Write a new entry naming the
   one it replaces, and italicize the old line in the Index so nobody follows a
   rule that has moved.
+- **A fully replaced entry may move to an archive.** When superseded entries pile
+  up, create `Decisions-archive.md` beside this file — the first time you need
+  it, not before — and move the entry verbatim: never rewritten, never
+  summarized. Its Index line stays here, marked superseded, so the trail
+  survives.
 - Every new entry also gets a line in the Index, in the same change. The Index is
   the part people read; an entry missing from it is an entry nobody opens.
 - Use the required format below. All four parts, every time — an entry without
