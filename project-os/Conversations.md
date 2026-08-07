@@ -175,7 +175,7 @@ Two sentences sharing a line get read as one, and the second is the one lost.
 ~~~
 The build failed on the third check.
 The cause is a missing id on the new entry.
-Run `{{CHECK_COMMAND}}` again after adding it and it goes green.
+Add the id, rerun the check, and it goes green.
 ~~~
 
 ### 6 · Short sentences
@@ -368,7 +368,9 @@ Three pages, no console errors, saving survives a reload.
 # Next
 
 The form needs one call from you:
-send through your own server, or a managed service?
+
+1) Send through your own server.
+2) Use a managed service.
 ~~~
 
 ### 14 · Plain language — the owner's words, never the code's
@@ -403,8 +405,8 @@ Instead:
 A page can vanish from the live site and the build will not notice.
 
 ```text
-Reference (skippable): traversal above the source root;
-two write paths uncovered by the check.
+Reference (skippable): ../ traversal above src/;
+the -f and --force write paths uncovered by the check.
 ```
 ~~~
 
@@ -419,9 +421,9 @@ The correction then strips the layout, which is the wrong half to cut.
 The numbers live in rule 1 only, so this rule can never drift from them.
 
 ~~~
-The file is close to its ceiling.
-Past it, the last rules drop off the end.
-Fix: keep the rules, move the explanations out.
+The slow page is the query, not the rendering.
+It refetches the whole list on every keystroke.
+Fix: fetch once, filter in memory.
 ~~~
 
 ### 16 · One home — never open a second file
