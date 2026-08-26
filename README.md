@@ -26,7 +26,7 @@ A file is the only part of your working relationship that survives a new session
 | `project-os/Code_review.md` | How risky changes get reviewed, and what counts as risky enough to trigger one. |
 | `project-os/Visual_QA.md` | How the running app gets tested by actually using it, not by reading the diff and hoping. |
 
-**Four living files.** These arrive nearly empty on purpose. They are yours to fill.
+**Five living files.** These arrive nearly empty on purpose. They are yours to fill.
 
 | File | What it becomes |
 |---|---|
@@ -34,21 +34,31 @@ A file is the only part of your working relationship that survives a new session
 | `project-os/Map.md` | Where things live in your project. Written once you have something to map. |
 | `project-os/History.md` | What changed and what was checked, one row per task. Useful from about the tenth row. |
 | `project-os/Decisions.md` | Why a non-obvious choice was made, so nobody re-litigates it in three months. |
+| `project-os/BugAtlas.md` | The map of bugs that came back. A symptom seen twice gets its cause and fix on record, so the third time costs minutes. |
 
 Each one ships with its structure already in place and a worked example at the end, in a block marked for deletion. That is all a kit can give you here. They are worth nothing on day one and a great deal on day sixty, and no starter kit can fake that difference.
 
 **Two tool files.** `project-os/mcp/Figma/Figma_MCP_Rules.md` holds working rules for the Figma MCP server: the call budget discipline, the hard caps, and the traps that fail silently. `project-os/mcp/Google_analytics/Google_Analytics_MCP_Rules.md` holds the wiring and reading rules for the official GA4 MCP server: key-outside-the-repo authorization, and never quoting a number that did not come from a tool call. Every rule in them was paid for in real use. Delete the folder of any server your project never touches; a different server earns its own folder there the first time it bites.
 
+**One install file.** `Installation.md` is the complete install law: the merge rules for a project that already has a `CLAUDE.md`, the placeholder list, the setup steps, and the closing report the install owes you, problems and clashes included. Used once, then kept or deleted at your word.
+
 ## Install
 
 Under ten minutes, and most of that is the assistant reading.
 
-1. Copy `CLAUDE.md` and the `project-os/` folder into the root of your project.
+The complete install law lives in `Installation.md`: the merge rules for an
+existing `CLAUDE.md`, the placeholders, the setup steps, and the report the
+install must end with, problems and clashes included.
+
+1. Copy `CLAUDE.md`, `Installation.md` and the `project-os/` folder into the
+   root of your project.
    Already have a `CLAUDE.md`? Keep yours: bring the kit's in as `CLAUDE-kit.md`
-   beside it, and the prompt below has your assistant merge the two.
+   beside it, and the install has your assistant merge the two.
 2. Paste the install prompt below into your assistant.
 3. Answer its questions. It asks once, in one batch.
-4. Commit the result.
+4. Read its closing report: what was set, what broke, and where your existing
+   rules clash with the kit's process.
+5. Commit the result.
 
 ## The install prompt
 
@@ -57,69 +67,21 @@ Copy this whole block and paste it into your assistant, in your project.
 ```
 Set up ProjectOS — the files I just copied into this project.
 
-1. Read CLAUDE.md and every file in project-os/, its mcp/ subfolder included.
-   All of them, in full, before you change anything. If the kit's entry file came in as CLAUDE-kit.md
-   beside an existing CLAUDE.md, fold it into the existing file — the
-   existing rules win every clash, each clash goes in your report — and
-   delete CLAUDE-kit.md when done.
+Read Installation.md at the project root and follow it exactly, every step,
+in order. Do not change anything before its reading step is complete.
 
-2. Work out from the repo itself everything you can: the project name, the
-   stack (framework, data store, host), the command that runs the app locally
-   and the URL it serves on, and the command that builds / typechecks / tests.
-   Read package manifests, config files, lockfiles, CI config and existing
-   docs. Do not guess where you can check. Run the check command once on the
-   untouched project: if it fails, that becomes a question for me, never the
-   standing check.
-
-3. Ask me only what the repo cannot tell you. Send every question in ONE
-   message, not one at a time. At minimum:
-   - my name,
-   - my role on this project,
-   - how I want you to talk to me: language, tone, how blunt, how long,
-   - whatever step 2 came up empty on — the host, a check command that
-     passes.
-
-4. Replace every placeholder — the values written in double curly braces —
-   with the real thing, in CLAUDE.md and every file under project-os/. None
-   may survive there. Where an answer is missing, write the honest state
-   ("not hosted yet") and flag it — never a guess. If the project uses no
-   Figma or no Google Analytics, ask me whether to delete that folder under
-   project-os/mcp/ instead of filling its setup table.
-
-5. Do the setup steps the files carry, then clear the scaffolding: fill the
-   marked setup blocks (the project description in CLAUDE.md, the reply
-   language and dial in project-os/Conversations.md), replace the skeleton
-   tree in project-os/Map.md with the real one and fill its Data and
-   Ownership tables, then delete the example blocks at the end of Map.md,
-   History.md, Decisions.md and Backlog.md — they only show the shape. The
-   example rows inside Code_review.md and Visual_QA.md carry their own
-   instruction and stay. So do the blocks you cannot fill yet — the project
-   invariants, the worst-bug-class lines; name them in your report as
-   waiting on me.
-
-6. Log the install itself as the first two rows in project-os/History.md —
-   the kit's rules apply to the kit. Then report back: what you set and
-   where you got it, what you asked me, what is still waiting on me — and
-   that the phrase "full report" lifts the reply-length ceiling when I want
-   the long version. If a rule in the kit contradicts how this project
-   actually works, say so instead of quietly adapting it.
+The install ends with the report Installation.md defines: what was set, every
+problem you hit, every clash between this project's existing rules and the
+kit's process, and what is waiting on me. No clash is resolved by an override
+without my verdict.
 ```
 
 ## The placeholders
 
-| Token | What it means | Example |
-|---|---|---|
-| `{{PROJECT_NAME}}` | The project's name | Northwind Dashboard |
-| `{{OWNER_NAME}}` | The person the assistant works for | Alex Rivera |
-| `{{OWNER_ROLE}}` | Their role on this project | product designer |
-| `{{PROJECT_ROOT}}` | Absolute path to the project folder | /Users/alex/code/northwind |
-| `{{DEV_URL}}` | Where the app runs locally | http://localhost:3000 |
-| `{{STACK}}` | One line: framework, data store, host | server-rendered web app · SQL database · managed cloud host |
-| `{{CHECK_COMMAND}}` | The build / typecheck / test command | npm run build && npm test |
-
-The two tool files under `project-os/mcp/` carry a few more (the Figma file
-key and target page, the Cloud project, the GA4 property), each inside a
-marked setup table with its own fill-or-delete instruction.
+Every value written in double curly braces is a placeholder, and none may
+survive the install. The full token list, with meanings and examples, lives in
+`Installation.md` step 5; the two tool files under `project-os/mcp/` carry a
+few more inside marked setup tables of their own.
 
 ## Which assistants this fits
 
@@ -141,4 +103,4 @@ Write it as law, not as advice. An assistant follows a stated invariant exactly.
 
 MIT — see `LICENSE`. Use it, change it, ship it in paid work.
 
-Its copyright line still holds `{{YEAR}}` and `{{OWNER_NAME}}`. Fill those in if you republish the kit under your own name; leave them alone if you are just using it, since the install copies `CLAUDE.md` and `project-os/` into your project and leaves the license behind.
+Its copyright line still holds `{{YEAR}}` and `{{OWNER_NAME}}`. Fill those in if you republish the kit under your own name; leave them alone if you are just using it, since the install copies `CLAUDE.md`, `Installation.md` and `project-os/` into your project and leaves the license behind.

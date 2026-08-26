@@ -50,6 +50,9 @@ Read this file first. Then the docs in `project-os/`, in this order:
    Load it when a review is due (rule 17).
 9. `project-os/Visual_QA.md` — how the running app gets tested by using it. Load
    it when the task changes something a person can see.
+10. `project-os/BugAtlas.md` — the project's recurring bug classes. Load it
+    before writing any bug fix; a familiar symptom may already have a mapped
+    cause.
 
 When a task goes through an MCP server (Figma, analytics, any tool that talks
 to an outside service), also read that server's rules doc under
@@ -304,6 +307,82 @@ them.
 This sits on top of rule 2. Rule 2 says do not solve more of the problem than
 asked. Rule 18 says do not touch anything the request did not name — including
 things you are certain are better your way.
+
+### 19. The same bug twice becomes an atlas row
+
+When a bug pattern appears a second time, or a fix took several attempts
+because the real cause was hidden, add or update a row in
+`project-os/BugAtlas.md` in the same task. Before writing any bug fix, check
+that file for a matching symptom first.
+
+History says a bug was fixed once. The atlas says it is a CLASS, and hands the
+next session the cause and the fix that held. Without it, the third occurrence
+costs as much as the first.
+
+## Shortcuts (owner-triggered)
+
+Short owner phrases that map to a fixed multi-step flow.
+Run a flow only when the owner types the exact phrase, case-insensitive.
+A casual "commit this" or "let's go fast" triggers nothing.
+
+### `FAST MODE`
+
+The owner checks every result themselves, in their own running app, so each
+round is edit, reply, next round.
+
+While it is on:
+
+- Make the requested change only; no risk-level statement.
+- Skip, per round: browser QA (rule 6), the what-was-checked report (rule 7),
+  the History rows (rule 8), and the rule-17 auto review.
+  The owner's own check replaces them.
+- Everything else still holds: smallest safe change (rule 2), no destructive
+  actions (rule 4), invariants (rule 11), never start the dev server (rule 16).
+- End every reply with a divider and then the line `Fast mode on`, alone.
+
+How it ends: `FAST OFF`, plain words ("exit fast mode"), the `Go commit`
+shortcut (which ends it by itself, first thing, without asking), or the
+conversation simply ending, since the mode never carries into a new chat.
+
+The skipped paperwork is deferred, not erased. The moment the mode ends, run
+the catch-up before anything else: ONE History row covering the whole burst,
+any Decisions entry the burst produced, any Backlog row an owner verdict
+earned. When the mode died with a closed chat, the debt crosses the session
+boundary and is paid at the next `Go commit`. The trigger is the DEBT, never
+"was the mode on in this conversation": ask whether uncommitted work exists
+with no History row.
+
+What the catch-up does NOT resurrect: the per-round QA and the auto review.
+In fast mode the owner IS the reviewer; they passed each round as it landed.
+If a round left something genuinely unverified, say so in one line.
+
+### `Go commit`
+
+Commit everything accumulated up to now, across sessions, not only this chat.
+
+> **Setup step — calibrate this flow at install, then delete this block.**
+> Ask the owner: which checks must pass before a commit, what must never be
+> staged beyond the defaults below, whether committing straight to the
+> current branch is allowed or each task gets its own branch, and who pushes.
+> Write the answers into the steps, replacing the bracketed parts.
+
+1. If FAST MODE is on, end it and pay its catch-up in full, first.
+2. `git status` plus `git diff`: see the whole uncommitted scope.
+3. Run the project checks [`{{CHECK_COMMAND}}`] and continue only if they
+   pass. A red check stops the commit; report it instead.
+4. Stage the intended files only. Never a blind add-everything, and never
+   env files, secrets, or generated junk.
+5. Commit with a clear message covering the full scope, [on the current
+   branch / on a task branch, per the owner's answer].
+6. Stop after the commit. [The owner pushes / open a PR, per their answer.]
+   Pushing is the owner's move unless they explicitly said otherwise.
+
+### `Backlog`
+
+When the owner says `Backlog` about an item, in any casing, append one row to
+`project-os/Backlog.md`: date, the item in plain words, source.
+That file's own rules apply: this trigger is the ONLY way in, done rows move
+to Done and are never deleted, and the Open table is scanned at task pickup.
 
 ## How to reply
 
