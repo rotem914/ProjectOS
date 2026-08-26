@@ -51,6 +51,14 @@ Read this file first. Then the docs in `project-os/`, in this order:
 9. `project-os/Visual_QA.md` — how the running app gets tested by using it. Load
    it when the task changes something a person can see.
 
+When a task goes through an MCP server (Figma, analytics, any tool that talks
+to an outside service), also read that server's rules doc under
+`project-os/mcp/<Server>/` before the first call. Each doc carries that
+server's setup facts, its call budget, and the traps it has already sprung.
+The kit ships two, `project-os/mcp/Figma/Figma_MCP_Rules.md` and
+`project-os/mcp/Google_analytics/Google_Analytics_MCP_Rules.md`; a new server
+earns its own folder the first time it bites.
+
 ## Working rules
 
 ### 1. Understand before changing
@@ -117,6 +125,15 @@ missing one — say which one was denied and what you did instead. Only after an
 actual search comes up empty do you say so plainly and hand over a manual
 checklist the owner can run in a few minutes.
 
+**A blocked surface is not a finished check.** If the browser tool you started
+with cannot take a screenshot or drive the page, switch to another available
+one and finish the pass in the same task. Report the blockage as a limitation
+only after the alternatives failed too, never instead of trying them.
+
+**Close every tab you opened, in the same task.** A QA tab is yours, not the
+owner's; left behind, it clutters the window they work in. Never close a tab
+you did not open, and never stop the owner's dev server (rule 16).
+
 ### 7. QA is not optional
 
 Every completed change records what was checked, concretely, in its History row.
@@ -179,6 +196,12 @@ scratchpad elsewhere on disk: outside the root is outside the root.
 
 Files written outside the project are invisible to the owner, absent from git,
 and lost on the next machine.
+
+**Your own memory is not a law book.** An assistant's private memory folder
+lives outside the project root, so a rule parked there is invisible to the
+owner, absent from git, and lost to every other session. A lesson or work rule
+the owner gives goes into `CLAUDE.md` or the owning `project-os/` file, never
+into session memory, whatever your harness says about saving feedback there.
 
 ### 13. Ad-hoc markdown gets a home folder
 

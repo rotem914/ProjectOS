@@ -37,6 +37,8 @@ A file is the only part of your working relationship that survives a new session
 
 Each one ships with its structure already in place and a worked example at the end, in a block marked for deletion. That is all a kit can give you here. They are worth nothing on day one and a great deal on day sixty, and no starter kit can fake that difference.
 
+**Two tool files.** `project-os/mcp/Figma/Figma_MCP_Rules.md` holds working rules for the Figma MCP server: the call budget discipline, the hard caps, and the traps that fail silently. `project-os/mcp/Google_analytics/Google_Analytics_MCP_Rules.md` holds the wiring and reading rules for the official GA4 MCP server: key-outside-the-repo authorization, and never quoting a number that did not come from a tool call. Every rule in them was paid for in real use. Delete the folder of any server your project never touches; a different server earns its own folder there the first time it bites.
+
 ## Install
 
 Under ten minutes, and most of that is the assistant reading.
@@ -55,8 +57,8 @@ Copy this whole block and paste it into your assistant, in your project.
 ```
 Set up ProjectOS — the files I just copied into this project.
 
-1. Read CLAUDE.md and every file in project-os/. All of them, in full, before
-   you change anything. If the kit's entry file came in as CLAUDE-kit.md
+1. Read CLAUDE.md and every file in project-os/, its mcp/ subfolder included.
+   All of them, in full, before you change anything. If the kit's entry file came in as CLAUDE-kit.md
    beside an existing CLAUDE.md, fold it into the existing file — the
    existing rules win every clash, each clash goes in your report — and
    delete CLAUDE-kit.md when done.
@@ -80,7 +82,9 @@ Set up ProjectOS — the files I just copied into this project.
 4. Replace every placeholder — the values written in double curly braces —
    with the real thing, in CLAUDE.md and every file under project-os/. None
    may survive there. Where an answer is missing, write the honest state
-   ("not hosted yet") and flag it — never a guess.
+   ("not hosted yet") and flag it — never a guess. If the project uses no
+   Figma or no Google Analytics, ask me whether to delete that folder under
+   project-os/mcp/ instead of filling its setup table.
 
 5. Do the setup steps the files carry, then clear the scaffolding: fill the
    marked setup blocks (the project description in CLAUDE.md, the reply
