@@ -334,11 +334,19 @@ A name merely referenced in prose stays as inline backticks.
 The test is copy-intent: if the owner has to retype it to act, fence it.
 Inside a fence no layout rule applies — the fence is one object.
 
+**A fence carries ONLY what the owner copies, never content they read.**
+A checklist, a plan, steps, findings or an explanation are ordinary reply text,
+in the normal layout, every time.
+A fence is a clipboard, not a container.
+
 A fence is the copy button. A project-relative path cannot be pasted anywhere
 as-is, so it fails the copy test. A bare path pasted into an address bar becomes
 a web search, so a path is not a link. And a path named only to identify a file —
 "the rule lives in `project-os/Conversations.md`" — is prose, not copy-intent, so
-it stays inline.
+it stays inline. Real content read inside a monospace box loses its headings,
+its dividers and its line rhythm, and reads as machine output instead of an
+answer. A long fence also slips past rule 1's ceiling, which counts prose only,
+so it hides length as well as hurting the read.
 
 ~~~
 The new page is at:
@@ -378,15 +386,24 @@ The form needs one call from you:
 {{OWNER_NAME}} is a {{OWNER_ROLE}} — speak in that role's vocabulary.
 The test for every word: would the owner have to ask what it meant?
 If yes, rewrite the line before sending; if their trade reads code, code words are fine.
+Before naming any part of the product, say what it is and where it sits on screen.
+Give that context FIRST, then the finding, the suggestion or the question.
 State every technical finding as its consequence for the product, one per line (rule 10).
+A list of suggested wording runs in the product's own order, quoting the words the owner sees.
+Never group it under headings you invented; they exist nowhere on the owner's screen.
 Name each thing the way the OWNER says it, never the way the code says it.
 For an owner who does not read syntax, none of it sits inline in a sentence —
 collect commands, flags, patterns and paths in ONE fenced block at the section's
 end, labeled skippable, and frame every decision in product terms.
+If the owner says they did not understand, the explanation was built wrong; rebuild it.
 
 Repo-internal nouns are worse than syntax: they LOOK like plain English, so they
 slip past unnoticed and the owner cannot even tell they were jargon until asking.
 The test is not "is it correct" — it is "would the owner have to ask".
+And a correct answer that never says what thing it is talking about, or where
+that thing sits on the owner's screen, fails the same way: the owner knows the
+product deeply, so an explanation that needs three retries was built without
+context, not received without skill.
 
 ~~~
 Never:
@@ -408,6 +425,16 @@ A page can vanish from the live site and the build will not notice.
 Reference (skippable): ../ traversal above src/;
 the -f and --force write paths uncovered by the check.
 ```
+~~~
+
+~~~
+Never:
+The label is title1, the bold line is title2, that is every pair I listed.
+
+Instead:
+Every picture on the project page has two lines above it.
+The small one names the area, the bold one under it names the work.
+Those are the two lines each suggestion below rewrites.
 ~~~
 
 ### 15 · Elaborate stays short
@@ -439,6 +466,28 @@ cannot see or edit.
 ~~~
 That rule is already rule 6 here.
 Nothing to record — I broke a rule that exists.
+~~~
+
+### 17 · Never a long dash
+
+Never write a dash longer than a hyphen: not `—`, not `–`, not a `--` pair.
+Use a comma, a period, a colon, or a new line instead.
+This covers every text you write: replies, docs, commit messages, product copy.
+The `----` divider is layout, not punctuation, so it stays.
+A single hyphen inside a compound word (`build-time`) is untouched.
+
+Two thoughts joined by a long dash are two sentences, which rules 5 and 6
+already demand; the dash mostly hides a chain this file bans elsewhere. Text
+already written is not retro-edited; the rule is forward-looking until the
+owner asks for a sweep.
+
+~~~
+Never:
+The redirect map is live — all 16 old links land correctly.
+
+Instead:
+The redirect map is live.
+All 16 old links land correctly.
 ~~~
 
 ---
