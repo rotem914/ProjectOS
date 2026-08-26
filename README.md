@@ -117,6 +117,10 @@ Set up ProjectOS — the files I just copied into this project.
 | `{{STACK}}` | One line: framework, data store, host | server-rendered web app · SQL database · managed cloud host |
 | `{{CHECK_COMMAND}}` | The build / typecheck / test command | npm run build && npm test |
 
+The two tool files under `project-os/mcp/` carry a few more (the Figma file
+key and target page, the Cloud project, the GA4 property), each inside a
+marked setup table with its own fill-or-delete instruction.
+
 ## Which assistants this fits
 
 It is written for Claude Code, which picks up a `CLAUDE.md` at the project root on its own. Copy the files in and it works.
