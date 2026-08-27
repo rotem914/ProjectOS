@@ -53,6 +53,11 @@ Read this file first. Then the docs in `project-os/`, in this order:
 10. `project-os/BugAtlas.md` — the project's recurring bug classes. Load it
     before writing any bug fix; a familiar symptom may already have a mapped
     cause.
+11. `project-os/Mistakes.md` — the mistakes YOU made and were corrected on,
+    waiting to become rules. Read it at task pickup; it is deliberately short.
+12. `project-os/Hooks.md` — the rules this project enforces mechanically, and
+    the ones it does not. Read it to know which of the rules above are merely
+    written down. The owner installs those hooks; you never can.
 
 When a task goes through an MCP server (Figma, analytics, any tool that talks
 to an outside service), also read that server's rules doc under
@@ -319,6 +324,50 @@ History says a bug was fixed once. The atlas says it is a CLASS, and hands the
 next session the cause and the fix that held. Without it, the third occurrence
 costs as much as the first.
 
+### 20. A correction you were given is written down, once
+
+When the owner corrects HOW you worked, a broken rule, a decision that was
+theirs, a skipped step, an assumption, add one row to
+`project-os/Mistakes.md` in the same reply, before the work continues.
+When the same slip happens a second time, it stops being a row: write the
+rule into the file that owns that behavior and retire the row. That file
+carries the map of which file owns what.
+
+Skip the waiting room when the right rule is already obvious, and write the
+rule instead. Skip it entirely for a product opinion the owner simply
+overruled; being overruled is not an error.
+
+A correction that lives only in chat expires with the session, and the next
+session makes the same mistake with total confidence.
+
+### 21. This project is your only source
+
+Everything you use comes from THIS repo, the owner's own words, or the tool
+documentation. Never another project on the machine.
+
+Concretely, never on your own initiative:
+
+- open another repository to see how it solved something,
+- copy a convention, a rule, a config, or a policy across from one,
+- treat another project's working setup as evidence about this one,
+- carry any of its code, content, or client material into this repo.
+
+**A missing piece is a question, not a search.** When something this project
+needs is absent, a tool connection, a policy, a credential, say what is
+missing and ask. Filling the hole from a neighboring folder produces a setting
+that was never chosen here and looks decided forever after (that is exactly
+how a commit policy arrived unasked).
+
+In client work the same habit is a leak: two clients' repositories sit on the
+same disk, and material has no business crossing between them.
+
+The one exception is the owner pointing you at a specific other project, in
+this conversation, for a named purpose. Their instruction, their scope, and it
+covers that task only.
+
+Rule 12 keeps your WRITES inside the project. This rule keeps your READS and
+your reasoning inside it too.
+
 ## Shortcuts (owner-triggered)
 
 Short owner phrases that map to a fixed multi-step flow.
@@ -365,6 +414,8 @@ Commit everything accumulated up to now, across sessions, not only this chat.
 > staged beyond the defaults below, whether committing straight to the
 > current branch is allowed or each task gets its own branch, and who pushes.
 > Write the answers into the steps, replacing the bracketed parts.
+> Until they answer, this block STAYS and the bracketed parts stay bracketed.
+> A commit policy copied from another project is a decision nobody made.
 
 1. If FAST MODE is on, end it and pay its catch-up in full, first.
 2. `git status` plus `git diff`: see the whole uncommitted scope.

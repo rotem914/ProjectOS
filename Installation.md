@@ -49,7 +49,20 @@ not one at a time. At minimum:
 - the owner's name,
 - their role on this project,
 - how they want you to talk to them: language, tone, how blunt, how long,
+- the commit policy the `Go commit` shortcut needs: which checks gate a
+  commit, whether work goes straight to the current branch or onto a task
+  branch, and who pushes,
 - whatever step 3 came up empty on: the host, a check command that passes.
+
+Every marked setup block in the kit is a question waiting to be asked. Walk
+them ALL before sending this message, and fold each one's question into the
+batch. A setup block reached in step 6 with no answer means step 4 was
+written short.
+
+**Never fill a setup block from a default, a convention, or another
+project's habit.** An unanswered block is left as it is and listed in the
+report's Waiting-on-you section. A guessed policy looks decided, so nobody
+ever revisits it; a blank one gets answered in ten seconds.
 
 ## 5. Replace every placeholder
 
@@ -86,11 +99,51 @@ Do the setup steps the files carry, then clear the scaffolding:
 - replace the skeleton tree in project-os/Map.md with the real one and fill
   its Data and Ownership tables;
 - delete the example blocks at the end of Map.md, History.md, Decisions.md,
-  Backlog.md and BugAtlas.md; they only show the shape;
+  Backlog.md, BugAtlas.md and Mistakes.md; they only show the shape;
 - the example rows inside Code_review.md and Visual_QA.md carry their own
   instruction and stay;
 - so do the blocks you cannot fill yet, the project invariants and the
   worst-bug-class lines; name them in the report as waiting on the owner.
+
+A block whose answer never arrived stays unfilled and goes to Waiting-on-you.
+Filling it from a sensible default is the one shortcut this install forbids
+(step 4).
+
+## 6b. Hand over the hooks
+
+The rule files you just installed are followed only while they are remembered.
+`project-os/Hooks.md` is what makes them hold on message fifty, and installing
+it is the owner's job, not yours: you are blocked from editing agent
+configuration by design.
+
+So, at the end of the install:
+
+- Read `project-os/Hooks.md`.
+- **Adapt the wording first.** Open `project-os/hooks-settings.json` and rewrite
+  the standing-rules text for THIS project, using the rules it actually has and
+  the mistakes it actually makes. The shipped wording is a generic default, and
+  a generic reminder every message is worth little. You may edit that file
+  freely: it is an ordinary repo file, not agent configuration.
+- **Check whether hooks are already installed.** Read
+  `.claude/settings.local.json` if it exists (reading it is allowed) and say in
+  the report which events already have hooks and which do not. If a hook there
+  uses the `echo` form with single quotes around JSON, flag it: it produces
+  invalid output under the Windows command prompt and silently injects nothing.
+- **Hand the owner the one command**, in the report's Waiting-on-you section:
+
+```
+node project-os/install-hooks.mjs
+```
+
+  It merges, never overwrites, backs the file up first, and leaves existing
+  hooks alone unless re-run with `--force`. Tell them it takes a minute, that a
+  new session is needed afterwards, and that until it is run every rule in this
+  folder depends on your memory rather than on enforcement.
+
+Never present the install as finished enforcement when only the documents are
+in place. If the owner asks why you cannot just do it: writing agent
+configuration is blocked for you, deliberately, and that block is worth more
+than the convenience.
 
 ## 7. Log the install
 
@@ -116,6 +169,27 @@ sections in this order:
    nothing has been overridden.
 4. **Waiting on you.** Everything that needs the owner's answer or verdict,
    numbered, so each item can be answered in one word.
+
+5. **Turn on the rules.** The last thing in the report, always, even when
+   everything else went perfectly. Short, numbered, and written for someone who
+   does not read code. It says: the rules are installed as documents, and one
+   command makes them enforced on every message. Give the command on its own
+   line, say it takes a minute, say a new session is needed after it, and say
+   how to check it worked. Use this shape:
+
+   > **To turn the rules on**
+   >
+   > Your rules are written down now, but nothing enforces them.
+   > In a long session the assistant slowly forgets them.
+   >
+   > 1. In a terminal, in this project folder, run:
+   >    `node project-os/install-hooks.mjs`
+   > 2. Close this session and start a new one.
+   > 3. Ask the assistant: "what rules were you given this turn?"
+   >    If it reads your rules back to you, it is working.
+   >
+   > This changes nothing in your project.
+   > It only repeats your rules to the assistant on every message you send.
 
 Also tell the owner once that the phrase "full report" lifts the reply-length
 ceiling when they want the long version.

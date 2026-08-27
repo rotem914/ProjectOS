@@ -21,6 +21,42 @@ than they look.
 Push generated pages onto the one target page; never scatter them across the
 file.
 
+## 0b. Connecting it (the part that is not in this repo)
+
+**The connection is a setting on the machine, never a file here.** An MCP
+server is registered in the assistant's own configuration, so a repo can carry
+every rule in this file and still have no Figma at all. If the tools are
+missing, that is the reason, and the fix is a one-time setup by the owner.
+
+**Never go looking for the connection in another project's folder.** Another
+repo's working setup is not this project's, its file keys and its plan are not
+this project's either, and in client work reading across projects is a leak.
+Ask the owner instead (CLAUDE.md rule 21).
+
+What the owner does once, on their machine:
+
+- Register Figma's MCP server with the assistant, at user scope so it follows
+  them between projects, or at project scope if only this repo should have it.
+- Choose the path: Figma's desktop app exposes a local server for the file that
+  is open in it, and Figma also hosts a remote server that signs in through the
+  browser. Take the current address and command straight from Figma's own
+  documentation rather than from another repo, since both have changed.
+- Confirm the seat: some capabilities need a paid Figma plan, and Dev Mode
+  features need a seat that has Dev Mode.
+
+How the assistant verifies it, before trusting anything else:
+
+- Search the tool list for the Figma tools first. A deferred tool that has not
+  been loaded is invisible, so "I see no Figma tools" is not evidence of a
+  missing connection until the search comes back empty.
+- Then make ONE identity call (`whoami` where the server exposes it, and it is
+  usually free). It answers connected-or-not without spending the budget below.
+- If it fails, say so plainly, name what the owner has to do, and stop. Do not
+  improvise a workaround, and do not fall back to another project's files.
+
+Nothing in this section belongs in the repo: no key, no token, no local path
+to a credential.
+
 ## 1. The call budget is rule #1
 
 - Writes count against the budget, and so do reads (`get_metadata`,

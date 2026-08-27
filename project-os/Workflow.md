@@ -63,6 +63,7 @@ Before touching anything, read:
 - `project-os/Decisions.md` — why things are the way they are.
 - `project-os/Conversations.md` — how to write the reply at the end.
 - `project-os/Backlog.md` — scan the open items; flag any that this task touches.
+- `project-os/Mistakes.md` — the corrections you were given, waiting to become rules.
 
 Read them before you form an opinion. An opinion formed without them is a guess that happens to be typed confidently.
 
@@ -232,6 +233,7 @@ Update only what needs to change.
 | The review bar or its scope changed | `project-os/Code_review.md` |
 | The hands-on testing method changed | `project-os/Visual_QA.md` |
 | An open item was added or closed | `project-os/Backlog.md` |
+| The owner corrected HOW you worked | `project-os/Mistakes.md`, or its rule's own file on a repeat |
 | Anything was completed | `project-os/History.md` |
 
 Do not write the same rule in two files. If two files need it, one states it and the other points there.

@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"console.log('PROJECT RULES: read CLAUDE.md and the files in ${CLAUDE_PROJECT_DIR}/project-os before doing anything in this session. Conversations.md governs every reply you write. Workflow.md governs every task. Read them now, in full, if you have not.')\"",
+            "timeout": 10,
+            "suppressOutput": true
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"console.log('STANDING RULES for this reply and this task: 1) Reply exactly as project-os/Conversations.md prescribes, layout and length included. 2) Change only what was asked, nothing else, however tempting. 3) Prefer the smallest safe change. 4) When something is unclear, or the decision belongs to the owner, ask instead of deciding. 5) After any completed change, add its History row. 6) Never write a file outside this project folder. 7) Never say a check passed unless it was actually run.')\"",
+            "timeout": 10,
+            "suppressOutput": true
+          }
+        ]
+      }
+    ]
+  }
+}
