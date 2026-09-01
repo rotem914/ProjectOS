@@ -109,14 +109,17 @@ A block whose answer never arrived stays unfilled and goes to Waiting-on-you.
 Filling it from a sensible default is the one shortcut this install forbids
 (step 4).
 
-## 6b. Hand over the hooks
+## 6b. Install the hooks yourself
 
 The rule files you just installed are followed only while they are remembered.
-`project-os/Hooks.md` is what makes them hold on message fifty, and installing
-it is the owner's job, not yours: you are blocked from editing agent
-configuration by design.
+`project-os/Hooks.md` is what makes them hold on message fifty.
 
-So, at the end of the install:
+**Install them. Do not ask first.** This is a step of the setup, exactly like
+replacing the placeholders, and the owner asking for ProjectOS is the approval.
+An enforcement layer that waits for someone to notice a request at the bottom
+of a report is an enforcement layer that never gets switched on.
+
+So, as part of the install:
 
 - Read `project-os/Hooks.md`.
 - **Adapt the wording first.** Open `project-os/hooks-settings.json` and rewrite
@@ -129,21 +132,47 @@ So, at the end of the install:
   the report which events already have hooks and which do not. If a hook there
   uses the `echo` form with single quotes around JSON, flag it: it produces
   invalid output under the Windows command prompt and silently injects nothing.
-- **Hand the owner the one command**, in the report's Waiting-on-you section:
+- **Run it**, from the project root:
 
 ```
 node project-os/install-hooks.mjs
 ```
 
   It merges, never overwrites, backs the file up first, and leaves existing
-  hooks alone unless re-run with `--force`. Tell them it takes a minute, that a
-  new session is needed afterwards, and that until it is run every rule in this
-  folder depends on your memory rather than on enforcement.
+  hooks alone unless re-run with `--force`. Report what it added, in one line.
+
+- **If the write is refused**, some environments guard their own configuration,
+  do not argue with it and do not retry in a loop. Say plainly that it was
+  refused, put that one command in the report's Waiting-on-you section for the
+  owner to run, and move on. Fallback, never the plan.
+
+- **Tell the owner the one thing that is theirs:** hooks are read at session
+  start, so the ones you just installed take effect in their NEXT session.
+  Give them the check: ask the assistant what rules it was given this turn, and
+  see whether it reads them back.
 
 Never present the install as finished enforcement when only the documents are
-in place. If the owner asks why you cannot just do it: writing agent
-configuration is blocked for you, deliberately, and that block is worth more
-than the convenience.
+in place, and never leave the hooks uninstalled merely because nobody asked.
+
+## 6c. Check the rotation scripts run here
+
+Two scripts ship in `project-os/` and keep the growing docs from becoming a
+tax on every task: `rotate-history.ps1` (History rows) and `rotate-docs.ps1`
+(Decisions entries, the Backlog Done table, the Mistakes tails, the BugAtlas
+rows). Both MOVE old material into a sibling `*-archive.md`, never rewrite it,
+and both are wired into `Go commit`.
+
+They are PowerShell, so they run on Windows out of the box and need PowerShell
+installed anywhere else. At install:
+
+- Run each once with `-DryRun`. A fresh repo has nothing to move, so the
+  expected output is a clean "nothing to move" per file. That is the proof the
+  paths resolved.
+- If PowerShell is not available on this machine, say so in the report's
+  Problems section and tell the owner plainly what it costs: the docs still
+  work, they simply grow forever until someone archives by hand.
+- Never edit an entry to make a file smaller. Shrinking is the scripts' job,
+  and theirs alone.
 
 ## 7. Log the install
 
@@ -170,26 +199,24 @@ sections in this order:
 4. **Waiting on you.** Everything that needs the owner's answer or verdict,
    numbered, so each item can be answered in one word.
 
-5. **Turn on the rules.** The last thing in the report, always, even when
-   everything else went perfectly. Short, numbered, and written for someone who
-   does not read code. It says: the rules are installed as documents, and one
-   command makes them enforced on every message. Give the command on its own
-   line, say it takes a minute, say a new session is needed after it, and say
-   how to check it worked. Use this shape:
+5. **The rules are on.** The last thing in the report, always. Short, and
+   written for someone who does not read code. Use this shape:
 
-   > **To turn the rules on**
+   > **Your rules are switched on**
    >
-   > Your rules are written down now, but nothing enforces them.
-   > In a long session the assistant slowly forgets them.
+   > I installed the part that keeps me following them.
+   > From now on your rules are repeated to me on every message you send,
+   > instead of fading as the conversation gets long.
    >
-   > 1. In a terminal, in this project folder, run:
-   >    `node project-os/install-hooks.mjs`
-   > 2. Close this session and start a new one.
-   > 3. Ask the assistant: "what rules were you given this turn?"
-   >    If it reads your rules back to you, it is working.
+   > One thing is yours: close this session and start a new one, because that
+   > setting is read when a session opens.
    >
-   > This changes nothing in your project.
-   > It only repeats your rules to the assistant on every message you send.
+   > To check it worked, ask me in the new session:
+   > "what rules were you given this turn?"
+   > If I read your rules back to you, it is working.
+
+   If the install could not write that setting, say so in the same place, in
+   plain words, and give the owner the one command to run instead.
 
 Also tell the owner once that the phrase "full report" lifts the reply-length
 ceiling when they want the long version.

@@ -106,6 +106,23 @@ Do not delete data, drop a schema, rewrite history, remove docs, or run a
 destructive command unless the owner asked for it and the way back is clear. The
 cost of asking is one message; the cost of being wrong is unbounded.
 
+**Archiving is not rewriting.** Every file in `project-os/` that accumulates
+forever has a ceiling, and two scripts enforce it by MOVING old material into a
+sibling `*-archive.md` that is not read by default:
+
+- `project-os/rotate-history.ps1` — History deep rows, and the History scan log.
+- `project-os/rotate-docs.ps1` — Decisions entries (newest 25 stay live), the
+  Backlog Done table (40), the Mistakes Promoted and Retired tables (30), and
+  each feature's BugAtlas Atlas table (30).
+
+Both are move-only, idempotent and dedup-safe: an entry is relocated byte for
+byte, never edited, summarized, renumbered or deleted, so running them twice
+changes nothing. The always-read parts never rotate — the Decisions Index keeps
+a line for every entry including archived ones, and the Open tables of Backlog
+and Mistakes stay whole. They run at `Go commit`. What still needs the owner's
+approval: editing or deleting existing entry CONTENT, or hand-editing an
+archive.
+
 ### 5. Secrets stay out of the repo
 
 Real secrets live in an uncommitted local env file and in the host's config.
@@ -283,6 +300,11 @@ your change introduced, then re-verify each fix — in the browser if it is
 user-visible. Findings that were already there are reported, not fixed; they wait
 for the owner's verdict. The task is not done until the review has run.
 
+That review covers two questions, not one: whether the changed code is correct,
+and **where else the change can reach**. The diff shows what you edited, never who
+was depending on it, so trace the consumers and say whether the impact is
+contained, shared, or unknown. `project-os/Code_review.md` carries the method.
+
 ### 18. The iron rule — change only what was asked
 
 Do exactly what was asked. Nothing else.
@@ -368,6 +390,58 @@ covers that task only.
 Rule 12 keeps your WRITES inside the project. This rule keeps your READS and
 your reasoning inside it too.
 
+## Review & QA commands (owner-triggered)
+
+Two phrases that start a calibrated pass. Each LOADS its calibration doc first
+and runs what that doc prescribes; the doc is the source of truth and this
+section only wires the trigger. Match is case-insensitive.
+
+Deliver findings as a terse chat summary in the reply format
+`project-os/Conversations.md` prescribes, with counts by severity, PLUS a dated
+document under the project's notes folder. Per finding the owner's verdict
+vocabulary is **fix / drop / backlog**; a `backlog` verdict adds the item to
+`project-os/Backlog.md`, and a `drop` is recorded in the calibration doc's
+exceptions so a later pass never raises it again.
+
+### `Go code review`
+
+Run the review in `project-os/Code_review.md`.
+
+1. **Read that file first** and load its calibration: the severity bar, the
+   always-check list, the settled exceptions.
+2. **Scope is the WHOLE REPO, every time.** The entire codebase as it stands,
+   including code that shipped long ago and code nobody has opened in months.
+   Not a diff, not the unpushed range, not the working tree, not "the files
+   this session touched". If a review tool is used as the engine, note that
+   such tools default to reviewing a diff, and that default is WRONG here:
+   drive it over the whole tree, in batches by area if the repo is large, and
+   say which areas were covered.
+   This matters because the automatic review after each task (rule 17) already
+   covers the diff. A second diff review adds nothing; the whole value of this
+   one is everything the diff reviews never look at. Only a range the owner
+   names in the same message narrows it.
+3. **Triage every finding as introduced or pre-existing.** Report pre-existing
+   ones, do not fix them, and do not let them block.
+4. **Deliver** the summary plus the dated document, one block per finding:
+   title, where, the problem, the fix, how to verify, status.
+
+### `GO visual qa`
+
+Run the pass in `project-os/Visual_QA.md`.
+
+1. **Read that file first** and load its calibration: what counts as a defect
+   here, the always-look-for list, the method.
+2. **Drive the running app**, one browser tab, on the app the owner already has
+   running (rule 16). Never start a second server, and never run several
+   browser-driving agents at once.
+3. **Pin scope** to the screens the recent work renders, plus their neighbours.
+   A full sweep of every screen only when the owner asks for one.
+4. **Per screen: every state and every way out.** Empty, loading, error, full.
+   Every dismiss path. Destructive inputs. Watch the console and the network.
+   Reload and confirm what was saved really persisted.
+5. **Deliver** the summary plus the dated document, and revert any test edits
+   before finishing.
+
 ## Shortcuts (owner-triggered)
 
 Short owner phrases that map to a fixed multi-step flow.
@@ -418,14 +492,26 @@ Commit everything accumulated up to now, across sessions, not only this chat.
 > A commit policy copied from another project is a decision nobody made.
 
 1. If FAST MODE is on, end it and pay its catch-up in full, first.
-2. `git status` plus `git diff`: see the whole uncommitted scope.
-3. Run the project checks [`{{CHECK_COMMAND}}`] and continue only if they
+2. **Rotate the growing docs**, so the live files stay cheap to read. Run both,
+   in this order (add `-DryRun` to either for a preview that writes nothing):
+
+   ```
+   powershell -NoProfile -ExecutionPolicy Bypass -File project-os\rotate-history.ps1
+   powershell -NoProfile -ExecutionPolicy Bypass -File project-os\rotate-docs.ps1
+   ```
+
+   Move-only and idempotent, so this is safe every time; a run with nothing to
+   move says so. It comes after step 1 on purpose, so the fast-mode catch-up row
+   is already in the file before rotation decides what is old. Stage whatever
+   they changed with the rest.
+3. `git status` plus `git diff`: see the whole uncommitted scope.
+4. Run the project checks [`{{CHECK_COMMAND}}`] and continue only if they
    pass. A red check stops the commit; report it instead.
-4. Stage the intended files only. Never a blind add-everything, and never
+5. Stage the intended files only. Never a blind add-everything, and never
    env files, secrets, or generated junk.
-5. Commit with a clear message covering the full scope, [on the current
+6. Commit with a clear message covering the full scope, [on the current
    branch / on a task branch, per the owner's answer].
-6. Stop after the commit. [The owner pushes / open a PR, per their answer.]
+7. Stop after the commit. [The owner pushes / open a PR, per their answer.]
    Pushing is the owner's move unless they explicitly said otherwise.
 
 ### `Backlog`

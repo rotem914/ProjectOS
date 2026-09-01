@@ -3,7 +3,7 @@
 A folder of markdown files that an AI coding assistant reads before it touches your project: your rules, your process, your history.
 It exists because a new chat session starts with none of that, and loses all of it again the moment the session ends.
 
-Almost all of it is not code: you copy the files in and your assistant picks them up. The one exception is the hooks, a short block you paste into your own settings once, which is what stops the rules being quietly forgotten halfway through a long session.
+Almost all of it is not code: you copy the files in and your assistant picks them up. The one exception is the hooks, a small setting the install switches on for you, which is what stops the rules being quietly forgotten halfway through a long session.
 
 ## The pattern
 
@@ -41,7 +41,7 @@ Each one ships with its structure already in place and a worked example at the e
 
 **Two tool files.** `project-os/mcp/Figma/Figma_MCP_Rules.md` holds working rules for the Figma MCP server: the call budget discipline, the hard caps, and the traps that fail silently. `project-os/mcp/Google_analytics/Google_Analytics_MCP_Rules.md` holds the wiring and reading rules for the official GA4 MCP server: key-outside-the-repo authorization, and never quoting a number that did not come from a tool call. Every rule in them was paid for in real use. Delete the folder of any server your project never touches; a different server earns its own folder there the first time it bites.
 
-**One enforcement file.** `project-os/Hooks.md` is the part that makes the rest hold. Rule files are followed while they are remembered; hooks fire on every message and every tool call whether anything remembers them or not. It ships a ready setup that needs no path editing and works on any machine, and it re-states your core rules on every single message rather than once at the start. One command installs it, `node project-os/install-hooks.mjs`, and you run that one yourself: the assistant is blocked from editing its own configuration, by design, which is a block worth keeping. A project running this kit without it is running on good intentions.
+**One enforcement file.** `project-os/Hooks.md` is the part that makes the rest hold. Rule files are followed while they are remembered; hooks fire on every message and every tool call whether anything remembers them or not. It ships a ready setup that needs no path editing and works on any machine, and it re-states your core rules on every single message rather than once at the start. The install switches it on for you, as a step and not as a suggestion; your only part is starting a new session afterwards, since the setting is read when a session opens. A project running this kit without it is running on good intentions.
 
 **One install file.** `Installation.md` is the complete install law: the merge rules for a project that already has a `CLAUDE.md`, the placeholder list, the setup steps, and the closing report the install owes you, problems and clashes included. Used once, then kept or deleted at your word.
 
@@ -62,9 +62,9 @@ install must end with, problems and clashes included.
 4. Read its closing report: what was set, what broke, and where your existing
    rules clash with the kit's process.
 5. Commit the result.
-6. Install the hooks: `node project-os/install-hooks.mjs`, then start a new
-   session. One minute, and it is what keeps the rest from fading. See
-   `project-os/Hooks.md` for what it does and how to check it worked.
+6. Start a new session. The install switches the hooks on for you; they are
+   read when a session opens, so the next one is where they take effect. See
+   `project-os/Hooks.md` for what they do and how to check they worked.
 
 ## The install prompt
 

@@ -17,8 +17,11 @@ time.
 
 ## Scope — pin it, never guess
 
-Say which range you reviewed, before you review it. It has two parts, and each one
-is easy to lose:
+**Two different passes load this file, and their scopes are opposites.** Say
+which one you are running, before you run it.
+
+**The automatic pass after a task: that task's own change.** Two parts, and each
+one is easy to lose:
 
 - work that is already committed but not yet shipped;
 - work still sitting uncommitted in the project folder.
@@ -26,6 +29,64 @@ is easy to lose:
 Anything that defaults to "uncommitted changes only" will report a clean tree when
 the real change was committed an hour ago. That is a silent empty review. Name the
 range in the report so an empty result can be trusted.
+
+**The `Go code review` trigger: the WHOLE REPOSITORY, every time.** The entire
+codebase as it stands, including code that shipped long ago and code nobody has
+opened in months. Never a diff. Review tools default to reviewing a diff, and
+that default is wrong here: drive the review across the whole tree, in batches
+by area if the repository is large, and say which areas were covered.
+
+The reason is simple. The automatic pass above already covers every new change,
+so a second review of the same diff finds the same nothing. The owner-driven
+pass exists for everything the automatic ones never look at, which after a few
+months is most of the codebase. Only a range the owner names in the same
+message narrows it.
+
+## Blast radius: where else can this change reach?
+
+A review answers two questions, not one. The first is whether the changed code is
+correct where it sits. The second is **where else the change can propagate**, and
+that is the one that gets skipped, because the diff never shows it. The diff shows
+what was edited. It does not show who was depending on it.
+
+Run this on every medium- or high-risk change, in either pass above.
+
+Trace the consumers of everything the change touched:
+
+- shared components, and every route or screen that renders one;
+- global tokens, theme values, shared styles, utility classes;
+- data shapes and schemas that are read somewhere else;
+- states and variants that reuse the same logic;
+- size- or breakpoint-scoped behaviour that can leak across widths;
+- flows and features that depend on the changed code;
+- consumers that are NOT in the diff;
+- hidden coupling: helpers, variants, inheritance, shared config, load order.
+
+Then classify the impact, and say which one it is, in a line of the report:
+
+| Class | Meaning |
+|---|---|
+| **Local** | Confidently contained to the intended area. |
+| **Shared** | Several known consumers are affected. |
+| **Unknown** | The full propagation could not be established. |
+
+**A small diff is not a local diff.** A one-line change to a shared component, a
+token, a helper, a schema, or a styling rule reaches further than a large isolated
+one. Size is not containment, and a review that reads it that way is guessing.
+
+When the impact is **shared**: name the affected consumers, open a representative
+few rather than only the file that was edited, confirm the change still holds
+there, and report any real side effect.
+
+When the impact is **unknown**: mark it **UNVERIFIED**, say what could not be
+determined, and name the smallest practical check that would settle it. An empty
+finding list is not proof of safety. It is the absence of evidence, and the two
+only look alike from outside.
+
+**Inspecting a consumer is not fixing it.** Blast radius widens what the review
+reads, never what the change edits (rules 2 and 18). A consumer that turns out to
+be broken is a reported finding, marked pre-existing when the change did not cause
+it, and it waits for the owner's verdict.
 
 ## A check that never ran is not a check that passed
 
@@ -69,6 +130,8 @@ that is what calibrates the bar for everything else.
 The spine of the always-check list. Add or drop dimensions to fit what this
 project actually is. For each one, the question to ask:
 
+- **Change impact / blast radius**: who else consumes what this change touched,
+  and does it still hold there? (The section above; run it on medium+ risk.)
 - **Data & persistence integrity** — can this change silently lose, corrupt, or
   half-write stored data? Are writes atomic, and are reads validated and loud on
   failure?

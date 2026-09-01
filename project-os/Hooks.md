@@ -15,31 +15,35 @@ A project running the kit with no hooks is running on good intentions.
 
 ## Who installs this
 
-**You do, by hand, once per project.** The assistant is deliberately blocked
-from editing agent configuration, so it can describe this setup and can never
-apply it. That block is a good thing, and it means the paste below is yours.
+**The assistant does, during the install, without being asked.** Installing the
+hooks is a step of the setup, not a suggestion at the end of it. A kit whose
+enforcement layer waits for the owner to notice a request is a kit that runs
+unenforced.
 
-The file that has to change is:
-
-```
-<your project>/.claude/settings.local.json
-```
-
-**One command does it**, run from the project root, by you:
+The step is one command, run from the project root:
 
 ```
 node project-os/install-hooks.mjs
 ```
 
-It merges the ready-made hooks in `project-os/hooks-settings.json` into that
-file. It never overwrites: whatever is already there is kept, a backup is
-written first, and an event that already has hooks is reported and left alone
-unless you re-run it with `--force`. Add `--dry` to see what it would do and
-change nothing.
+It merges the ready-made hooks in `project-os/hooks-settings.json` into
+`.claude/settings.local.json`. It never overwrites: whatever is already there
+is kept, a backup is written first, and an event that already has hooks is
+reported and left alone unless it is re-run with `--force`. Add `--dry` to see
+what it would do and change nothing.
 
-If you would rather do it by hand, the same content is in the block below.
+**If the environment refuses that write**, some setups guard their own
+configuration, do not argue with it and do not retry in a loop. Say plainly
+that the write was refused, hand the owner that one command to run themselves,
+and carry on. That is the fallback, never the plan.
 
-Hooks are read when a session starts, so **start a new session afterwards**.
+**The owner's only step is a restart.** Hooks are read when a session starts,
+so the newly installed ones take effect in the NEXT session, not this one. Say
+that clearly, and give the one question that proves it worked: ask the
+assistant what rules it was given this turn, and see whether it reads them
+back.
+
+If you would rather wire it by hand, the same content is in the block below.
 
 ## Level 1 — works in any project, needs no files
 

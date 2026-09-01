@@ -25,9 +25,11 @@ did that change do, and how do I undo it".
 - Never write "tested" or "QA passed". Those phrases record nothing. Name the
   input, the screen, and what happened.
 - When this file gets long, move the oldest rows into an archive file beside it.
-  Create that file the first time you need it. Move rows **verbatim** — never
+  `project-os/rotate-history.ps1` does exactly that at `Go commit`, and creates
+  the archive the first time it is needed. Rows move **verbatim** — never
   rewritten, never summarized, never merged, because the detail you drop is the
-  one the next reader needed.
+  one the next reader needed. Never hand-move rows: the script dedups, so it is
+  safe to run every time, and a hand-move breaks that guarantee.
 
 ## Risk scale
 

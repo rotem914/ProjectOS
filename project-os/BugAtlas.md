@@ -25,6 +25,13 @@ A one-off typo earns nothing. The atlas is for classes, not incidents.
 4. If nothing matches, debug normally.
 5. If the issue turns out to be a pattern, add the row in the same task.
 
+## Rotation
+
+`project-os/rotate-docs.ps1` keeps the newest 30 Atlas rows live and moves
+older ones verbatim into `BugAtlas-archive.md` at `Go commit`. Rows are
+relocated, never edited, renumbered or deleted, so an archived row still
+answers a search.
+
 ## Atlas
 
 | # | Symptom | Root cause | The fix that holds | Times bitten | Where recorded |

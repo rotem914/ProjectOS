@@ -19,6 +19,13 @@ chosen, so nobody re-argues it in six months and nobody quietly undoes it.
   it, not before — and move the entry verbatim: never rewritten, never
   summarized. Its Index line stays here, marked superseded, so the trail
   survives.
+- **This file also rotates, the way History does.** `project-os/rotate-docs.ps1`
+  keeps the newest 25 entries live at `Go commit` and moves older ones into the
+  same `Decisions-archive.md`, under its own `## Archived decisions` heading.
+  Those entries still BIND the project; they only aged out of the live read, so
+  treat one exactly as if it were still here. The Index keeps its line for every
+  one of them, so nothing becomes invisible. Two kinds of entry therefore share
+  that archive — superseded (dead) and rotated (alive) — and its header says so.
 - Every new entry also gets a line in the Index, in the same change. The Index is
   the part people read; an entry missing from it is an entry nobody opens.
 - Use the required format below. All four parts, every time — an entry without
