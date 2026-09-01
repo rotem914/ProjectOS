@@ -25,7 +25,7 @@ reading time.
 
 | Setting | Value |
 |---|---|
-| Project root | `{{PROJECT_ROOT}}` |
+| Project root | this repository, wherever this copy of it lives |
 | Local app | `{{DEV_URL}}` |
 | Checks | `{{CHECK_COMMAND}}` |
 
@@ -211,7 +211,8 @@ a task touches one, say so at pickup.
 
 ### 12. Every file you write stays inside the project root
 
-Everything you create or edit lives under `{{PROJECT_ROOT}}`. Never the user's
+Everything you create or edit lives inside this repository, wherever this copy
+of it happens to live. Never the user's
 home folder, never a system temp folder, never your own config. No routing around
 it with a shell command.
 

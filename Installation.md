@@ -67,8 +67,16 @@ URL it serves on, and the command that builds, typechecks, and tests.
 
 Read package manifests, config files, lockfiles, CI config and existing docs.
 Do not guess where you can check. Run the check command once on the untouched
-project: if it fails, that becomes a line in the report's Problems section and
-a question for the owner, never the standing check.
+project. There are THREE outcomes, not two:
+
+- **It passes.** It becomes the standing check.
+- **It fails.** That is a Problems line and a question for the owner, never the
+  standing check.
+- **It was refused, so it never ran.** A permission system can deny an unfamiliar
+  build command, and a session with nobody to approve it gets no answer at all.
+  Say REFUSED, name the command, and put it in Waiting-on-you. A command that
+  never ran is not a command that passed, and recording it as the standing check
+  means every future task believes a check is running when none is.
 
 ## 4. Ask once
 
@@ -132,7 +140,7 @@ CLAUDE.md and every file under project-os/. None may survive there.
 | `{{PROJECT_NAME}}` | The project's name | Northwind Dashboard |
 | `{{OWNER_NAME}}` | The person the assistant works for | Alex Rivera |
 | `{{OWNER_ROLE}}` | Their role on this project | product designer |
-| `{{PROJECT_ROOT}}` | Absolute path to the project folder | /Users/alex/code/northwind |
+| `{{PROJECT_ROOT}}` | Retired. Do not write a machine path into a committed file: it is one person's checkout, and a teammate reads a boundary that does not exist for them. CLAUDE.md now says "this repository, wherever this copy lives". | |
 | `{{DEV_URL}}` | Where the app runs locally | http://localhost:3000 |
 | `{{STACK}}` | One line: framework, data store, host | server-rendered web app · SQL database · managed cloud host |
 | `{{CHECK_COMMAND}}` | The build / typecheck / test command | npm run build && npm test |
@@ -140,6 +148,14 @@ CLAUDE.md and every file under project-os/. None may survive there.
 The two tool files under project-os/mcp/ carry a few more (the Figma file key
 and target page, the Cloud project, the GA4 property), each inside a marked
 setup table with its own instruction.
+
+**A repo with more than one app gets more than one row.** `{{DEV_URL}}` and
+`{{CHECK_COMMAND}}` are written as single values, which is right for a single
+app and wrong for a workspace: picking the one app you were pointed at leaves
+every other app unchecked, silently, for the life of the project. Replace those
+rows with a small table, one line per app, plus the workspace-wide command if
+there is one, and say in the `Go commit` calibration which of them gate a
+commit.
 
 Where an answer is missing, write the honest state ("not hosted yet") and add
 it to the report's Waiting-on-you section, never a guess. If the project uses
@@ -198,6 +214,12 @@ node project-os/install-hooks.mjs
 
   It merges, never overwrites, backs the file up first, and leaves existing
   hooks alone unless re-run with `--force`. Report what it added, in one line.
+
+- **Prove one hook actually speaks.** Installing is not evidence. Run the hook's
+  own command once in a shell, exactly as it is written in the settings, and
+  confirm the standing-rules text comes back. If nothing comes back, or the
+  shell mangles it, the hooks are installed and silent, which looks identical to
+  working. Say so in Problems rather than reporting the rules as on.
 
 - **If the write is refused**, some environments guard their own configuration,
   do not argue with it and do not retry in a loop. Say plainly that it was

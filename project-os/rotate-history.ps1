@@ -83,9 +83,9 @@ $targets.Add([pscustomobject]@{
     Sect     = '## Appendix'
     Scan     = $true
     # The Scan log rotates too, on the same move-only terms (added 2026-07-31).
-    # It was deliberately exempt for a long time because CLAUDE.md rule 6 calls
-    # it "the always-read index" — but at 414 rows / 238 KB that index was a
-    # quarter-megabyte read at every task pickup, and it made rule 8's size
+    # It was exempt for a long time because History.md calls the scan log the
+    # list you always read — but past a few hundred rows that list becomes a
+    # quarter-megabyte read at every task pickup, and it makes the size
     # target unreachable no matter how hard the appendix was trimmed. Keeping
     # the newest $MaxKeepScanRows preserves the working window; everything older
     # moves verbatim into a sibling archive that is NOT read by default.
@@ -276,8 +276,16 @@ foreach ($t in $targets) {
             if ($lines[$i] -match '^\|[\s\-:|]+\|\s*$') { $sepIdx = $i; break }
         }
         if ($sepIdx -lt 0) { continue }
+        # Stop at the END OF THIS TABLE, not at the end of the section. Scanning
+        # on would reach a row inside a trailing example block, and every blank
+        # line between here and there would be treated as stranded whitespace —
+        # rewriting a file on a run that moved nothing.
         $lastRow = -1
-        for ($i = $sepIdx + 1; $i -lt $span.To; $i++) { if ($lines[$i] -match '^\|') { $lastRow = $i } }
+        for ($i = $sepIdx + 1; $i -lt $span.To; $i++) {
+            if ($lines[$i] -match '^\|') { $lastRow = $i; continue }
+            if ($lines[$i].Trim() -eq '') { continue }
+            break
+        }
         if ($lastRow -lt 0) { continue }
         for ($i = $sepIdx + 1; $i -lt $lastRow; $i++) {
             if ($lines[$i].Trim() -eq '') { $blankDrop.Add($i) | Out-Null }

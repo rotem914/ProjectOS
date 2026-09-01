@@ -20,9 +20,9 @@
 # retired and superseded tails rotate.
 #
 # Preview (writes nothing):
-#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\rotate-docs.ps1 -DryRun
+#   powershell -NoProfile -ExecutionPolicy Bypass -File project-os/rotate-docs.ps1 -DryRun
 # Apply for real:
-#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\rotate-docs.ps1
+#   powershell -NoProfile -ExecutionPolicy Bypass -File project-os/rotate-docs.ps1
 
 [CmdletBinding()]
 param(

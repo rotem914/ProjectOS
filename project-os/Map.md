@@ -15,7 +15,7 @@ lies costs more than no map.
   a data store, or a major file. Never as a follow-up task — a follow-up is a
   task that does not happen.
 - One line per entry: what it is, not how it works. The how lives in the code.
-- Paths are relative to `{{PROJECT_ROOT}}`.
+- Paths are relative to the repository root.
 - This is a snapshot, not a plan. Nothing here describes work that has not landed.
 
 ## Stack
@@ -24,7 +24,7 @@ lies costs more than no map.
 
 | Setting | Value |
 |---|---|
-| Project root | `{{PROJECT_ROOT}}` |
+| Project root | this repository, wherever this copy of it lives |
 | Runs locally at | `{{DEV_URL}}` |
 | Checks | `{{CHECK_COMMAND}}` |
 
