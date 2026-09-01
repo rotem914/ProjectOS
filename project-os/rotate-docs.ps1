@@ -40,7 +40,7 @@ $kb   = 1024.0
 $utf8 = [System.Text.UTF8Encoding]::new($false)   # UTF-8, no BOM
 
 # The kit installs into project-os\ at the repo root, so the root is one level up.
-$root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path.TrimEnd('\')
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path.TrimEnd([char]0x5C, [char]0x2F)
 
 # Project config: dot-source projectos.config.ps1 if present. Only $ExtraDocTargets
 # is consumed here, so a project can add its own growing file without editing this.
@@ -191,8 +191,8 @@ $targets = New-Object System.Collections.Generic.List[object]
 $targets.Add([pscustomobject]@{
     Name = 'project-os/Decisions.md'
     Kind = 'section'
-    Live = Join-Path $root 'project-os\Decisions.md'
-    Arch = Join-Path $root 'project-os\Decisions-archive.md'
+    Live = Join-Path (Join-Path $root 'project-os') 'Decisions.md'
+    Arch = Join-Path (Join-Path $root 'project-os') 'Decisions-archive.md'
     Sect = 'Index'          # the always-read list; the pointer is stamped under it
     Keep = $MaxKeepDecisions
 }) | Out-Null
@@ -200,18 +200,27 @@ $targets.Add([pscustomobject]@{
 $targets.Add([pscustomobject]@{
     Name = 'project-os/Backlog.md (Done)'
     Kind = 'table'
-    Live = Join-Path $root 'project-os\Backlog.md'
-    Arch = Join-Path $root 'project-os\Backlog-archive.md'
+    Live = Join-Path (Join-Path $root 'project-os') 'Backlog.md'
+    Arch = Join-Path (Join-Path $root 'project-os') 'Backlog-archive.md'
     Sect = 'Done'
     Keep = $MaxKeepBacklog
+}) | Out-Null
+
+$targets.Add([pscustomobject]@{
+    Name = 'project-os/BugAtlas.md'
+    Kind = 'table'
+    Live = Join-Path (Join-Path $root 'project-os') 'BugAtlas.md'
+    Arch = Join-Path (Join-Path $root 'project-os') 'BugAtlas-archive.md'
+    Sect = 'Atlas'
+    Keep = $MaxKeepAtlas
 }) | Out-Null
 
 foreach ($sect in @('Promoted', 'Retired')) {
     $targets.Add([pscustomobject]@{
         Name = ('project-os/Mistakes.md ({0})' -f $sect)
         Kind = 'table'
-        Live = Join-Path $root 'project-os\Mistakes.md'
-        Arch = Join-Path $root 'project-os\Mistakes-archive.md'
+        Live = Join-Path (Join-Path $root 'project-os') 'Mistakes.md'
+        Arch = Join-Path (Join-Path $root 'project-os') 'Mistakes-archive.md'
         Sect = $sect
         Keep = $MaxKeepMistakes
     }) | Out-Null

@@ -49,7 +49,7 @@ $kb   = 1024.0
 $utf8 = [System.Text.UTF8Encoding]::new($false)   # UTF-8, no BOM
 
 # The kit installs into project-os\ at the repo root, so the root is one level up.
-$root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path.TrimEnd('\')
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path.TrimEnd([char]0x5C, [char]0x2F)
 
 # Project config: dot-source projectos.config.ps1 if present; otherwise fall back
 # to safe defaults. Only $ExtraHistoryTargets is consumed here.
@@ -78,8 +78,8 @@ $targets = New-Object System.Collections.Generic.List[object]
 
 $targets.Add([pscustomobject]@{
     Name     = 'project-os/History.md (appendix + scan log)'
-    Live     = Join-Path $root 'project-os\History.md'
-    Arch     = Join-Path $root 'project-os\History-archive.md'
+    Live     = Join-Path (Join-Path $root 'project-os') 'History.md'
+    Arch     = Join-Path (Join-Path $root 'project-os') 'History-archive.md'
     Sect     = '## Appendix'
     Scan     = $true
     # The Scan log rotates too, on the same move-only terms (added 2026-07-31).
@@ -90,7 +90,7 @@ $targets.Add([pscustomobject]@{
     # the newest $MaxKeepScanRows preserves the working window; everything older
     # moves verbatim into a sibling archive that is NOT read by default.
     ScanSect = '## Scan log'
-    ScanArch = Join-Path $root 'project-os\History-scan-archive.md'
+    ScanArch = Join-Path (Join-Path $root 'project-os') 'History-scan-archive.md'
 }) | Out-Null
 
 $featuresDir = Join-Path $root 'features'

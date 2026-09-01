@@ -30,6 +30,35 @@ The merge law:
 - An override happens only after the owner's explicit verdict on that clash,
   as its own change, never as part of the install.
 
+## 2b. Two checks before you go further
+
+Both take seconds, and each one catches a failure that is invisible afterwards.
+
+**Did copying the kit overwrite an existing rules file?** The merge law above
+only works if the project's own CLAUDE.md still exists. If the files were
+dragged in rather than renamed, it was replaced on disk before you ever ran,
+and there is nothing left to clash with. Check the history:
+
+```
+git log --oneline -3 -- CLAUDE.md
+```
+
+If that shows earlier versions and the file now holds this kit's placeholders,
+STOP. Recover the previous one with `git show HEAD:CLAUDE.md`, keep the kit's
+beside it as CLAUDE-kit.md, and only then merge. In a project with no version
+history, say plainly in the report that the merge could not be verified.
+
+**Is Node available?** Everything that enforces the rules runs through it: the
+hooks themselves and their installer. Check:
+
+```
+node --version
+```
+
+No Node means the enforcement layer cannot run, whatever this project is
+written in. That is a Problems line in the report, and the owner needs to know
+the rules are documents only until it is installed.
+
 ## 3. Learn the repo before asking
 
 Work out from the repo itself everything you can: the project name, the stack
@@ -182,8 +211,15 @@ The kit's rules apply to the kit.
 ## 8. The install report
 
 The one output the owner reads. Deliver it as the install's closing message,
-in the reply format project-os/Conversations.md prescribes, with these
-sections in this order:
+in the reply format project-os/Conversations.md prescribes.
+
+**This one report is exempt from that file's length ceiling**, and only this
+one. Its layout rules still apply in full: the dividers, the headings, one
+sentence per line, plain words. Length is what lifts, because a report that
+drops a problem or a clash to fit a line budget defeats its own purpose. The
+same exemption is written into Conversations.md, so the two cannot disagree.
+
+Sections, in this order:
 
 1. **What was set.** Each value, and where it came from: the repo, or the
    owner's answer.

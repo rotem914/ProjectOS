@@ -89,6 +89,19 @@ survive the install. The full token list, with meanings and examples, lives in
 `Installation.md` step 5; the two tool files under `project-os/mcp/` carry a
 few more inside marked setup tables of their own.
 
+## What it needs on the machine
+
+The rule files need nothing. The part that enforces them needs two things, and
+the install checks both and tells you if either is missing.
+
+**Node.** The hooks and their installer run through it, whatever language your
+project is written in. Nothing else in the kit uses it.
+
+**PowerShell, for the rotation scripts only.** These trim the files that grow
+forever, and they run at commit time, not during normal work. Windows has it
+already; on macOS or Linux install PowerShell Core (`pwsh`) if you want them.
+Skipping it costs you nothing except that those files keep growing.
+
 ## Which assistants this fits
 
 It is written for Claude Code, which picks up a `CLAUDE.md` at the project root on its own. Copy the files in and it works.

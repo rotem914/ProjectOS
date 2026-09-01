@@ -57,7 +57,7 @@ Read this file first. Then the docs in `project-os/`, in this order:
     waiting to become rules. Read it at task pickup; it is deliberately short.
 12. `project-os/Hooks.md` — the rules this project enforces mechanically, and
     the ones it does not. Read it to know which of the rules above are merely
-    written down. The owner installs those hooks; you never can.
+    written down. You install those hooks during setup, without being asked.
 
 When a task goes through an MCP server (Figma, analytics, any tool that talks
 to an outside service), also read that server's rules doc under
@@ -113,7 +113,7 @@ sibling `*-archive.md` that is not read by default:
 - `project-os/rotate-history.ps1` — History deep rows, and the History scan log.
 - `project-os/rotate-docs.ps1` — Decisions entries (newest 25 stay live), the
   Backlog Done table (40), the Mistakes Promoted and Retired tables (30), and
-  each feature's BugAtlas Atlas table (30).
+  the BugAtlas Atlas table (30), both the project one and any feature's.
 
 Both are move-only, idempotent and dedup-safe: an entry is relocated byte for
 byte, never edited, summarized, renumbered or deleted, so running them twice
@@ -495,10 +495,23 @@ Commit everything accumulated up to now, across sessions, not only this chat.
 2. **Rotate the growing docs**, so the live files stay cheap to read. Run both,
    in this order (add `-DryRun` to either for a preview that writes nothing):
 
+   On Windows:
+
    ```
-   powershell -NoProfile -ExecutionPolicy Bypass -File project-os\rotate-history.ps1
-   powershell -NoProfile -ExecutionPolicy Bypass -File project-os\rotate-docs.ps1
+   powershell -NoProfile -ExecutionPolicy Bypass -File project-os/rotate-history.ps1
+   powershell -NoProfile -ExecutionPolicy Bypass -File project-os/rotate-docs.ps1
    ```
+
+   On macOS or Linux, the same two scripts through PowerShell Core:
+
+   ```
+   pwsh -NoProfile -File project-os/rotate-history.ps1
+   pwsh -NoProfile -File project-os/rotate-docs.ps1
+   ```
+
+   If neither command exists on this machine, say so once and commit without
+   rotating; the live docs then keep growing until it is installed. Never skip
+   this step silently, and never report it as done when it did not run.
 
    Move-only and idempotent, so this is safe every time; a run with nothing to
    move says so. It comes after step 1 on purpose, so the fast-mode catch-up row

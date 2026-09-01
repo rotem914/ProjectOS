@@ -69,7 +69,10 @@ Inside that ceiling, say the problem and the why — never a verdict alone.
 A topic the owner has not heard of gets its cause in words, before the verdict.
 Only the long evidence and the full check list go to the `project-os/History.md` row.
 The ceiling holds for EVERY reply, work behind it or not.
-It lifts ONLY when the owner asks for a `full report`: 16 prose lines.
+It lifts ONLY when the owner asks for a `full report`: 16 prose lines,
+and once more for the install report that `Installation.md` defines, which
+has fixed sections it must carry in full. Every layout rule still applies
+to that report; only the length ceiling lifts.
 Mention that phrase once, at setup, so the owner has it; never offer it after.
 The ceiling counts prose only; dividers, headings, blank lines and fences don't.
 It is the whole reply's budget, the four report sections included.

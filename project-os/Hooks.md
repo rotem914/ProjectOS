@@ -27,10 +27,25 @@ node project-os/install-hooks.mjs
 ```
 
 It merges the ready-made hooks in `project-os/hooks-settings.json` into
-`.claude/settings.local.json`. It never overwrites: whatever is already there
-is kept, a backup is written first, and an event that already has hooks is
-reported and left alone unless it is re-run with `--force`. Add `--dry` to see
-what it would do and change nothing.
+`.claude/settings.local.json`, and it never overwrites.
+
+**Hooks of the same kind run side by side.** That setting holds a LIST, so this
+project's hooks are added beside whatever the project already had, and both
+fire. Nothing existing is removed, reworded or reordered. Running it twice
+changes nothing, because a hook already present is recognised.
+
+Flags, all of them optional:
+
+- `--dry` shows what it would do and writes nothing.
+- `--shared` writes to `.claude/settings.json`, which is committed, so the whole
+  team gets the hooks. Without it the hooks land in `.claude/settings.local.json`,
+  which is personal to one machine and usually not committed, so a teammate
+  cloning the repo gets none. Say which one you chose, out loud.
+- `--replace` removes an event's existing hooks instead of running beside them.
+  For a hook known to be broken, never as a default.
+
+Both settings files are read before anything is judged missing, so a hook
+already installed in the other one is never added twice.
 
 **If the environment refuses that write**, some setups guard their own
 configuration, do not argue with it and do not retry in a loop. Say plainly
