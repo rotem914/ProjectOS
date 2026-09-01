@@ -72,21 +72,50 @@ a question for the owner, never the standing check.
 
 ## 4. Ask once
 
-Ask only what the repo cannot tell you. Send every question in ONE message,
-not one at a time. At minimum:
+Ask only what the repo cannot tell you, in ONE message, never one at a time.
 
-- the owner's name,
-- their role on this project,
-- how they want you to talk to them: language, tone, how blunt, how long,
-- the commit policy the `Go commit` shortcut needs: which checks gate a
-  commit, whether work goes straight to the current branch or onto a task
-  branch, and who pushes,
-- whatever step 3 came up empty on: the host, a check command that passes.
+**Send it as TWO piles, and label them.** A batch of nine questions reads as
+nine decisions when half of them are things you already worked out and only
+need waved through. Separating them halves what the owner has to think about.
+
+**Pile one: confirm, and silence means yes.** Everything you derived and are
+confident in. State each as a fact with its source, not as a question. The
+owner reads them, and answers only the ones you got wrong.
+Typically: their name from the version history, the command that runs the app
+and the address it serves on, the command that checks the project, whether a
+tool folder is needed, whether the install file is deleted when this is over.
+
+**Pile two: needs a real answer, and the install waits.** Only what genuinely
+cannot be derived, and what would be wrong to guess. Number these.
+Typically: their role on this project, how they want you to write to them, the
+commit policy (which checks gate a commit, straight to the branch or a branch
+per task, who pushes), and anything step 3 came up empty on.
+
+Say which pile blocks the install and which does not, in one line, so nobody
+answers eight things to unblock one.
+
+**Two questions have a shape that matters:**
+
+**How long replies should be.** Never ask for numbers. Nobody can picture
+sixteen words. Show the SAME short answer written two ways, a terse one and a
+fuller one, and ask which reads better. Turn the answer into the numbers
+yourself.
+
+**The project invariants.** Do not leave that section empty and move on. Read
+the code, propose the three to six things this project cannot afford to break,
+and ask for a yes or no on each. Nothing is faster than judging a real list.
+Write every one as its CONSEQUENCE, in the owner's language: whose data could
+be exposed, what a customer would see, what would be lost. A candidate written
+as a technical noun cannot be judged by the person who has to approve it, so
+the yes it gets back is worthless.
 
 Every marked setup block in the kit is a question waiting to be asked. Walk
-them ALL before sending this message, and fold each one's question into the
-batch. A setup block reached in step 6 with no answer means step 4 was
-written short.
+them ALL before sending this message, and fold each one into the right pile. A
+setup block reached in step 6 with no answer means step 4 was written short.
+
+**The hooks are not a question.** They are installed for you in step 6b, on
+their default, and the report says so in one line. Never ask the owner to
+choose where they go.
 
 **Never fill a setup block from a default, a convention, or another
 project's habit.** An unanswered block is left as it is and listed in the
@@ -235,7 +264,7 @@ Sections, in this order:
 4. **Waiting on you.** Everything that needs the owner's answer or verdict,
    numbered, so each item can be answered in one word.
 
-5. **The rules are on.** The last thing in the report, always. Short, and
+5. **The rules are on.** Second to last in the report, always. Short, and
    written for someone who does not read code. Use this shape:
 
    > **Your rules are switched on**
@@ -253,6 +282,42 @@ Sections, in this order:
 
    If the install could not write that setting, say so in the same place, in
    plain words, and give the owner the one command to run instead.
+
+   Say in one line where the hooks were installed: personal to this machine by
+   default, and team-wide is available on request. Do not turn it into a
+   question.
+
+6. **What you can say to me.** The closing section, after the rules are on.
+   The owner has just been handed a folder of rules and knows none of the
+   phrases that drive it, so list them: a title, then ONE line saying what it
+   does. Nothing else, no flags, no explanation of the machinery.
+
+   List every trigger this project actually has, which is every one in
+   CLAUDE.md's Review, QA and Shortcuts sections. On a stock install:
+
+   > **What you can say to me**
+   >
+   > **Go commit**
+   > Commit everything so far, with the checks run first.
+   >
+   > **Go code review**
+   > Review the whole codebase and hand you the findings.
+   >
+   > **GO visual qa**
+   > Use the running app screen by screen and report what breaks.
+   >
+   > **FAST MODE**
+   > Skip the paperwork and check each round yourself, until you say stop.
+   >
+   > **Backlog**
+   > Put the thing we just discussed on the open-items list.
+   >
+   > **full report**
+   > Lift the length limit when you want the long version of an answer.
+
+   Adapt the list to what this project ended up with, and drop anything that
+   does not exist here. A trigger the owner never learns is a trigger nobody
+   uses.
 
 Also tell the owner once that the phrase "full report" lifts the reply-length
 ceiling when they want the long version.
