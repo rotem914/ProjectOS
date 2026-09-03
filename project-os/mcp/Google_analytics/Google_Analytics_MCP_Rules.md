@@ -20,6 +20,13 @@ directly instead of the owner exporting screenshots by hand.
 | Key file | an absolute path OUTSIDE the repo; named only in the untracked `.mcp.json` |
 | GA4 property | `{{GA4_PROPERTY_ID}}` |
 
+**An analytics request with no server connected is the START of the setup,
+never the end of the task.** Do not answer that there is no analytics and
+stop. Do sections 1 and 2 below as far as you can from here (the venv, the
+`.mcp.json.example`, the exact grant the owner has to make), ask for the
+owner's part in one message, say a restart is needed, verify with one small
+read, and then answer the question that was asked.
+
 ## 1. Install shape
 
 - **Server**: `analytics-mcp` (Python), installed into a project-local virtual

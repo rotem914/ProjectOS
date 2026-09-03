@@ -23,39 +23,60 @@ file.
 
 ## 0b. Connecting it (the part that is not in this repo)
 
-**The connection is a setting on the machine, never a file here.** An MCP
-server is registered in the assistant's own configuration, so a repo can carry
-every rule in this file and still have no Figma at all. If the tools are
-missing, that is the reason, and the fix is a one-time setup by the owner.
+**A Figma request with no Figma connected is the START of the setup, never
+the end of the task.** The first time the owner asks for anything in Figma and
+the tools are not there, do not answer that there is no Figma and stop. That
+answer was given once, on a real install, and it turned a one-time setup into a
+dead end. Open the setup in that same reply, do your part of it, ask for the
+owner's part, and then do what was asked.
+
+**The connection is a setting, never a rule file.** An MCP server is
+registered in the assistant's configuration, so this repo can carry every rule
+below and still have no Figma at all. The registration can live at project
+scope, in a `.mcp.json` at the repo root, which is an ordinary file you can
+write, or at user scope on the owner's machine, which only they can do.
 
 **Never go looking for the connection in another project's folder.** Another
 repo's working setup is not this project's, its file keys and its plan are not
 this project's either, and in client work reading across projects is a leak.
 Ask the owner instead (CLAUDE.md rule 21).
 
-What the owner does once, on their machine:
+**The setup, in order:**
 
-- Register Figma's MCP server with the assistant, at user scope so it follows
-  them between projects, or at project scope if only this repo should have it.
-- Choose the path: Figma's desktop app exposes a local server for the file that
-  is open in it, and Figma also hosts a remote server that signs in through the
-  browser. Take the current address and command straight from Figma's own
-  documentation rather than from another repo, since both have changed.
-- Confirm the seat: some capabilities need a paid Figma plan, and Dev Mode
-  features need a seat that has Dev Mode.
+1. **Look before you conclude.** Search the tool list for the Figma tools. A
+   deferred tool that has not been loaded is invisible, so "I see no Figma
+   tools" is not evidence until the search comes back empty.
+2. **Register the server yourself, at project scope.** Write `.mcp.json` at
+   the repo root (merge if one exists, never overwrite), pointing at Figma's
+   hosted server, which signs in through the browser:
 
-How the assistant verifies it, before trusting anything else:
+   ```json
+   {
+     "mcpServers": {
+       "figma": { "type": "http", "url": "https://mcp.figma.com/mcp" }
+     }
+   }
+   ```
 
-- Search the tool list for the Figma tools first. A deferred tool that has not
-  been loaded is invisible, so "I see no Figma tools" is not evidence of a
-  missing connection until the search comes back empty.
-- Then make ONE identity call (`whoami` where the server exposes it, and it is
-  usually free). It answers connected-or-not without spending the budget below.
-- If it fails, say so plainly, name what the owner has to do, and stop. Do not
-  improvise a workaround, and do not fall back to another project's files.
+   That address is Figma's as of this writing; if it fails, take the current
+   one from Figma's own documentation, never from another repo. The desktop
+   app's local server is the alternative, for the file open in the app.
+   If writing that file is refused, hand the owner this block and carry on.
+3. **Ask the owner for their part, in one message:** the link to the Figma
+   file, which page generated work should land on, the plan (it sets the call
+   budget below), and to sign in when the browser asks after the restart.
+   Some capabilities need a paid seat, and Dev Mode features need a Dev Mode
+   seat; say so once.
+4. **Say that a restart is needed.** A registered server is picked up when a
+   session starts, so the tools appear in the NEXT session, not this one.
+5. **Verify with ONE free call.** After the restart, make one identity call
+   (`whoami` where the server exposes it). It answers connected or not without
+   spending the metered budget below. Fill the setup table in section 0.
+6. **Then do the original request.** The frame the owner asked for is still
+   the task; the setup was the detour, not the destination.
 
-Nothing in this section belongs in the repo: no key, no token, no local path
-to a credential.
+Nothing in this section belongs in the repo except `.mcp.json`: no key, no
+token, no local path to a credential.
 
 ## 1. The call budget is rule #1
 

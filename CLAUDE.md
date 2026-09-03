@@ -67,6 +67,13 @@ The kit ships two, `project-os/mcp/Figma/Figma_MCP_Rules.md` and
 `project-os/mcp/Google_analytics/Google_Analytics_MCP_Rules.md`; a new server
 earns its own folder the first time it bites.
 
+**A tool that is not connected is a setup to start, never a reason to stop.**
+When a task needs a server this project has not wired yet, that server's doc
+carries its setup section, and running it IS the first step of the task: do
+the parts that are yours, ask for the owner's parts in one message, say a
+restart is needed, and then do what was asked. "There is no Figma here" is not
+an answer, it is the moment the setup begins.
+
 ## Working rules
 
 ### 1. Understand before changing
