@@ -358,8 +358,7 @@ A command is pasted into whatever terminal is open, and that terminal may be in
 another folder or another project; a bare command then fails, or runs somewhere
 else. Prefixing the move into the project makes the fence true to its own test:
 paste it anywhere and it works. In PowerShell that is
-`cd "C:\code
-orthwind"; npm run dev`, in a POSIX shell
+`cd "C:\code\northwind"; npm run dev`, in a POSIX shell
 `cd /Users/alex/code/northwind && npm run dev`.
 
 ~~~
