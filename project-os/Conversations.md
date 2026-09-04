@@ -339,6 +339,8 @@ Inside a fence no layout rule applies — the fence is one object.
 A terminal command starts by entering the project folder, full path, on the
 same line, in the shell's own syntax.
 Never a bare `npm run dev`: it works only if the terminal happens to sit there.
+An instruction to click through a dashboard comes with the direct link to that
+screen, fenced, not a trail of menu names.
 
 **A fence carries ONLY what the owner copies, never content they read.**
 A checklist, a plan, steps, findings or an explanation are ordinary reply text,
@@ -357,7 +359,9 @@ so it hides length as well as hurting the read.
 A command is pasted into whatever terminal is open, and that terminal may be in
 another folder or another project; a bare command then fails, or runs somewhere
 else. Prefixing the move into the project makes the fence true to its own test:
-paste it anywhere and it works. In PowerShell that is
+paste it anywhere and it works. The same holds for a dashboard: naming menus
+makes the owner hunt, a deep link lands them on the screen, and most dashboards
+have one. In PowerShell the command form is
 `cd "C:\code\northwind"; npm run dev`, in a POSIX shell
 `cd /Users/alex/code/northwind && npm run dev`.
 
@@ -369,6 +373,16 @@ cd /Users/alex/code/northwind && npm run dev
 ```
 
 Then open the settings page and the save button should answer at once.
+~~~
+
+~~~
+Turn on object storage for the account, here:
+
+```
+https://dash.cloudflare.com/?to=/:account/r2
+```
+
+Say enabled and I create the bucket.
 ~~~
 
 ~~~
