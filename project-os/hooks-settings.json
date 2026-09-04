@@ -23,6 +23,26 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit|Bash|PowerShell|Monitor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"{{ROOT}}/project-os/guards/path-guard.mjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|PowerShell|Monitor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"{{ROOT}}/project-os/guards/destructive-guard.mjs\""
+          }
+        ]
+      }
     ]
   }
 }

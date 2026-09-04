@@ -41,7 +41,7 @@ Each one ships with its structure already in place and a worked example at the e
 
 **Two tool files.** `project-os/mcp/Figma/Figma_MCP_Rules.md` holds working rules for the Figma MCP server: the call budget discipline, the hard caps, and the traps that fail silently. `project-os/mcp/Google_analytics/Google_Analytics_MCP_Rules.md` holds the wiring and reading rules for the official GA4 MCP server: key-outside-the-repo authorization, and never quoting a number that did not come from a tool call. Every rule in them was paid for in real use. Delete the folder of any server your project never touches; a different server earns its own folder there the first time it bites.
 
-**One enforcement file.** `project-os/Hooks.md` is the part that makes the rest hold. Rule files are followed while they are remembered; hooks fire on every message and every tool call whether anything remembers them or not. It ships a ready setup that needs no path editing and works on any machine, and it re-states your core rules on every single message rather than once at the start. The install switches it on for you, as a step and not as a suggestion; your only part is starting a new session afterwards, since the setting is read when a session opens. A project running this kit without it is running on good intentions.
+**One enforcement file.** `project-os/Hooks.md` is the part that makes the rest hold. Rule files are followed while they are remembered; hooks fire on every message and every tool call whether anything remembers them or not. It ships a ready setup that needs no path editing and works on any machine: your core rules re-stated on every single message, plus two guards that do not ask, one that refuses any file written outside the project and one that refuses a destructive command before it runs. The install switches it on for you, as a step and not as a suggestion; your only part is starting a new session afterwards, since the setting is read when a session opens. A project running this kit without it is running on good intentions.
 
 **One install file.** `Installation.md` is the complete install law: the merge rules for a project that already has a `CLAUDE.md`, the placeholder list, the setup steps, and the closing report the install owes you, problems and clashes included. Used once, then kept or deleted at your word.
 
@@ -112,7 +112,7 @@ It is written for Claude Code, which picks up a `CLAUDE.md` at the project root 
 
 Other assistants read a different entry filename. Rename `CLAUDE.md` to whatever yours looks for — the content does not change. The `project-os/` folder is plain markdown with no tooling attached, so it needs no adjustment at all.
 
-The hooks in `project-os/Hooks.md` are the exception: they are Claude Code's own mechanism, and another assistant with a similar feature needs its own equivalent wiring. Everything the hooks say is already written in the rule files, so a project without them still works, it just relies on the assistant remembering.
+The hooks in `project-os/Hooks.md` are the exception: they are Claude Code's own mechanism, and another assistant with a similar feature needs its own equivalent wiring. Everything the reminder hooks say is already written in the rule files, so a project without them still works, it just relies on the assistant remembering. The two guards are the exception to that too: without them nothing stops a stray write or a bad delete except the assistant's own care.
 
 ## Growing it
 

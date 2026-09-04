@@ -13,6 +13,9 @@
 //               gitignored, so it reaches only this machine)
 //   --replace   replace an event's existing hooks instead of running beside them
 //
+// The guards under project-os/guards/ ride in the same file, wired by absolute
+// path: {{ROOT}} in hooks-settings.json becomes this project's root at install.
+//
 // DEFAULT IS COMBINE, NOT REPLACE. A hook event holds a LIST, so this project's
 // hooks are appended to whatever is already there and both run. Nothing the
 // project already had is removed, reworded or reordered. `--replace` is the
@@ -87,6 +90,15 @@ try {
 if (!incoming || typeof incoming.hooks !== 'object' || incoming.hooks === null) {
   die('hooks-settings.json has no "hooks" object.');
 }
+
+// A guard is a script at a path, and the path has to be absolute: a hook runs
+// from whatever folder the tool happens to be in, and an environment variable
+// in the command string is not expanded on every shell. So the shipped file
+// carries {{ROOT}} and it is replaced HERE, once, with this project's real
+// root, forward slashes, which every shell on every platform accepts.
+const rootForward = root.split('\\').join('/');
+const withRoot = JSON.parse(JSON.stringify(incoming).split('{{ROOT}}').join(rootForward));
+incoming = withRoot;
 
 const target = readSettings(targetPath, { strict: true });
 const other = readSettings(otherPath, { strict: false });

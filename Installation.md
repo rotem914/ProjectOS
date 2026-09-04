@@ -17,10 +17,11 @@ adapt files; you cannot adapt what you have not read.
 Two exceptions, because reading is the biggest bill of the install and these
 files are never adapted by hand:
 
-- **The scripts are read by their header only.** `rotate.ps1` and
-  `install-hooks.mjs` open with a comment that says what they do and what
-  their parameters are; read that and stop. Their internals are not the
-  install's business, and they are half the folder by size.
+- **The scripts are read by their header only.** `rotate.ps1`,
+  `install-hooks.mjs` and the two files under `project-os/guards/` open with a
+  comment that says what they do and how they are wired; read that and stop.
+  Their internals are not the install's business, and together they are most
+  of the folder by size.
 - **A tool folder the project will delete is deleted before it is read.** The
   `mcp/` folders exist only to be filled; if step 4's pile one already says a
   server is not used here, remove that folder first and read nothing in it.
@@ -267,6 +268,11 @@ node project-os/install-hooks.mjs
   confirm the standing-rules text comes back. If nothing comes back, or the
   shell mangles it, the hooks are installed and silent, which looks identical to
   working. Say so in Problems rather than reporting the rules as on.
+
+- **Prove one guard actually blocks.** Same idea, no real action: pipe one fake
+  tool call into the destructive guard and read the exit code. `Hooks.md` has
+  the one-line command. Exit 2 with a reason is a working guard; exit 0 means
+  it is not installed or not running, and that goes in Problems.
 
 - **If the write is refused**, some environments guard their own configuration,
   do not argue with it and do not retry in a loop. Say plainly that it was

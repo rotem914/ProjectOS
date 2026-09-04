@@ -113,67 +113,42 @@ long block gets skimmed exactly like a long rule file.
 a file with a short preview, and the end of your text never reaches the model.
 A hook that says too much says nothing.
 
-## Level 2 — the guards, when a project earns them
+## Level 2 — the guards, and they ship with the kit
 
-These need a real script in the project, because they have to make decisions,
-and they are the difference between a rule that is repeated and a rule that
-cannot be broken.
+These are the difference between a rule that is repeated and a rule that
+cannot be broken. They live in `project-os/guards/`, they install with the same
+command as level 1, and they are wired by absolute path: the installer replaces
+`{{ROOT}}` in `hooks-settings.json` with this project's real root, because a
+hook runs from whatever folder the tool happens to be in and an environment
+variable in the command is not expanded on every shell.
 
-**The folder guard.** Fires before every file write and every shell command,
-and refuses anything aimed outside the project folder. It reads the command,
-including redirections and inline shells, and blocks what it cannot prove is
-inside. Without it, the rule about staying inside the project is a sentence in
-a document, and stray files land in your home folder and in the agent's own
-configuration.
+**The folder guard**, `guards/path-guard.mjs`. Fires before every file write
+and every shell command, and refuses anything aimed outside the project folder.
+It reads the command, including redirections, writing programs, inline shells
+and `cd` moves, and blocks what it cannot prove is inside. Without it, the rule
+about staying inside the project is a sentence in a document, and stray files
+land in the home folder and in the agent's own configuration. It runs on
+Windows, macOS and Linux; the one exception it allows on its own is the
+assistant's memory folder, markdown only. An `EXTRA_ROOTS` list at the top of
+the file, empty by default, is where the owner names any other folder writes
+may reach.
 
-**The destructive-command guard.** Fires before every shell command and blocks
-recursive deletes and the other one-way operations, unless the target is
-provably disposable. Its job is the command nobody meant to run.
+**The destructive-command guard**, `guards/destructive-guard.mjs`. Fires before
+every shell command and blocks the one-way operations: recursive or forced
+deletes whose targets are not provably disposable, force pushes, history
+rewrites, hard resets, branch deletes. Its job is the command nobody meant to
+run. A dry-run flag passes; a delete inside `node_modules`, a build folder, the
+OS temp folder or a `*.tmp` leftover passes; everything else stops with the
+reason.
 
-**The reply linter.** Fires when the assistant finishes a reply, checks it
-against your reply rules, and, on the next message, tells it exactly which line
-broke which rule. It warns, it never blocks and never forces a rewrite: a
-blocked reply has already been rendered, so a rewrite just shows you the same
-answer twice.
+Both are the same shape: read the tool call from standard input, exit 0 to
+allow, exit 2 with one line on standard error to block, and on any error of
+their own exit 0. That last part is the law below, fail open.
 
-They wire the same way as level 1, with the event and the script path:
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Write|Edit|NotebookEdit|Bash|PowerShell",
-        "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/path-guard.mjs\"" }
-        ]
-      },
-      {
-        "matcher": "Bash|PowerShell",
-        "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/destructive-guard.mjs\"" }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/reply-linter.mjs\"" }
-        ]
-      }
-    ]
-  }
-}
-```
-
-One caution on the paths above: the dollar-brace variable is expanded by the
-tool when it prepares the command, but a real install saw the same variable
-print as literal text inside a hook's OUTPUT on Windows. If a guard fails to
-start there, replace the variable with the absolute path to the script.
-
-**The kit does not ship these scripts yet.** Level 1 is the whole of what this
-file gives you with no files added. When a project needs the guards, they are
-written into that project, and this section is the shape they wire into.
+**Not shipped yet: the reply linter.** It would check each reply against the
+reply rules and correct the next one. It is coupled to the project's own
+length dial, so it needs a per-project setup the kit does not have yet. Hooks.md
+says so here rather than pretending; a project that wants it writes it.
 
 ## The laws every hook here obeys
 
@@ -197,8 +172,15 @@ once rather than assuming.
 
 - **The session hook:** start a new session and ask the assistant what standing
   rules it was given this turn. It should quote them back.
-- **A guard:** ask for something the guard forbids, in a way that is safe to be
-  refused, and confirm you get the refusal rather than the action.
+- **A guard:** feed it one fake tool call and read the exit code, no real
+  action needed. From the project root:
+
+  ```
+  echo {"tool_name":"Bash","tool_input":{"command":"rm -rf src"}} | node project-os/guards/destructive-guard.mjs
+  ```
+
+  It should print one blocking line and exit with code 2. A guard that exits 0
+  there is not installed, not this file, or broken, in that order of likelihood.
 - **The linter:** after a reply that clearly breaks a rule, the next message
   should carry the correction.
 

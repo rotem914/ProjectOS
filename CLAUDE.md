@@ -231,6 +231,13 @@ scratchpad elsewhere on disk: outside the root is outside the root.
 Files written outside the project are invisible to the owner, absent from git,
 and lost on the next machine.
 
+**This rule is enforced, not only stated.** `project-os/guards/path-guard.mjs`
+runs before every file write and every shell command and refuses what it cannot
+prove is inside the project; `project-os/guards/destructive-guard.mjs` refuses
+the one-way commands the same way. Both are installed with the hooks
+(`project-os/Hooks.md`). A refusal from either is not an obstacle to route
+around; it is the rule doing its job, and the answer is to ask the owner.
+
 **Your own memory is not a law book.** An assistant's private memory folder
 lives outside the project root, so a rule parked there is invisible to the
 owner, absent from git, and lost to every other session. A lesson or work rule
