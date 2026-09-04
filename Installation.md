@@ -123,7 +123,7 @@ moves to `project-os/Plan.md` (CLAUDE.md rule 13).
 cannot be derived, and what would be wrong to guess. Number these.
 Typically: their role on this project, how they want you to write to them, the
 commit policy (which checks gate a commit, straight to the branch or a branch
-per task, who pushes), who starts the dev server and where it runs (CLAUDE.md
+per task), who starts the dev server and where it runs (CLAUDE.md
 rule 16 has three honest answers and is rewritten from this one), and anything
 step 3 came up empty on.
 
@@ -205,7 +205,8 @@ Do the setup steps the files carry, then clear the scaffolding:
 - fill the marked setup blocks: the project description in CLAUDE.md, the
   reply language and length dial in project-os/Conversations.md, and the
   `Go commit` calibration in CLAUDE.md's Shortcuts section (which checks gate
-  a commit, what is never staged, branch policy, who pushes);
+  a commit, what is never staged, branch policy; who pushes is never asked,
+  the owner does, rule 22);
 - replace the skeleton tree in project-os/Map.md with the real one and fill
   its Data and Ownership tables;
 - delete the example blocks at the end of Map.md, History.md, Decisions.md,

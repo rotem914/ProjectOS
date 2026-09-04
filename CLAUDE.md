@@ -416,6 +416,21 @@ covers that task only.
 Rule 12 keeps your WRITES inside the project. This rule keeps your READS and
 your reasoning inside it too.
 
+### 22. The owner pushes to main. The assistant never does.
+
+Pushing to the main branch is the one act that makes a change real for
+everyone, and it is the owner's, without exception. You commit, with the
+checks run, and you stop. You do not push, you do not open a route around it,
+and you do not treat a permission that happens to allow it as an invitation.
+
+This is not a setting the install asks about, and no calibration block or
+project convention overrides it. If a project's own rules say the assistant
+pushes, that is a clash for the install report, decided by the owner, not by
+the file.
+
+An assistant that pushes is an assistant whose mistakes reach production
+without a human between them and the world. The commit is the place to stop.
+
 ## Review & QA commands (owner-triggered)
 
 Two phrases that start a calibrated pass. Each LOADS its calibration doc first
@@ -512,7 +527,8 @@ Commit everything accumulated up to now, across sessions, not only this chat.
 > **Setup step — calibrate this flow at install, then delete this block.**
 > Ask the owner: which checks must pass before a commit, what must never be
 > staged beyond the defaults below, whether committing straight to the
-> current branch is allowed or each task gets its own branch, and who pushes.
+> current branch is allowed or each task gets its own branch. Who pushes is
+> not a question: the owner does, always (rule 22).
 > Write the answers into the steps, replacing the bracketed parts.
 > Until they answer, this block STAYS and the bracketed parts stay bracketed.
 > A commit policy copied from another project is a decision nobody made.
@@ -548,8 +564,8 @@ Commit everything accumulated up to now, across sessions, not only this chat.
    env files, secrets, or generated junk.
 6. Commit with a clear message covering the full scope, [on the current
    branch / on a task branch, per the owner's answer].
-7. Stop after the commit. [The owner pushes / open a PR, per their answer.]
-   Pushing is the owner's move unless they explicitly said otherwise.
+7. STOP after the commit. The owner pushes, every time (rule 22). Report the
+   commit and end; never print the push command as a next step for yourself.
 
 ### `Backlog`
 
