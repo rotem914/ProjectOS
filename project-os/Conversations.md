@@ -336,6 +336,9 @@ A file path is the FULL absolute path, never a project-relative one.
 A name merely referenced in prose stays as inline backticks.
 The test is copy-intent: if the owner has to retype it to act, fence it.
 Inside a fence no layout rule applies — the fence is one object.
+A terminal command starts by entering the project folder, full path, on the
+same line, in the shell's own syntax.
+Never a bare `npm run dev`: it works only if the terminal happens to sit there.
 
 **A fence carries ONLY what the owner copies, never content they read.**
 A checklist, a plan, steps, findings or an explanation are ordinary reply text,
@@ -350,6 +353,24 @@ it stays inline. Real content read inside a monospace box loses its headings,
 its dividers and its line rhythm, and reads as machine output instead of an
 answer. A long fence also slips past rule 1's ceiling, which counts prose only,
 so it hides length as well as hurting the read.
+
+A command is pasted into whatever terminal is open, and that terminal may be in
+another folder or another project; a bare command then fails, or runs somewhere
+else. Prefixing the move into the project makes the fence true to its own test:
+paste it anywhere and it works. In PowerShell that is
+`cd "C:\code
+orthwind"; npm run dev`, in a POSIX shell
+`cd /Users/alex/code/northwind && npm run dev`.
+
+~~~
+Start it and look:
+
+```
+cd /Users/alex/code/northwind && npm run dev
+```
+
+Then open the settings page and the save button should answer at once.
+~~~
 
 ~~~
 The new page is at:
