@@ -10,9 +10,20 @@ delivered.
 
 ## 1. Read everything first
 
-Read CLAUDE.md and every file in project-os/, its mcp/ subfolder included.
-All of them, in full, before changing anything. A step below will tell you to
+Read CLAUDE.md and every markdown file in project-os/, its mcp/ subfolder
+included, in full, before changing anything. A step below will tell you to
 adapt files; you cannot adapt what you have not read.
+
+Two exceptions, because reading is the biggest bill of the install and these
+files are never adapted by hand:
+
+- **The scripts are read by their header only.** `rotate.ps1` and
+  `install-hooks.mjs` open with a comment that says what they do and what
+  their parameters are; read that and stop. Their internals are not the
+  install's business, and they are half the folder by size.
+- **A tool folder the project will delete is deleted before it is read.** The
+  `mcp/` folders exist only to be filled; if step 4's pile one already says a
+  server is not used here, remove that folder first and read nothing in it.
 
 ## 2. Merge with an existing CLAUDE.md
 
@@ -48,6 +59,14 @@ STOP. Recover the previous one with `git show HEAD:CLAUDE.md`, keep the kit's
 beside it as CLAUDE-kit.md, and only then merge. In a project with no version
 history, say plainly in the report that the merge could not be verified.
 
+**What does your own memory already say about this project?** Rule 12 keeps
+rules out of the assistant's private memory, and that folder is invisible to
+the owner, so this is the only moment anyone will look. List every note there
+that concerns this project, one line each, and put them in the report under
+Waiting-on-you with a keep-or-trim verdict per line. A note that is really a
+rule gets moved into the right file here; a note that is stale gets deleted on
+the owner's word, never yours.
+
 **Is Node available?** Everything that enforces the rules runs through it: the
 hooks themselves and their installer. Check:
 
@@ -72,6 +91,12 @@ project. There are THREE outcomes, not two:
 - **It passes.** It becomes the standing check.
 - **It fails.** That is a Problems line and a question for the owner, never the
   standing check.
+- **Nothing exists to run yet.** A project with a plan and no code has no check
+  command and no dev address. Do not invent one and do not leave the row empty:
+  write the FUTURE command the plan will create, name the plan step that creates
+  it, and mark every table that carries it "nothing to run before that step".
+  The report's Problems section says so in one fixed line: "No check exists yet;
+  it arrives at step N of the plan." The same shape applies to the dev address.
 - **It was refused, so it never ran.** A permission system can deny an unfamiliar
   build command, and a session with nobody to approve it gets no answer at all.
   Say REFUSED, name the command, and put it in Waiting-on-you. A command that
@@ -91,16 +116,24 @@ confident in. State each as a fact with its source, not as a question. The
 owner reads them, and answers only the ones you got wrong.
 Typically: their name from the version history, the command that runs the app
 and the address it serves on, the command that checks the project, whether a
-tool folder is needed, whether the install file is deleted when this is over.
+tool folder is needed, and, if a build plan sits loose in the repo, that it
+moves to `project-os/Plan.md` (CLAUDE.md rule 13).
 
 **Pile two: needs a real answer, and the install waits.** Only what genuinely
 cannot be derived, and what would be wrong to guess. Number these.
 Typically: their role on this project, how they want you to write to them, the
 commit policy (which checks gate a commit, straight to the branch or a branch
-per task, who pushes), and anything step 3 came up empty on.
+per task, who pushes), who starts the dev server and where it runs (CLAUDE.md
+rule 16 has three honest answers and is rewritten from this one), and anything
+step 3 came up empty on.
 
 Say which pile blocks the install and which does not, in one line, so nobody
 answers eight things to unblock one.
+
+**This message, like the closing report, is exempt from the reply-length
+ceiling.** It must be complete, since a question left out is a setup block
+filled by a guess. Every layout rule still applies. The same exemption is
+written into Conversations.md rule 1, so the two files agree.
 
 **Two questions have a shape that matters:**
 
@@ -133,7 +166,10 @@ ever revisits it; a blank one gets answered in ten seconds.
 ## 5. Replace every placeholder
 
 Replace every value written in double curly braces with the real thing, in
-CLAUDE.md and every file under project-os/. None may survive there.
+CLAUDE.md and every file under project-os/. None may survive there, and that
+includes the ones sitting inside example fences (`~~~` blocks): an example
+reply in Conversations.md carries the dev address too, and a careful reader of
+the table below would not expect one there.
 
 | Token | What it means | Example |
 |---|---|---|
@@ -200,7 +236,17 @@ So, as part of the install:
   the standing-rules text for THIS project, using the rules it actually has and
   the mistakes it actually makes. The shipped wording is a generic default, and
   a generic reminder every message is worth little. You may edit that file
-  freely: it is an ordinary repo file, not agent configuration.
+  freely: it is an ordinary repo file, not agent configuration. The recipe:
+  - Five to seven rules, each one line, numbered. A rule earns a line when
+    breaking it costs the owner a round of correction; a rule nobody breaks
+    does not.
+  - Under about 600 characters. The text is paid for on every message.
+  - No apostrophes anywhere in it: the text sits inside single quotes, and one
+    apostrophe ends the string. Write "do not", never the contraction.
+  - No dollar-brace variables. The shell on Windows prints them as literal
+    text. Use names relative to the project, "project-os/Conversations.md".
+  - Run the finished command once in the shell before installing, and once
+    more in the other shell if the machine has both, and read what comes out.
 - **Check whether hooks are already installed.** Read
   `.claude/settings.local.json` if it exists (reading it is allowed) and say in
   the report which events already have hooks and which do not. If a hook there
@@ -236,18 +282,19 @@ in place, and never leave the hooks uninstalled merely because nobody asked.
 
 ## 6c. Check the rotation scripts run here
 
-Two scripts ship in `project-os/` and keep the growing docs from becoming a
-tax on every task: `rotate-history.ps1` (History rows) and `rotate-docs.ps1`
-(Decisions entries, the Backlog Done table, the Mistakes tails, the BugAtlas
-rows). Both MOVE old material into a sibling `*-archive.md`, never rewrite it,
-and both are wired into `Go commit`.
+One script ships in `project-os/` and keeps the growing docs from becoming a
+tax on every task: `rotate.ps1`, with three engines inside it (History rows and
+the scan log; Decisions entries; the Backlog Done, Mistakes tail and BugAtlas
+tables). It MOVES old material into a sibling `*-archive.md`, never rewrites
+it, and it is wired into `Go commit`.
 
-They are PowerShell, so they run on Windows out of the box and need PowerShell
-installed anywhere else. At install:
+It is PowerShell, so it runs on Windows out of the box and needs PowerShell
+Core (`pwsh`) anywhere else. At install:
 
-- Run each once with `-DryRun`. A fresh repo has nothing to move, so the
-  expected output is a clean "nothing to move" per file. That is the proof the
-  paths resolved.
+- Run it once with `-DryRun`. A fresh repo has nothing to move, so the expected
+  output is "nothing to move" per file, and a target named "(missing - skipped)"
+  only for a file this project does not have. That is the proof the paths
+  resolved; a run that moves nothing writes nothing.
 - If PowerShell is not available on this machine, say so in the report's
   Problems section and tell the owner plainly what it costs: the docs still
   work, they simply grow forever until someone archives by hand.
@@ -337,6 +384,12 @@ Sections, in this order:
    > **full report**
    > Lift the length limit when you want the long version of an answer.
 
+   **Then the project's own phrases.** A plan-driven project is driven by its
+   own triggers ("go 1.1", "next step", a build phrase the owner already uses),
+   and those are the ones used most. Add a second short group under the same
+   heading, "This project's own", with whatever this install found or the owner
+   named. Leave it out only when there genuinely is none.
+
    Adapt the list to what this project ended up with, and drop anything that
    does not exist here. A trigger the owner never learns is a trigger nobody
    uses.
@@ -349,6 +402,9 @@ in Clashes too, said plainly, instead of quietly adapting the kit.
 
 ## 9. Clean up
 
-When the report is delivered, this file has done its job: ask the owner
-whether to delete Installation.md or keep it for reference. CLAUDE-kit.md, if
-there was one, is already gone (step 2).
+When the report is delivered, this file has done its job, and it STAYS. Other
+files point at it by name (Hooks.md, the installer's header, Conversations.md),
+so deleting it leaves a reader following a pointer to nothing. Say once in the
+report that it is kept as the record of how the install was done, and that the
+owner may delete it later if they want; if they do, the pointers are theirs to
+update. CLAUDE-kit.md, if there was one, is already gone (step 2).

@@ -19,7 +19,7 @@ chosen, so nobody re-argues it in six months and nobody quietly undoes it.
   it, not before — and move the entry verbatim: never rewritten, never
   summarized. Its Index line stays here, marked superseded, so the trail
   survives.
-- **This file also rotates, the way History does.** `project-os/rotate-docs.ps1`
+- **This file also rotates, the way History does.** `project-os/rotate.ps1`
   keeps the newest 25 entries live at `Go commit` and moves older ones into the
   same `Decisions-archive.md`, under its own `## Archived decisions` heading.
   Those entries still BIND the project; they only aged out of the live read, so
@@ -35,7 +35,7 @@ chosen, so nobody re-argues it in six months and nobody quietly undoes it.
 ## Required format
 
 ```md
-## YYYY-MM-DD — Decision title
+## YYYY-MM-DD · Decision title
 
 ### Context
 What problem or constraint forced a choice.
@@ -62,7 +62,7 @@ task touches. A line in _italics_ means part of that entry no longer holds.
 
 ---
 
-## YYYY-MM-DD — Example entry, delete this one
+## YYYY-MM-DD · Example entry, delete this one
 
 ### Context
 

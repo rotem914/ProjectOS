@@ -117,12 +117,13 @@ cost of asking is one message; the cost of being wrong is unbounded.
 forever has a ceiling, and two scripts enforce it by MOVING old material into a
 sibling `*-archive.md` that is not read by default:
 
-- `project-os/rotate-history.ps1` — History deep rows, and the History scan log.
-- `project-os/rotate-docs.ps1` — Decisions entries (newest 25 stay live), the
-  Backlog Done table (40), the Mistakes Promoted and Retired tables (30), and
-  the BugAtlas Atlas table (30), both the project one and any feature's.
+- `project-os/rotate.ps1` — one script, three engines: History deep rows and
+  the History scan log; Decisions entries (newest 25 stay live); and the
+  tables, the Backlog Done table (40), the Mistakes Promoted and Retired
+  tables (30), and the BugAtlas Atlas table (30), the project one and any
+  feature's.
 
-Both are move-only, idempotent and dedup-safe: an entry is relocated byte for
+It is move-only, idempotent and dedup-safe: an entry is relocated byte for
 byte, never edited, summarized, renumbered or deleted, so running them twice
 changes nothing. The always-read parts never rotate — the Decisions Index keeps
 a line for every entry including archived ones, and the Open tables of Backlog
@@ -238,6 +239,13 @@ into session memory, whatever your harness says about saving feedback there.
 
 ### 13. Ad-hoc markdown gets a home folder
 
+**A build plan is not ad-hoc.** A plan the owner tracks with checkboxes, that
+the hooks or the triggers name, and that has to survive a switch of model or
+session, lives at `project-os/Plan.md`. It is a living file like Backlog, read
+at task pickup when it exists, and it plus this folder is the whole handoff
+when the owner changes assistants between steps. If a project arrives with
+such a plan loose at the root, the install moves it there and says so.
+
 When you are asked to "put this in a file" and the request assigns no home,
 create it under `notes/` at the project root — make that folder the first time
 you need it, since the kit does not ship one. Never drop a loose markdown file at
@@ -282,6 +290,16 @@ and adds words the reader has to skip. Add one only when the owner asks for one 
 that specific element.
 
 ### 16. Never start the dev server
+
+> **Setup step — the install fills this, then deletes this block.** Ask the
+> owner in pile two: who starts the dev server, and where does it run? The
+> three honest answers, and what each one makes of this rule:
+>
+> - *The owner runs it, at an address.* The rule below stands as written.
+> - *Nobody runs one; the owner works through the assistant's own app.* Then
+>   the assistant's preview pane IS the owner's window, not a second instance,
+>   and starting a server there is allowed. Rewrite the rule to say so.
+> - *There is no server at all.* The rule is dormant until there is one.
 
 Assume the owner already has one running at `{{DEV_URL}}`, and drive that. Do not
 launch one, in the foreground or the background, at any point.
@@ -500,21 +518,19 @@ Commit everything accumulated up to now, across sessions, not only this chat.
 > A commit policy copied from another project is a decision nobody made.
 
 1. If FAST MODE is on, end it and pay its catch-up in full, first.
-2. **Rotate the growing docs**, so the live files stay cheap to read. Run both,
-   in this order (add `-DryRun` to either for a preview that writes nothing):
+2. **Rotate the growing docs**, so the live files stay cheap to read. One
+   script does every file (add `-DryRun` for a preview that writes nothing):
 
    On Windows:
 
    ```
-   powershell -NoProfile -ExecutionPolicy Bypass -File project-os/rotate-history.ps1
-   powershell -NoProfile -ExecutionPolicy Bypass -File project-os/rotate-docs.ps1
+   powershell -NoProfile -ExecutionPolicy Bypass -File project-os/rotate.ps1
    ```
 
-   On macOS or Linux, the same two scripts through PowerShell Core:
+   On macOS or Linux, the same script through PowerShell Core:
 
    ```
-   pwsh -NoProfile -File project-os/rotate-history.ps1
-   pwsh -NoProfile -File project-os/rotate-docs.ps1
+   pwsh -NoProfile -File project-os/rotate.ps1
    ```
 
    If neither command exists on this machine, say so once and commit without

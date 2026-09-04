@@ -47,7 +47,8 @@ Each one ships with its structure already in place and a worked example at the e
 
 ## Install
 
-Under ten minutes, and most of that is the assistant reading.
+Under ten minutes of your time. The assistant's part is longer, mostly
+reading, and it runs while you do something else.
 
 The complete install law lives in `Installation.md`: the merge rules for an
 existing `CLAUDE.md`, the placeholders, the setup steps, and the report the
@@ -57,7 +58,9 @@ install must end with, problems and clashes included.
    root of your project.
    Already have a `CLAUDE.md`? Keep yours: bring the kit's in as `CLAUDE-kit.md`
    beside it, and the install has your assistant merge the two.
-2. Paste the install prompt below into your assistant.
+2. Paste the install prompt below into your assistant. Or just tell it to
+   install ProjectOS and give it this link: it reads `Installation.md` either
+   way.
 3. Answer its questions. It asks once, in one batch.
 4. Read its closing report: what was set, what broke, and where your existing
    rules clash with the kit's process.
@@ -97,10 +100,11 @@ the install checks both and tells you if either is missing.
 **Node.** The hooks and their installer run through it, whatever language your
 project is written in. Nothing else in the kit uses it.
 
-**PowerShell, for the rotation scripts only.** These trim the files that grow
-forever, and they run at commit time, not during normal work. Windows has it
-already; on macOS or Linux install PowerShell Core (`pwsh`) if you want them.
-Skipping it costs you nothing except that those files keep growing.
+**PowerShell, for the rotation script only.** One script, `rotate.ps1`, trims
+the files that grow forever, and it runs at commit time, not during normal
+work. Windows has it already; on macOS or Linux install PowerShell Core
+(`pwsh`) if you want it. Skipping it costs you nothing except that those files
+keep growing.
 
 ## Which assistants this fits
 

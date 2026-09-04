@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node -e \"console.log('PROJECT RULES: read CLAUDE.md and the files in ${CLAUDE_PROJECT_DIR}/project-os before doing anything in this session. Conversations.md governs every reply you write. Workflow.md governs every task. Read them now, in full, if you have not.')\"",
+            "command": "node -e \"console.log('PROJECT RULES: read CLAUDE.md and the files in project-os before doing anything in this session. Conversations.md governs every reply you write. Workflow.md governs every task. Read them now, in full, if you have not.')\"",
             "timeout": 10,
             "suppressOutput": true
           }

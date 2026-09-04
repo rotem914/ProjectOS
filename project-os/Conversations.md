@@ -70,9 +70,9 @@ A topic the owner has not heard of gets its cause in words, before the verdict.
 Only the long evidence and the full check list go to the `project-os/History.md` row.
 The ceiling holds for EVERY reply, work behind it or not.
 It lifts ONLY when the owner asks for a `full report`: 16 prose lines,
-and once more for the install report that `Installation.md` defines, which
-has fixed sections it must carry in full. Every layout rule still applies
-to that report; only the length ceiling lifts.
+and twice more for the two messages `Installation.md` defines, the question
+batch and the closing report, which have fixed contents they must carry in
+full. Every layout rule still applies to both; only the length ceiling lifts.
 Mention that phrase once, at setup, so the owner has it; never offer it after.
 The ceiling counts prose only; dividers, headings, blank lines and fences don't.
 It is the whole reply's budget, the four report sections included.
@@ -472,6 +472,10 @@ Nothing to record — I broke a rule that exists.
 ~~~
 
 ### 17 · Never a long dash
+
+The `## YYYY-MM-DD · Title` heading in Decisions.md uses a middle dot for the
+same reason, and the rotation script accepts any separator there, so an older
+entry written with a dash still rotates.
 
 Never write a dash longer than a hyphen: not `—`, not `–`, not a `--` pair.
 Use a comma, a period, a colon, or a new line instead.

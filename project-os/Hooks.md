@@ -63,8 +63,7 @@ If you would rather wire it by hand, the same content is in the block below.
 ## Level 1 — works in any project, needs no files
 
 Paste this and you are done. It adds nothing to the repository, depends on no
-script, and needs no path edited: `${CLAUDE_PROJECT_DIR}` is filled in by the
-tool itself.
+script, and needs no path edited: every name in it is relative to the project.
 
 Two hooks. The first speaks once when a session opens. The second speaks on
 **every single message**, which is the whole point: a rule repeated at the top
@@ -79,7 +78,7 @@ not.
         "hooks": [
           {
             "type": "command",
-            "command": "node -e \"console.log('PROJECT RULES: read CLAUDE.md and the files in ${CLAUDE_PROJECT_DIR}/project-os before doing anything in this session. Conversations.md governs every reply you write. Workflow.md governs every task. Read them now, in full, if you have not.')\"",
+            "command": "node -e \"console.log('PROJECT RULES: read CLAUDE.md and the files in project-os before doing anything in this session. Conversations.md governs every reply you write. Workflow.md governs every task. Read them now, in full, if you have not.')\"",
             "timeout": 10,
             "suppressOutput": true
           }
@@ -166,6 +165,11 @@ They wire the same way as level 1, with the event and the script path:
   }
 }
 ```
+
+One caution on the paths above: the dollar-brace variable is expanded by the
+tool when it prepares the command, but a real install saw the same variable
+print as literal text inside a hook's OUTPUT on Windows. If a guard fails to
+start there, replace the variable with the absolute path to the script.
 
 **The kit does not ship these scripts yet.** Level 1 is the whole of what this
 file gives you with no files added. When a project needs the guards, they are
