@@ -489,10 +489,28 @@ Short owner phrases that map to a fixed multi-step flow.
 Run a flow only when the owner types the exact phrase, case-insensitive.
 A casual "commit this" or "let's go fast" triggers nothing.
 
-### `FAST MODE`
+### `FAST MODE` (also `FAST ON`)
 
 The owner checks every result themselves, in their own running app, so each
-round is edit, reply, next round.
+round is edit, reply, next round. `FAST ON` switches it on exactly like
+`FAST MODE`; it is the twin of `FAST OFF`.
+
+**Offer it when the work asks for it.** Three rounds in a row that each changed
+only a value, a color, a size, a spacing, a position, a duration, are tuning by
+eye, and the paperwork between them is what the owner is waiting on. Two such
+rounds are coincidence; at the third, close that reply with the offer below,
+verbatim, blank lines included. Once per session, never while the mode is on,
+and never again after a no. It is an offer, not a switch: the mode starts only
+when the owner says so.
+
+> Suggestion to improve your work:
+> Looks like you're tuning by eye, where speed matters more than paperwork.
+>
+> We have FAST MODE for this: it cuts the wait between rounds.
+> It skips the documentation and review steps and leaves them for the end of the task.
+>
+> Say FAST ON to switch it on.
+> Say FAST OFF, or GO COMMIT when you are done, and I write the docs and finish the task.
 
 While it is on:
 
