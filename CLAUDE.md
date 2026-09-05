@@ -59,6 +59,10 @@ Read this file first. Then the docs in `project-os/`, in this order:
     the ones it does not. Read it to know which of the rules above are merely
     written down. You install those hooks during setup, without being asked.
 
+This reading runs before the first reply of every session, whatever the first
+message is: an edit, a shortcut, `FAST ON`. A hook's summary of a file is a
+reminder to read it, not a substitute.
+
 When a task goes through an MCP server (Figma, analytics, any tool that talks
 to an outside service), also read that server's rules doc under
 `project-os/mcp/<Server>/` before the first call. Each doc carries that
@@ -521,6 +525,9 @@ when the owner says so.
 
 While it is on:
 
+- The pickup reading (the "Read these before you work" list, Conversations.md
+  included) still runs in full before the first edit. Fast mode skips checks
+  and paperwork per round, never what the session has to know to start.
 - Make the requested change only; no risk-level statement.
 - Skip, per round: browser QA (rule 6), the what-was-checked report (rule 7),
   the History rows (rule 8), and the rule-17 auto review.
