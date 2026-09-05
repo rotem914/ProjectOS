@@ -257,15 +257,6 @@ at task pickup when it exists, and it plus this folder is the whole handoff
 when the owner changes assistants between steps. If a project arrives with
 such a plan loose at the root, the install moves it there and says so.
 
-**A plan says WHAT to build, never how to work.** Steps, their order, what
-each one delivers, and a tick when it lands. Not how replies are written, not
-what gets logged, not which checks run: those are this file and `project-os/`,
-and a plan that carries its own working rules creates a second rulebook the
-owner never reads in full. A working rule found inside a plan is a clash for
-the report, then moved into the file that owns it or dropped, never obeyed
-from the plan. A step done is a tick in the plan; the History row for it is
-the same as for any task, one per completed change.
-
 When you are asked to "put this in a file" and the request assigns no home,
 create it under `notes/` at the project root — make that folder the first time
 you need it, since the kit does not ship one. Never drop a loose markdown file at

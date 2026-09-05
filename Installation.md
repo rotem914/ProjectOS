@@ -118,9 +118,7 @@ owner reads them, and answers only the ones you got wrong.
 Typically: their name from the version history, the command that runs the app
 and the address it serves on, the command that checks the project, whether a
 tool folder is needed, and, if a build plan sits loose in the repo, that it
-moves to `project-os/Plan.md` (CLAUDE.md rule 13). Read that plan for working
-instructions while you are at it: a plan may only say what to build, so any
-"how to work" line in it goes to the report's Clashes, not into practice.
+moves to `project-os/Plan.md` (CLAUDE.md rule 13).
 
 **Pile two: needs a real answer, and the install waits.** Only what genuinely
 cannot be derived, and what would be wrong to guess. Number these.
