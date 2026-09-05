@@ -257,6 +257,15 @@ at task pickup when it exists, and it plus this folder is the whole handoff
 when the owner changes assistants between steps. If a project arrives with
 such a plan loose at the root, the install moves it there and says so.
 
+**A plan names a model for every step.** When you write a work plan for a new
+project, each step carries a suggested model and three words on why: the
+most capable one for design, architecture, anything irreversible and anything
+that touches data; a faster, cheaper one for mechanical rounds, renames, copy
+and small fixes. The owner switches models between steps and pays for each,
+so the plan is where that choice is easiest to make and hardest to guess. A
+suggestion, not a setting: the owner picks, and a step with no obvious fit
+says so rather than inventing one.
+
 When you are asked to "put this in a file" and the request assigns no home,
 create it under `notes/` at the project root — make that folder the first time
 you need it, since the kit does not ship one. Never drop a loose markdown file at
