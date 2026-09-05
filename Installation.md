@@ -42,6 +42,16 @@ The merge law:
 - An override happens only after the owner's explicit verdict on that clash,
   as its own change, never as part of the install.
 
+**The assistant's own global instructions are not project rules.** A personal
+instruction file the owner keeps for every project (a house style, a preferred
+diagram format, a tone) is not the existing CLAUDE.md above, and a clash with
+it is not a question. Inside this project the kit's rules win, because the
+project's rules are the more specific ones and that is how the assistant
+resolves the two anyway. Say it in the report as one line under What was set
+("your global preference for X does not apply inside this project"), never as
+something the owner has to rule on: a regular owner has no way to answer that
+question, and it should not be asked.
+
 ## 2b. Two checks before you go further
 
 Both take seconds, and each one catches a failure that is invisible afterwards.
@@ -333,7 +343,9 @@ Sections, in this order:
    a block that cannot be filled. One line each, with its practical
    consequence. An install with no problems says so explicitly.
 3. **Clashes.** Every place an existing rule or working habit of this project
-   interferes with the kit's processes. Per clash: the existing rule, the kit
+   interferes with the kit's processes. The project's own rules only: a clash with
+   the assistant's global instructions is settled by step 2, the kit wins, and
+   is stated under What was set, not asked here. Per clash: the existing rule, the kit
    rule or process it blocks, what keeping it will cost in practice, and a
    keep-or-override recommendation. This is a decision list for the owner;
    nothing has been overridden.
