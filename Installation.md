@@ -132,7 +132,7 @@ moves to `project-os/Plan.md` (CLAUDE.md rule 13).
 
 **Pile two: needs a real answer, and the install waits.** Only what genuinely
 cannot be derived, and what would be wrong to guess. Number these.
-Typically: their role on this project, how they want you to write to them, the
+Typically: their role on this project, the language replies are written in, the
 commit policy (which checks gate a commit, straight to the branch or a branch
 per task), who starts the dev server and where it runs (CLAUDE.md
 rule 16 has three honest answers and is rewritten from this one), and anything
@@ -146,12 +146,12 @@ ceiling.** It must be complete, since a question left out is a setup block
 filled by a guess. Every layout rule still applies. The same exemption is
 written into Conversations.md rule 1, so the two files agree.
 
-**Two questions have a shape that matters:**
+**Reply length is not a question.** The limits in Conversations.md rule 1 are
+law and ship as written; never ask how long replies should be, never show two
+sample answers, never turn an answer into numbers. An owner who wants a
+different limit edits that rule later, with the file in front of them.
 
-**How long replies should be.** Never ask for numbers. Nobody can picture
-sixteen words. Show the SAME short answer written two ways, a terse one and a
-fuller one, and ask which reads better. Turn the answer into the numbers
-yourself.
+**One question has a shape that matters:**
 
 **The project invariants.** Do not leave that section empty and move on. Read
 the code, propose the three to six things this project cannot afford to break,
@@ -214,7 +214,8 @@ project-os/mcp/ instead of filling its setup table.
 Do the setup steps the files carry, then clear the scaffolding:
 
 - fill the marked setup blocks: the project description in CLAUDE.md, the
-  reply language and length dial in project-os/Conversations.md, and the
+  reply language in project-os/Conversations.md (its length limits are law,
+  not a setup block), and the
   `Go commit` calibration in CLAUDE.md's Shortcuts section (which checks gate
   a commit, what is never staged, branch policy; who pushes is never asked,
   the owner does, rule 22);

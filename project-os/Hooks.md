@@ -146,9 +146,9 @@ allow, exit 2 with one line on standard error to block, and on any error of
 their own exit 0. That last part is the law below, fail open.
 
 **Not shipped yet: the reply linter.** It would check each reply against the
-reply rules and correct the next one. It is coupled to the project's own
-length dial, so it needs a per-project setup the kit does not have yet. Hooks.md
-says so here rather than pretending; a project that wants it writes it.
+reply rules and correct the next one. It is a script of its own with a test
+suite, and it has not been made generic yet, so the kit does not carry it.
+Hooks.md says so here rather than pretending; a project that wants it writes it.
 
 ## The laws every hook here obeys
 

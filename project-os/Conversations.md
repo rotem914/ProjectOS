@@ -85,15 +85,14 @@ Open on the substance — nothing above the first `----`, no preamble ("Sure —
 
 The owner asks when more is wanted, so the default is the floor, not a guess.
 
-**These numbers are a dial, not a law.** Three lines of sixteen words is only a
-starting default, and another owner may want five, or ten.
+**These numbers are law, and the install never asks about them.** Three lines
+of sixteen words ships as written, in every project, with no sample answers to
+choose between and no question about length at setup.
 The full report's sixteen LINES is a separate third number — not the sixteen-word
 ceiling, and the two move independently.
 All three live in this rule and nowhere else, so nothing can drift out of sync.
-
-> **Setup step — delete this block when done.** Set all three numbers from the
-> owner's install answers about length; a tone or bluntness answer becomes one
-> added line in this rule.
+An owner who wants a different limit edits this rule later, with the file in
+front of them, and that edit is the only way the numbers change.
 
 "Never a verdict alone" is the half that matters most.
 A conclusion fits in ten words. A cause almost never does.
