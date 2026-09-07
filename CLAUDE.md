@@ -608,6 +608,37 @@ Commit everything accumulated up to now, across sessions, not only this chat.
 7. STOP after the commit. The owner pushes, every time (rule 22). Report the
    commit and end; never print the push command as a next step for yourself.
 
+### `Go backup`
+
+One local, self-contained ZIP snapshot of the whole project, for offline
+disaster recovery that depends on no git host and no sync folder. Flow:
+
+1. Run `project-os/backup.ps1` (PowerShell; `pwsh` on macOS or Linux). It zips
+   the whole project, git history included, and leaves out the regenerable
+   folders named in its setup block, the assistant's machine-local folders, the
+   `.tmp/` scratch folder and every real secret file (`.env*`, `.dev.vars*`;
+   the `.example` templates travel). It either verifies every file back out of
+   the finished archive or fails and leaves no ZIP at all; there is no "mostly
+   worked".
+2. The ZIP lands in `backups/` at the project root, which is gitignored.
+3. Never commit or push a ZIP.
+4. Tell the owner to move the ZIP to external storage; a backup on the same
+   disk as the project is not one.
+
+**Secrets never travel.** Real env files are excluded on purpose, so a full
+restore recreates them by hand from the templates. Say so when reporting a
+restore, never as a surprise during one.
+
+**Restore.** Unzip the chosen `backups/*.zip` into a NEW folder, never over the
+live tree; reinstall dependencies; recreate the env files from their
+templates; then run the project as usual. The full git history is inside the
+snapshot's `.git` folder, so nothing has to be fetched from anywhere.
+
+### `Go commit and backup`
+
+Run both flows back to back: `Go commit` in full (the assistant commits and
+stops, the owner pushes), then `Go backup`.
+
 ### `Backlog`
 
 When the owner says `Backlog` about an item, in any casing, append one row to

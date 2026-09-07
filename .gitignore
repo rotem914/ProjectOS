@@ -1,0 +1,2 @@
+# A `Go backup` snapshot never enters git, in the kit repo or in any project.
+/backups/

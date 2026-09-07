@@ -17,7 +17,7 @@ adapt files; you cannot adapt what you have not read.
 Two exceptions, because reading is the biggest bill of the install and these
 files are never adapted by hand:
 
-- **The scripts are read by their header only.** `rotate.ps1`,
+- **The scripts are read by their header only.** `rotate.ps1`, `backup.ps1`,
   `install-hooks.mjs` and the two files under `project-os/guards/` open with a
   comment that says what they do and how they are wired; read that and stop.
   Their internals are not the install's business, and together they are most
@@ -219,6 +219,11 @@ Do the setup steps the files carry, then clear the scaffolding:
   `Go commit` calibration in CLAUDE.md's Shortcuts section (which checks gate
   a commit, what is never staged, branch policy; who pushes is never asked,
   the owner does, rule 22);
+- check the exclusion list at the top of project-os/backup.ps1 against this
+  stack: every regenerable folder (dependencies, build output, caches) is
+  named there, and nothing this project commits on purpose is. Then add
+  `/backups/` to the project's `.gitignore`, creating the file if there is
+  none, so a snapshot can never be committed;
 - replace the skeleton tree in project-os/Map.md with the real one and fill
   its Data and Ownership tables;
 - delete the example blocks at the end of Map.md, History.md, Decisions.md,
@@ -319,6 +324,14 @@ Core (`pwsh`) anywhere else. At install:
 - Never edit an entry to make a file smaller. Shrinking is the scripts' job,
   and theirs alone.
 
+The second script, `backup.ps1`, makes the `Go backup` snapshot. Run it once,
+after step 6 has settled its exclusion list and gitignored `backups/`. It
+prints the ZIP path and a count of files verified back out of the archive, or
+fails and leaves nothing; either is the proof. A ZIP that took minutes or
+weighs hundreds of megabytes means a regenerable folder is missing from the
+exclusion list: fix the list, delete the ZIP, run again. The ZIP it leaves is
+the project's first snapshot; tell the owner where it is in the report.
+
 ## 7. Log the install
 
 Log the install itself as the first two rows in project-os/History.md.
@@ -388,6 +401,9 @@ Sections, in this order:
    >
    > **Go commit**
    > Commit everything so far, with the checks run first.
+   >
+   > **Go backup**
+   > Zip the whole project into one file you can put on a drive.
    >
    > **Go code review**
    > Review the whole codebase and hand you the findings.

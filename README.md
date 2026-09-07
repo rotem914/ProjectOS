@@ -100,11 +100,13 @@ the install checks both and tells you if either is missing.
 **Node.** The hooks and their installer run through it, whatever language your
 project is written in. Nothing else in the kit uses it.
 
-**PowerShell, for the rotation script only.** One script, `rotate.ps1`, trims
-the files that grow forever, and it runs at commit time, not during normal
-work. Windows has it already; on macOS or Linux install PowerShell Core
-(`pwsh`) if you want it. Skipping it costs you nothing except that those files
-keep growing.
+**PowerShell, for two scripts only.** `rotate.ps1` trims the files that grow
+forever, and it runs at commit time, not during normal work. `backup.ps1`
+zips the whole project, git history included and secrets excluded, into one
+file you can put on a drive, when you say `Go backup`. Windows has PowerShell
+already; on macOS or Linux install PowerShell Core (`pwsh`) if you want them.
+Skipping it costs you nothing except that those files keep growing and the
+backup is yours to make by hand.
 
 ## Which assistants this fits
 
