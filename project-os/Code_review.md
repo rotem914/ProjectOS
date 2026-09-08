@@ -51,6 +51,14 @@ what was edited. It does not show who was depending on it.
 
 Run this on every medium- or high-risk change, in either pass above.
 
+**Run it on every change that touches something SHARED as well, whatever the
+risk level.** Shared means a part shown on more than one screen, or a value the
+whole product reads: a component, a token, a spacing or type value, a schema, a
+helper. Touching one arms this trace even when the edit is one line and the risk
+was called low. The rating measures the size of the edit; this section measures
+its reach, and those are not the same question. When it fires, open the other
+places the thing appears, and report what moved there.
+
 Trace the consumers of everything the change touched:
 
 - shared components, and every route or screen that renders one;
