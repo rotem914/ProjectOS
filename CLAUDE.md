@@ -167,6 +167,11 @@ with cannot take a screenshot or drive the page, switch to another available
 one and finish the pass in the same task. Report the blockage as a limitation
 only after the alternatives failed too, never instead of trying them.
 
+**A dead app is the same case.** If the address will not load, the check is not
+impossible, it is waiting on one command from the owner. Ask them to start the
+server and say so in the reply (rule 16); never treat a down server as the end
+of the browser pass.
+
 **Close every tab you opened, in the same task.** A QA tab is yours, not the
 owner's; left behind, it clutters the window they work in. Never close a tab
 you did not open, and never stop the owner's dev server (rule 16).
@@ -324,10 +329,20 @@ that specific element.
 Assume the owner already has one running at `{{DEV_URL}}`, and drive that. Do not
 launch one, in the foreground or the background, at any point.
 
-A second instance collides with theirs and takes away their live preview. If the
-app looks down, say so and ask them to start it. One-shot commands like
-`{{CHECK_COMMAND}}` do not hold the port and are fine to run. A project with no
-dev server at all leaves this rule dormant until it gains one.
+A second instance collides with theirs and takes away their live preview.
+One-shot commands like `{{CHECK_COMMAND}}` do not hold the port and are fine to
+run. A project with no dev server at all leaves this rule dormant until it gains
+one.
+
+**A server that is down is a REQUEST to the owner, never a step you drop.** Not
+starting one is the only half of this rule; the other half is asking. Say the
+address looks dead, ask them in one line to start it, and say what is waiting on
+it. Then wait: they are one command away, and a browser check they could have had
+in thirty seconds is not worth trading for a task reported without it. Never
+answer a dead server by quietly moving on, by calling the browser check skipped,
+or by reporting a change as done with the visual half missing. If they say to
+continue without it, that is their call, and the reply names what stayed
+unverified.
 
 ### 17. Risky changes get reviewed
 
