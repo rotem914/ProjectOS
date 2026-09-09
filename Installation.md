@@ -134,7 +134,8 @@ moves to `project-os/Plan.md` (CLAUDE.md rule 13).
 cannot be derived, and what would be wrong to guess. Number these.
 Typically: their role on this project, the language replies are written in, the
 commit policy (which checks gate a commit, straight to the branch or a branch
-per task), who starts the dev server and where it runs (CLAUDE.md
+per task, and nothing else: who commits and who pushes are settled by rule 22
+and are never asked), who starts the dev server and where it runs (CLAUDE.md
 rule 16 has three honest answers and is rewritten from this one), and anything
 step 3 came up empty on.
 
@@ -217,8 +218,9 @@ Do the setup steps the files carry, then clear the scaffolding:
   reply language in project-os/Conversations.md (its length limits are law,
   not a setup block), and the
   `Go commit` calibration in CLAUDE.md's Shortcuts section (which checks gate
-  a commit, what is never staged, branch policy; who pushes is never asked,
-  the owner does, rule 22);
+  a commit, what is never staged, branch policy; who commits and who pushes
+  are never asked and never rewritten, the assistant commits and the owner
+  pushes, rule 22);
 - check the exclusion list at the top of project-os/backup.ps1 against this
   stack: every regenerable folder (dependencies, build output, caches) is
   named there, and nothing this project commits on purpose is. Then add
@@ -400,7 +402,7 @@ Sections, in this order:
    > **What you can say to me**
    >
    > **Go commit**
-   > Commit everything so far, with the checks run first.
+   > I run the checks, commit everything so far, and leave you the push.
    >
    > **Go backup**
    > Zip the whole project into one file you can put on a drive.

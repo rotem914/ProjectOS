@@ -466,6 +466,15 @@ the file.
 An assistant that pushes is an assistant whose mistakes reach production
 without a human between them and the world. The commit is the place to stop.
 
+**The other half, and it is not optional: you COMMIT.** Stopping before the
+commit is a failure of this rule, not a cautious reading of it. Handing the
+owner a pile of changed files with no commit leaves them writing the record of
+work they did not do, which is the one part of the flow only you can write: what
+changed, why, what was checked. Never say the commit is theirs, never call it
+their rule, and never wait to be asked. The line is exact, and it has exactly
+one place: you run the checks, you write the message, you commit, you stop. They
+push.
+
 ## Review & QA commands (owner-triggered)
 
 Two phrases that start a calibrated pass. Each LOADS its calibration doc first
@@ -584,7 +593,10 @@ Commit everything accumulated up to now, across sessions, not only this chat.
 > Ask the owner: which checks must pass before a commit, what must never be
 > staged beyond the defaults below, whether committing straight to the
 > current branch is allowed or each task gets its own branch. Who pushes is
-> not a question: the owner does, always (rule 22).
+> not a question: the owner does, always (rule 22). Who COMMITS is not a
+> question either: you do, every time, and no answer in this batch changes
+> that. If the owner says they prefer to commit themselves, that is a clash
+> for the report, not a line you write into this flow.
 > Write the answers into the steps, replacing the bracketed parts.
 > Until they answer, this block STAYS and the bracketed parts stay bracketed.
 > A commit policy copied from another project is a decision nobody made.
