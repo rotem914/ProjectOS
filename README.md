@@ -55,12 +55,13 @@ existing `CLAUDE.md`, the placeholders, the setup steps, and the report the
 install must end with, problems and clashes included.
 
 1. Copy `CLAUDE.md`, `Installation.md` and the `project-os/` folder into the
-   root of your project.
+   root of your project. This step is yours: the install never clones or
+   downloads anything, and it stops and tells you if a file is missing.
    Already have a `CLAUDE.md`? Keep yours: bring the kit's in as `CLAUDE-kit.md`
    beside it, and the install has your assistant merge the two.
 2. Paste the install prompt below into your assistant. Or just tell it to
    install ProjectOS and give it this link: it reads `Installation.md` either
-   way.
+   way, from the copy now sitting in your project.
 3. Answer its questions. It asks once, in one batch.
 4. Read its closing report: what was set, what broke, and where your existing
    rules clash with the kit's process.
