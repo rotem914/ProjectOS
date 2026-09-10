@@ -97,7 +97,13 @@ Before implementing, state:
 - the risk level,
 - the QA you expect to run,
 - the rollback point,
-- the docs that will need updating.
+- the docs that will need updating,
+- and, when the plan runs to more than one step, the model suggested for each
+  one with three words on why (CLAUDE.md rule 13). The most capable one for
+  design, architecture, anything irreversible and anything touching data; a
+  faster, cheaper one for mechanical rounds. It is a suggestion the owner picks
+  from, and a step with no obvious fit says so. This applies to a plan in chat
+  as much as to a saved `project-os/Plan.md`.
 
 Practical and short. A three-line plan is fine. No plan is not.
 
