@@ -25,11 +25,16 @@ has to re-learn the vocabulary each time.
 
 ## In-flight narration
 
-Lines written *while working* follow the TONE rules but not the layout: short,
-one sentence per line, no padding — and no `----` dividers or `# H1` headings.
+Nothing is written between tool calls.
+One line at pickup says what the task is; the next text is the report.
+No plan of the next edit, no summary of the last one, no "I'll do X now".
+That one line follows the tone rules, never the layout: no divider, no heading.
+The one exception is a question that blocks the work, and it ends the turn.
 
-That scaffolding is built for a final report; stamping it on a one-line status
-makes the stream noisier, not calmer.
+A running commentary fills the owner's feed with lines they never need, and the
+report at the end already carries what changed. The scaffolding of dividers and
+headings is built for that final report; stamping it on a one-line status makes
+the stream noisier, not calmer.
 
 ## The one hierarchy
 
