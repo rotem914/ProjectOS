@@ -1,0 +1,44 @@
+{
+  "description": "ProjectOS as a plugin: one dispatcher decides, per project, whether this kit's hooks apply. Inert in any project without project-os/hooks-settings.json, and it stands down wherever the project's own settings already wire the same hook.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.mjs", "session"],
+            "timeout": 15,
+            "suppressOutput": true
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.mjs", "prompt"],
+            "timeout": 15,
+            "suppressOutput": true
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit|Bash|PowerShell|Monitor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.mjs", "pretool"],
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}

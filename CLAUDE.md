@@ -135,6 +135,15 @@ and Mistakes stay whole. They run at `Go commit`. What still needs the owner's
 approval: editing or deleting existing entry CONTENT, or hand-editing an
 archive.
 
+**Heavy things are reported, never deleted.** A project quietly grows ten- and
+twenty-gigabyte things nobody needs: a stray download, a partial archive, a
+cache, a build folder. `project-os/heavy.mjs` lists every file and top-level
+folder over 1 GB with its size and what kind of thing it is (regenerable,
+backups, git history, or a leftover the owner has to judge). It runs at
+`Go commit`, and whenever a task shows you something that big, say so in the
+report with its path and size. The owner deletes, or says the word; you never
+delete on your own, whatever the kind says.
+
 ### 5. Secrets stay out of the repo
 
 Real secrets live in an uncommitted local env file and in the host's config.
@@ -638,6 +647,9 @@ Commit everything accumulated up to now, across sessions, not only this chat.
    is already in the file before rotation decides what is old. Stage whatever
    they changed with the rest.
 3. `git status` plus `git diff`: see the whole uncommitted scope.
+3b. **List the heavy things** (rule 4): `node project-os/heavy.mjs`. Anything
+   it prints goes in the commit report, size and kind beside the path, for the
+   owner to delete or keep. It deletes nothing and never blocks the commit.
 4. Run the project checks [`{{CHECK_COMMAND}}`] and continue only if they
    pass. A red check stops the commit; report it instead.
 5. Stage the intended files only. Never a blind add-everything, and never

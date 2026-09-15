@@ -28,7 +28,9 @@ Two exceptions, because reading is the biggest bill of the install and these
 files are never adapted by hand:
 
 - **The scripts are read by their header only.** `rotate.ps1`, `backup.ps1`,
-  `install-hooks.mjs` and the two files under `project-os/guards/` open with a
+  `heavy.mjs`, `install-hooks.mjs`, the two files under `project-os/guards/`
+  and `hooks/dispatch.mjs` at the kit root (part of the plugin, never copied
+  into a project) open with a
   comment that says what they do and how they are wired; read that and stop.
   Their internals are not the install's business, and together they are most
   of the folder by size.
@@ -280,6 +282,20 @@ replacing the placeholders, and the owner asking for ProjectOS is the approval.
 An enforcement layer that waits for someone to notice a request at the bottom
 of a report is an enforcement layer that never gets switched on.
 
+**First, check whether they are already on.** If the owner did the
+once-per-computer step (README, "Once per computer"), the kit runs as a plugin
+on this machine, and this session's start carried a line beginning
+`[ProjectOS plugin] hooks active for` naming this project. If that line is in
+your context, the hooks ARE on, for this project, from the first message:
+adapt the wording exactly as below (the plugin reads the same file), write
+NOTHING under `.claude`, do not run the installer, and skip the wiring and
+speaking checks; a `--dry` run would say "will add" and that is expected. Prove
+the guard with the fake-payload command in `Hooks.md`, aimed at the plugin's
+own dispatcher. In the report, "Your rules are switched on" says they come
+from the plugin on this computer, and that another computer needs the same
+once-per-computer command. If the line is absent, the rest of this section is
+the path.
+
 So, as part of the install:
 
 - Read `project-os/Hooks.md`.
@@ -348,7 +364,9 @@ node project-os/install-hooks.mjs
 ```
 
   Say where to type it, not only what. That turns a blocked install from a
-  to-do into a ten-second fix in the same session.
+  to-do into a ten-second fix in the same session. Offer the once-per-computer
+  command from the README beside it, as the fix that ends this for every
+  future project on that machine.
 
 - **Tell the owner the one thing that is theirs:** hooks are read at session
   start, so the ones you just installed take effect in their NEXT session.
@@ -435,6 +453,16 @@ Sections, in this order:
    >
    > To check it worked, ask me in the new session:
    > "what rules were you given this turn?"
+
+   When the hooks came from the plugin (6b, the announcing line was in
+   context), the block says so instead, and asks nothing of the owner here:
+
+   > **Your rules are switched on**
+   >
+   > They come from the ProjectOS plugin on this computer, so they were on
+   > from the first message and nothing had to be installed in this project.
+   > Another computer needs the same one-time command, in the kit's README
+   > under "Once per computer".
    > If I read your rules back to you, it is working.
 
    If the install could not write that setting, this section is REPLACED, in

@@ -45,6 +45,33 @@ Each one ships with its structure already in place and a worked example at the e
 
 **One install file.** `Installation.md` is the complete install law: the merge rules for a project that already has a `CLAUDE.md`, the placeholder list, the setup steps, and the closing report the install owes you, problems and clashes included. Used once, then kept or deleted at your word.
 
+## Once per computer
+
+One command, once, and every project that carries the kit gets its hooks with
+no install step, in any permission mode. It puts a copy of this kit in your
+personal Claude folder, where Claude Code reads it as a plugin; the hooks stay
+silent in any project without `project-os/` and stand down where a project
+already wired its own. Needs `git` and `node` on the path.
+
+Windows, in PowerShell:
+
+```
+git clone https://github.com/rotem914/ProjectOS "$env:USERPROFILE\.claude\skills\projectos"
+```
+
+macOS or Linux, in a terminal:
+
+```
+git clone https://github.com/rotem914/ProjectOS ~/.claude/skills/projectos
+```
+
+Then start a new session anywhere. To pick up a newer kit later, run
+`git pull` inside that folder; the hooks read it on their next call.
+
+Skip this and the install still works: the assistant then writes the hooks into
+each project's own settings, and asks you for one command whenever its
+environment refuses that write.
+
 ## Install
 
 Under ten minutes of your time. The assistant's part is longer, mostly
@@ -66,9 +93,11 @@ install must end with, problems and clashes included.
 4. Read its closing report: what was set, what broke, and where your existing
    rules clash with the kit's process.
 5. Commit the result.
-6. Start a new session. The install switches the hooks on for you; they are
-   read when a session opens, so the next one is where they take effect. See
-   `project-os/Hooks.md` for what they do and how to check they worked.
+6. Start a new session. With the once-per-computer step done, the hooks were
+   already on from the first message. Without it the install switches them on
+   for you, and they are read when a session opens, so the next one is where
+   they take effect. See `project-os/Hooks.md` for what they do and how to
+   check they worked.
 
 ## The install prompt
 
@@ -98,8 +127,10 @@ few more inside marked setup tables of their own.
 The rule files need nothing. The part that enforces them needs two things, and
 the install checks both and tells you if either is missing.
 
-**Node.** The hooks and their installer run through it, whatever language your
-project is written in. Nothing else in the kit uses it.
+**Node.** The hooks, their installer and `heavy.mjs` (the commit-time list of
+files big enough to delete) run through it, whatever language your project is
+written in. Nothing else in the kit uses it. The once-per-computer step also
+needs `git`, to clone the kit.
 
 **PowerShell, for two scripts only.** `rotate.ps1` trims the files that grow
 forever, and it runs at commit time, not during normal work. `backup.ps1`

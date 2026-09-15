@@ -1,0 +1,5 @@
+{
+  "name": "projectos",
+  "version": "1.0.0",
+  "description": "ProjectOS hooks for every project on this computer that carries the kit: the standing-rules reminders and the two guards, with no per-project install step. Clone the kit into your personal skills folder once; see README.md, \"Once per computer\"."
+}

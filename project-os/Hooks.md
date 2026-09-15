@@ -13,14 +13,32 @@ memory.
 
 A project running the kit with no hooks is running on good intentions.
 
-## Who installs this
+## Two ways the hooks get wired
 
-**The assistant does, during the install, without being asked.** Installing the
-hooks is a step of the setup, not a suggestion at the end of it. A kit whose
-enforcement layer waits for the owner to notice a request is a kit that runs
-unenforced.
+**Once per computer: the kit as a plugin.** The owner clones the kit into their
+personal skills folder, `~/.claude/skills/projectos` (README, "Once per
+computer"), and Claude Code reads it as a plugin from then on. Its one hook,
+`hooks/dispatch.mjs` at the kit root, fires in every session and decides per
+project: it looks for `project-os/hooks-settings.json`, walking up from the
+session's folder, and does nothing where that file is absent. Where it is
+present, it prints the reminder text it finds in that file (as data, never
+run) and runs the two guards from the plugin's own copy, with the project root
+set to the project it found. No install step, no settings write, so no
+environment can refuse it. It announces itself once per session with a line
+beginning `[ProjectOS plugin] hooks active for`.
 
-The step is one command, run from the project root:
+**Per project: the installer.** Where the plugin is not on the machine, the
+assistant installs the hooks into the project's own settings, during the
+install, without being asked. Installing the hooks is a step of the setup, not
+a suggestion at the end of it. A kit whose enforcement layer waits for the
+owner to notice a request is a kit that runs unenforced.
+
+**Settings wiring wins.** When both exist, the plugin stands down for every
+hook the project's own settings already carry, per event and per guard, so
+nothing fires twice. A project can keep its own wiring forever; the plugin is
+for the projects that have none.
+
+The installer step is one command, run from the project root:
 
 ```
 node project-os/install-hooks.mjs
@@ -159,9 +177,11 @@ Hooks.md says so here rather than pretending; a project that wants it writes it.
 - **A guard blocks, a linter warns.** Anything that changes the world gets
   stopped before it happens. Anything about style or wording gets corrected on
   the next message, never by forcing a redo.
-- **The scripts live in this project.** Never point a hook at a copy sitting in
-  another project on the same disk. Rename or move that project and this one
-  silently loses its protection, and the two copies drift apart unnoticed.
+- **A hook points at a copy that moves with what it guards.** The project's
+  own copy under `project-os/`, or the plugin's kit clone in the personal
+  skills folder. Never a copy sitting in another project on the same disk:
+  rename or move that project and this one silently loses its protection, and
+  the two copies drift apart unnoticed.
 - **Nothing secret goes in this file.** It holds paths and instructions. Keys,
   tokens and credentials live outside the repository.
 
@@ -180,6 +200,16 @@ once rather than assuming.
 
   Every event under "present:" is installed. Any event under "will add:" is
   not, and the speaking and blocking checks below prove nothing about it.
+  The one exception: when the session started with a line beginning
+  `[ProjectOS plugin] hooks active for` and naming this project, the hooks
+  come from the plugin, "will add" is expected, and nothing needs installing.
+- **The plugin's guard, when the plugin is the wiring:** the announcing line
+  names the plugin folder; feed the same fake tool call to its dispatcher from
+  the project root, and expect the same blocking line and exit code 2:
+
+  ```
+  echo {"tool_name":"Bash","tool_input":{"command":"rm -rf src"},"cwd":"."} | node <plugin folder>/hooks/dispatch.mjs pretool
+  ```
 - **The session hook:** start a new session and ask the assistant what standing
   rules it was given this turn. It should quote them back.
 - **A guard:** feed it one fake tool call and read the exit code, no real
@@ -196,6 +226,16 @@ once rather than assuming.
 
 If nothing happens, the usual causes are: the session was not restarted, the
 JSON has a syntax error, or the command form does not survive your shell.
+
+**Where the plugin does not reach, stated plainly.** A session run in the
+cloud, a session whose setting sources exclude the personal folder, a managed
+policy that disables personal plugins, or a project folder that lacks
+`project-os/hooks-settings.json` (a worktree that excludes it, a folder above
+the project). In every one of those the per-project installer is the wiring,
+and the announcing line is absent, which is how you know. The plugin's guards
+also use the plugin copy's own settings, so an `EXTRA_ROOTS` list edited in a
+project's copy of `path-guard.mjs` applies only when that project's own wiring
+is the one running.
 
 ## The trap that costs an afternoon
 
