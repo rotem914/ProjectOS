@@ -107,7 +107,19 @@ URL it serves on, and the command that builds, typechecks, and tests.
 
 Read package manifests, config files, lockfiles, CI config and existing docs.
 Do not guess where you can check. Run the check command once on the untouched
-project. There are THREE outcomes, not two:
+project.
+
+**Never install dependencies to make that check runnable.** A check command in
+a repo whose packages are not installed needs an install first, and that is a
+change to the owner's machine they did not ask for: it can take minutes, it can
+take gigabytes, and on one real install it took the last of the disk and the
+hook install died on it. If the check cannot run without an install, do not
+run it. Record the check as "not run: dependencies are not installed", put the
+install command in pile two of step 4 for the owner to approve, and when they
+do, check free space before running it. A one-shot check that needs nothing
+installed, or whose packages are already there, runs as written.
+
+There are THREE outcomes, not two:
 
 - **It passes.** It becomes the standing check.
 - **It fails.** That is a Problems line and a question for the owner, never the
@@ -127,6 +139,15 @@ project. There are THREE outcomes, not two:
 ## 4. Ask once
 
 Ask only what the repo cannot tell you, in ONE message, never one at a time.
+
+**Real questions go in the question panel, when the client has one.** Claude
+Code and its desktop app offer a built-in question panel, a form with the
+questions as tabs and the options as rows, and the owner has asked for it in
+so many words: it is far easier than reading options out of the feed. Every
+pile-two question below goes through it, one tab per question, the options as
+rows with one line each on what they mean, and a free-text way out. Pile one
+never goes in it: those are statements to be waved through, not choices. In a
+client with no such panel, the feed carries both piles as written below.
 
 **Send it as TWO piles, and label them.** A batch of nine questions reads as
 nine decisions when half of them are things you already worked out and only
@@ -289,7 +310,17 @@ node project-os/install-hooks.mjs
 ```
 
   It merges, never overwrites, backs the file up first, and leaves existing
-  hooks alone unless re-run with `--force`. Report what it added, in one line.
+  hooks alone unless re-run with `--force`. It proves the target folder is
+  writable before it starts, and it says "added" only after the file is on
+  disk; a run that ends in a sentence starting "install-hooks:" and an error
+  wrote nothing, and that sentence carries the remedy. Report what it added,
+  in one line, quoting the "added:" line and never the "will add:" one.
+
+- **Prove it is wired, not only that the scripts run.** Run the installer once
+  more with `--dry`. Every event it lists under "present:" is installed; any
+  event under "will add:" is not, whatever the two checks below say. Those two
+  run the scripts by hand and pass on an unwired project just the same, which
+  is how an install reported working hooks that were never in the settings.
 
 - **Prove one hook actually speaks.** Installing is not evidence. Run the hook's
   own command once in a shell, exactly as it is written in the settings, and
@@ -304,8 +335,20 @@ node project-os/install-hooks.mjs
 
 - **If the write is refused**, some environments guard their own configuration,
   do not argue with it and do not retry in a loop. Say plainly that it was
-  refused, put that one command in the report's Waiting-on-you section for the
-  owner to run, and move on. Fallback, never the plan.
+  refused and move on. Fallback, never the plan. But a refused install is not
+  one item among eight: the kit's own line is that a project without hooks
+  runs on good intentions, so the remedy takes the slot in the report where
+  "Your rules are switched on" would have gone, as its opening section (see
+  section 8), not a Waiting-on-you entry. The remedy is one command, and in
+  Claude Code the owner can run it without leaving the conversation, by typing
+  it in the chat box with an exclamation mark in front:
+
+```
+!node project-os/install-hooks.mjs
+```
+
+  Say where to type it, not only what. That turns a blocked install from a
+  to-do into a ten-second fix in the same session.
 
 - **Tell the owner the one thing that is theirs:** hooks are read at session
   start, so the ones you just installed take effect in their NEXT session.
@@ -394,8 +437,27 @@ Sections, in this order:
    > "what rules were you given this turn?"
    > If I read your rules back to you, it is working.
 
-   If the install could not write that setting, say so in the same place, in
-   plain words, and give the owner the one command to run instead.
+   If the install could not write that setting, this section is REPLACED, in
+   the same slot and as the report's FIRST section, by the honest version: the
+   rules are documents only until one command runs. Give the command, say it
+   can be typed straight into the chat box with an exclamation mark in front,
+   and say a new session comes after it. Never file that command under
+   Waiting-on-you among the other items; on a refused install it is the one
+   thing in the report that matters.
+
+   > **Your rules are not enforced yet**
+   >
+   > I could not switch on the part that keeps me following them; this
+   > environment blocks me from writing that setting.
+   > Until it is on, your rules are documents I may forget in a long session.
+   >
+   > Type this in the chat box, exclamation mark included, and it runs here:
+   >
+   > ```
+   > !node project-os/install-hooks.mjs
+   > ```
+   >
+   > Then start a new session, and ask me what rules I was given this turn.
 
    Say in one line where the hooks were installed: personal to this machine by
    default, and team-wide is available on request. Do not turn it into a

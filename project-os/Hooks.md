@@ -170,6 +170,16 @@ Hooks.md says so here rather than pretending; a project that wants it writes it.
 A hook that is not firing looks exactly like a hook that is firing, so check it
 once rather than assuming.
 
+- **First, that anything is wired at all:** the two checks below run the
+  scripts by hand, so they pass whether or not the settings file names them.
+  The installer's dry run is the check that cannot be fooled:
+
+  ```
+  node project-os/install-hooks.mjs --dry
+  ```
+
+  Every event under "present:" is installed. Any event under "will add:" is
+  not, and the speaking and blocking checks below prove nothing about it.
 - **The session hook:** start a new session and ask the assistant what standing
   rules it was given this turn. It should quote them back.
 - **A guard:** feed it one fake tool call and read the exit code, no real

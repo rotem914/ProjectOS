@@ -403,6 +403,9 @@ Nothing on the existing pages changed.
 
 A question for the owner is the LAST thing in the reply, never buried mid-reply.
 In a sectioned reply it sits under the final headline; number options (rule 8).
+When the client has a built-in question panel, a question with options goes
+through it, always, with one line per option; the feed then carries only what
+the answer is waiting on. The panel is easier to answer than a list in the feed.
 
 A question in the middle is answered late or not at all.
 
