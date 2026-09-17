@@ -405,6 +405,44 @@ weighs hundreds of megabytes means a regenerable folder is missing from the
 exclusion list: fix the list, delete the ZIP, run again. The ZIP it leaves is
 the project's first snapshot; tell the owner where it is in the report.
 
+## 6d. Give the project a browser
+
+Rule 6 says anything a person can see is verified in a running browser, and a
+project with no browser tool turns that rule into a manual checklist for the
+owner. The owner has asked, in so many words, for the assistant to have a
+browser in every project. So the install wires one, the same way it wires the
+hooks: as a step, not a suggestion.
+
+1. **Look first.** Search the tool list for `browser` (a deferred tool is
+   invisible until searched for). The desktop app's built-in browser pane, or
+   the Claude in Chrome extension, counts when it actually loads a page. Note
+   which one you found in the report; if one works, stop here.
+2. **Otherwise register Chrome DevTools at project scope.** It drives its own
+   Chrome, needs no sign-in, and runs through Node, which the kit already
+   requires. Write `.mcp.json` at the project root, merging into an existing
+   one and never overwriting it; on Windows the command goes through `cmd`,
+   because a stdio server started as bare `npx` does not launch there:
+
+   ```
+   {"mcpServers":{"chrome-devtools":{"command":"cmd","args":["/c","npx","-y","chrome-devtools-mcp@latest"]}}}
+   ```
+
+   macOS or Linux:
+
+   ```
+   {"mcpServers":{"chrome-devtools":{"command":"npx","args":["-y","chrome-devtools-mcp@latest"]}}}
+   ```
+
+3. **Tell the owner the one thing that is theirs.** A project-scope server is
+   read at session start and the assistant asks the owner once to approve it,
+   so it works from their next session. Put that in the report under What was
+   set, one line: which browser this project has and that it starts with the
+   next session. If Chrome is not installed on the machine, say so in Problems
+   instead; nothing here installs a browser.
+
+Never write the server into the owner's personal configuration, and never copy
+another project's connection (rule 21). The project file is the whole setup.
+
 ## 7. Log the install
 
 Log the install itself as the first two rows in project-os/History.md.

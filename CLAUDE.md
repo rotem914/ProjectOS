@@ -181,6 +181,14 @@ impossible, it is waiting on one command from the owner. Ask them to start the
 server and say so in the reply (rule 16); never treat a down server as the end
 of the browser pass.
 
+**Every project has a browser tool, by install.** The install (Installation.md
+6d) either finds one that loads a page, the desktop app's built-in pane or the
+Chrome extension, or registers Chrome DevTools at project scope in `.mcp.json`,
+which drives its own Chrome. So "no browser tool here" is a setup that was
+skipped, not a state to report: if the search comes back empty in a project
+that carries this kit, run that step now, in the same task, and ask the owner
+for the one approval it needs.
+
 **Close every tab you opened, in the same task.** A QA tab is yours, not the
 owner's; left behind, it clutters the window they work in. Never close a tab
 you did not open, and never stop the owner's dev server (rule 16).
