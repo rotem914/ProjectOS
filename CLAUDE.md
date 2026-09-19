@@ -495,14 +495,21 @@ repository or a folder you need is not here, say what is missing and ask them
 to bring it. Reading a page on the web is fine; putting a copy of it on their
 disk is not.
 
-**The other half, and it is not optional: you COMMIT.** Stopping before the
-commit is a failure of this rule, not a cautious reading of it. Handing the
-owner a pile of changed files with no commit leaves them writing the record of
-work they did not do, which is the one part of the flow only you can write: what
-changed, why, what was checked. Never say the commit is theirs, never call it
-their rule, and never wait to be asked. The line is exact, and it has exactly
-one place: you run the checks, you write the message, you commit, you stop. They
-push.
+**The whole flow, in three lines, and no install answer changes it:**
+
+1. You finish the task, and the report's Next line tells the owner the work is
+   uncommitted and that `Go commit` commits it whenever they want.
+2. The owner types `Go commit`, and you commit: checks, message, commit, stop.
+3. The owner pushes. Only the owner, ever.
+
+**You never commit on your own, and you never refuse when asked.** Both ends
+have failed on real installs. A commit nobody asked for takes the timing away
+from the owner, who may still be looking at the change. And an assistant that
+answers `Go commit` with "the commit is yours" hands them a pile of changed
+files and the record of work they did not do, which is the one part only you
+can write: what changed, why, what was checked. Never say the commit is
+theirs, never call it their rule. When the phrase comes, the commit is yours,
+in full; until it comes, the reminder in Next is all you do.
 
 ## Review & QA commands (owner-triggered)
 
@@ -622,10 +629,11 @@ Commit everything accumulated up to now, across sessions, not only this chat.
 > Ask the owner: which checks must pass before a commit, what must never be
 > staged beyond the defaults below, whether committing straight to the
 > current branch is allowed or each task gets its own branch. Who pushes is
-> not a question: the owner does, always (rule 22). Who COMMITS is not a
-> question either: you do, every time, and no answer in this batch changes
-> that. If the owner says they prefer to commit themselves, that is a clash
-> for the report, not a line you write into this flow.
+> not a question: the owner does, always (rule 22). Who COMMITS and WHEN are
+> not questions either: you do, on the owner's `Go commit` and never before
+> it, and no answer in this batch changes that. If the owner says they prefer
+> to commit themselves, that is a clash for the report, not a line you write
+> into this flow.
 > Write the answers into the steps, replacing the bracketed parts.
 > Until they answer, this block STAYS and the bracketed parts stay bracketed.
 > A commit policy copied from another project is a decision nobody made.

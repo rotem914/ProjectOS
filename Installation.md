@@ -167,8 +167,9 @@ moves to `project-os/Plan.md` (CLAUDE.md rule 13).
 cannot be derived, and what would be wrong to guess. Number these.
 Typically: their role on this project, the language replies are written in, the
 commit policy (which checks gate a commit, straight to the branch or a branch
-per task, and nothing else: who commits and who pushes are settled by rule 22
-and are never asked), who starts the dev server and where it runs (CLAUDE.md
+per task, and nothing else: who commits, when, and who pushes are settled by
+rule 22 and are never asked: the assistant, on the owner's `Go commit` only,
+and the owner), who starts the dev server and where it runs (CLAUDE.md
 rule 16 has three honest answers and is rewritten from this one), and anything
 step 3 came up empty on.
 

@@ -261,6 +261,8 @@ Close with a short summary:
 - what changed,
 - what was checked,
 - what was not checked or is still risky,
-- the next step.
+- the next step. When the task left uncommitted work, the next step says so
+  and names the phrase: `Go commit`, whenever the owner wants. You never commit
+  before that phrase, and the push after it is theirs alone (CLAUDE.md rule 22).
 
 Format it per `project-os/Conversations.md`. Leave out implementation noise the owner did not ask for — a summary padded with steps that went fine buries the one line that did not.
