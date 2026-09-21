@@ -80,11 +80,21 @@ history, say plainly in the report that the merge could not be verified.
 
 **What does your own memory already say about this project?** Rule 12 keeps
 rules out of the assistant's private memory, and that folder is invisible to
-the owner, so this is the only moment anyone will look. List every note there
-that concerns this project, one line each, and put them in the report under
-Waiting-on-you with a keep-or-trim verdict per line. A note that is really a
-rule gets moved into the right file here; a note that is stale gets deleted on
-the owner's word, never yours.
+the owner, so this is the only moment anyone will look. Sort every note there
+that concerns this project into three piles, and decide two of them yourself:
+
+- **A note that is really a rule** moves into the right file here, now, with
+  no question. The project is the law book; say in What was set how many moved
+  and where.
+- **A note about another project** is not this install's business. Leave it
+  and say nothing.
+- **A note that looks stale for this project** is the only pile the owner
+  sees, and they see it as ONE question, never one per note: the list, one
+  line each, your keep-or-trim recommendation beside each, and a single ask,
+  "trim the ones I marked?". Deleting is on the owner's word, never yours.
+
+On a real install this step produced three separate questions about the
+assistant's own notes, which the owner had no way to judge one by one.
 
 **Is Node available?** Everything that enforces the rules runs through it: the
 hooks themselves and their installer. Check:
@@ -248,7 +258,8 @@ Do the setup steps the files carry, then clear the scaffolding:
   reply language in project-os/Conversations.md (its length limits are law,
   not a setup block), and the
   `Go commit` calibration in CLAUDE.md's Shortcuts section (which checks gate
-  a commit, what is never staged, branch policy; who commits and who pushes
+  a commit and the branch policy; what is never staged ships as a fixed list
+  and is never asked; who commits and who pushes
   are never asked and never rewritten, the assistant commits and the owner
   pushes, rule 22);
 - check the exclusion list at the top of project-os/Backup-whole-project.ps1 against this

@@ -617,9 +617,10 @@ If a round left something genuinely unverified, say so in one line.
 Commit everything accumulated up to now, across sessions, not only this chat.
 
 > **Setup step — calibrate this flow at install, then delete this block.**
-> Ask the owner: which checks must pass before a commit, what must never be
-> staged beyond the defaults below, whether committing straight to the
-> current branch is allowed or each task gets its own branch. Who pushes is
+> Ask the owner: which checks must pass before a commit, and whether
+> committing straight to the current branch is allowed or each task gets its
+> own branch. What is never staged is NOT a question: step 5 carries the list,
+> and an owner who is not a developer cannot answer it. Who pushes is
 > not a question: the owner does, always (rule 22). Who COMMITS and WHEN are
 > not questions either: you do, on the owner's `Go commit` and never before
 > it, and no answer in this batch changes that. If the owner says they prefer
@@ -659,8 +660,12 @@ Commit everything accumulated up to now, across sessions, not only this chat.
    owner to delete or keep. It deletes nothing and never blocks the commit.
 4. Run the project checks [`{{CHECK_COMMAND}}`] and continue only if they
    pass. A red check stops the commit; report it instead.
-5. Stage the intended files only. Never a blind add-everything, and never
-   env files, secrets, or generated junk.
+5. Stage the intended files only. Never a blind add-everything, and never any
+   of these, in any project: env files and anything holding a secret or a key,
+   the `backups/` folder, the `.tmp/` scratch folder and `*.tmp` leftovers,
+   dependencies and build output, and the assistant's personal settings
+   (`.claude/settings.local.json`). If the project needs one more kept out,
+   the owner says so once and it joins this list.
 6. Commit with a clear message covering the full scope, [on the current
    branch / on a task branch, per the owner's answer].
 7. STOP after the commit. The owner pushes, every time (rule 22). Report the
