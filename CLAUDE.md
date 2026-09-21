@@ -137,7 +137,7 @@ archive.
 
 **Heavy things are reported, never deleted.** A project quietly grows ten- and
 twenty-gigabyte things nobody needs: a stray download, a partial archive, a
-cache, a build folder. `project-os/find-heavy-files.mjs` lists every file and top-level
+cache, a build folder. `project-os/Find-heavy-files.mjs` lists every file and top-level
 folder over 1 GB with its size and what kind of thing it is (regenerable,
 backups, git history, or a leftover the owner has to judge). It runs at
 `Go commit`, and whenever a task shows you something that big, say so in the
@@ -654,7 +654,7 @@ Commit everything accumulated up to now, across sessions, not only this chat.
    is already in the file before rotation decides what is old. Stage whatever
    they changed with the rest.
 3. `git status` plus `git diff`: see the whole uncommitted scope.
-3b. **List the heavy things** (rule 4): `node project-os/find-heavy-files.mjs`. Anything
+3b. **List the heavy things** (rule 4): `node project-os/Find-heavy-files.mjs`. Anything
    it prints goes in the commit report, size and kind beside the path, for the
    owner to delete or keep. It deletes nothing and never blocks the commit.
 4. Run the project checks [`{{CHECK_COMMAND}}`] and continue only if they
