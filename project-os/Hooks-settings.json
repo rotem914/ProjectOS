@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"{{ROOT}}/project-os/guards/path-guard.mjs\""
+            "command": "node \"{{ROOT}}/project-os/guards/Path-guard.mjs\""
           }
         ]
       },
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"{{ROOT}}/project-os/guards/destructive-guard.mjs\""
+            "command": "node \"{{ROOT}}/project-os/guards/Destructive-guard.mjs\""
           }
         ]
       }

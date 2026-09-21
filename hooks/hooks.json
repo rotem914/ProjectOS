@@ -1,5 +1,5 @@
 {
-  "description": "ProjectOS as a plugin: one dispatcher decides, per project, whether this kit's hooks apply. Inert in any project without project-os/hooks-settings.json, and it stands down wherever the project's own settings already wire the same hook.",
+  "description": "ProjectOS as a plugin: one dispatcher decides, per project, whether this kit's hooks apply. Inert in any project without project-os/Hooks-settings.json, and it stands down wherever the project's own settings already wire the same hook.",
   "hooks": {
     "SessionStart": [
       {

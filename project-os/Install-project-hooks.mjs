@@ -1,10 +1,10 @@
-// Installs this project's hooks, by merging project-os/hooks-settings.json into
+// Installs this project's hooks, by merging project-os/Hooks-settings.json into
 // the project's Claude settings.
 //
 // The assistant runs this as a STEP OF THE INSTALL, without being asked. See
 // Installation.md section 6b. The owner can also run it by hand at any time.
 //
-//   node project-os/install-hooks.mjs
+//   node project-os/Install-project-hooks.mjs
 //
 // Flags:
 //   --dry       show what would change and write nothing
@@ -14,7 +14,7 @@
 //   --replace   replace an event's existing hooks instead of running beside them
 //
 // The guards under project-os/guards/ ride in the same file, wired by absolute
-// path: {{ROOT}} in hooks-settings.json becomes this project's root at install.
+// path: {{ROOT}} in Hooks-settings.json becomes this project's root at install.
 //
 // DEFAULT IS COMBINE, NOT REPLACE. A hook event holds a LIST, so this project's
 // hooks are appended to whatever is already there and both run. Nothing the
@@ -46,7 +46,7 @@ const SHARED = args.has('--shared');
 const REPLACE = args.has('--replace') || args.has('--force');
 
 const root = process.cwd();
-const sourcePath = path.join(root, 'project-os', 'hooks-settings.json');
+const sourcePath = path.join(root, 'project-os', 'Hooks-settings.json');
 const targetDir = path.join(root, '.claude');
 const targetName = SHARED ? 'settings.json' : 'settings.local.json';
 const targetPath = path.join(targetDir, targetName);
@@ -56,7 +56,7 @@ const targetPath = path.join(targetDir, targetName);
 const otherPath = path.join(targetDir, SHARED ? 'settings.local.json' : 'settings.json');
 
 function die(message) {
-  console.error(`install-hooks: ${message}`);
+  console.error(`Install-project-hooks: ${message}`);
   process.exit(1);
 }
 
@@ -85,7 +85,7 @@ function explainFsError(err, what) {
 // A probe file is created and removed; a failure here is the same failure the
 // real write would hit, caught in one second instead of halfway through.
 function probeWritable() {
-  const probe = path.join(targetDir, `.install-hooks-probe-${process.pid}`);
+  const probe = path.join(targetDir, `.Install-project-hooks-probe-${process.pid}`);
   try {
     fs.mkdirSync(targetDir, { recursive: true });
     fs.writeFileSync(probe, 'probe', 'utf8');
@@ -135,7 +135,7 @@ try {
   die(`${path.relative(root, sourcePath)} is not valid JSON: ${err.message}`);
 }
 if (!incoming || typeof incoming.hooks !== 'object' || incoming.hooks === null) {
-  die('hooks-settings.json has no "hooks" object.');
+  die('Hooks-settings.json has no "hooks" object.');
 }
 
 // A guard is a script at a path, and the path has to be absolute: a hook runs
@@ -191,7 +191,7 @@ for (const [event, entries] of Object.entries(incoming.hooks)) {
 
 // The plan, in the future tense: nothing below is a claim that anything was
 // written. "added:" appears only after the file is in place.
-console.log(`install-hooks: target ${path.relative(root, targetPath)}${SHARED ? ' (shared, committed)' : ' (personal to this machine)'}`);
+console.log(`Install-project-hooks: target ${path.relative(root, targetPath)}${SHARED ? ' (shared, committed)' : ' (personal to this machine)'}`);
 console.log(`  node:     ${process.version} (the hooks run through it, so this is the proof it is available)`);
 if (alreadyThere.length) console.log(`  present:  ${alreadyThere.join(', ')} (already wired, nothing to do)`);
 if (added.length) console.log(`  will add: ${added.join(', ')} (NOT wired yet)`);
@@ -199,12 +199,12 @@ if (combined.length) console.log(`  will combine: ${combined.join(', ')} (yours 
 if (replaced.length) console.log(`  will REPLACE: ${replaced.join(', ')} (existing hooks removed)`);
 
 if (!added.length && !combined.length && !replaced.length) {
-  console.log('install-hooks: nothing to change. Every hook this project ships is already installed.');
+  console.log('Install-project-hooks: nothing to change. Every hook this project ships is already installed.');
   process.exit(0);
 }
 
 if (DRY) {
-  console.log('install-hooks: --dry, nothing written. Every event above under "will add" is not installed.');
+  console.log('Install-project-hooks: --dry, nothing written. Every event above under "will add" is not installed.');
   process.exit(0);
 }
 
@@ -227,7 +227,7 @@ try {
 }
 
 // Only now is anything "added": the file is on disk under its real name.
-console.log(`install-hooks: wrote ${path.relative(root, targetPath)}`);
+console.log(`Install-project-hooks: wrote ${path.relative(root, targetPath)}`);
 if (added.length) console.log(`  added:    ${added.join(', ')}`);
 if (combined.length) console.log(`  combined: ${combined.join(', ')}`);
 if (replaced.length) console.log(`  REPLACED: ${replaced.join(', ')}`);

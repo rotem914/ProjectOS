@@ -11,7 +11,7 @@
 // with no install step and no settings write.
 //
 // WHICH PROJECTS. Only a project that carries the kit: the marker is
-// project-os/hooks-settings.json, the file the owner copies in with the rest of
+// project-os/Hooks-settings.json, the file the owner copies in with the rest of
 // project-os/. The project root is found by walking up from the session's
 // project folder (CLAUDE_PROJECT_DIR), then from the payload's cwd, then from
 // the process cwd, so a session opened in a subfolder still finds it. No
@@ -23,7 +23,7 @@
 // nothing fires twice. Checked per event, and per guard for PreToolUse.
 //
 // WHAT IT RUNS. Only code from the plugin's own folder: the reminder TEXT is
-// read out of the project's hooks-settings.json as data (the string inside the
+// read out of the project's Hooks-settings.json as data (the string inside the
 // console.log form) and printed, never executed, so a user-level plugin never
 // runs a command from a repository it happens to be opened in. The two guards
 // run as child processes from this plugin's copy under project-os/guards/,
@@ -37,7 +37,11 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const MARKER = path.join('project-os', 'hooks-settings.json');
+// The marker, in both spellings: projects installed before the kit's files
+// were renamed carry the lowercase name, and a case-sensitive disk tells the
+// two apart.
+const MARKERS = ['Hooks-settings.json', 'hooks-settings.json'].map((f) => path.join('project-os', f));
+const markerIn = (dir) => MARKERS.map((m) => path.join(dir, m)).find((f) => fs.existsSync(f)) || null;
 const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const mode = process.argv[2] || '';
 const norm = (p) => String(p).replace(/\\/g, '/').replace(/\/+$/, '');
@@ -64,7 +68,7 @@ function findRootFrom(start) {
   if (!start) return null;
   let dir = path.resolve(String(start));
   for (let i = 0; i < 64; i++) {
-    if (fs.existsSync(path.join(dir, MARKER))) return dir;
+    if (markerIn(dir)) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) return null;
     dir = parent;
@@ -112,7 +116,7 @@ function reminderText(command) {
 }
 
 function runReminders(root, event) {
-  const kit = readJson(path.join(root, MARKER));
+  const kit = readJson(markerIn(root) || '');
   const ours = hookCommands(kit, event);
   const theirs = settingsCommands(root, event);
   const lines = [];
@@ -165,12 +169,14 @@ try {
     if (lines.length) process.stdout.write(`[ProjectOS plugin] ${lines.join('\n')}\n`);
   } else if (mode === 'pretool') {
     const tool = String(payload.tool_name || '');
-    const wired = settingsCommands(root, 'PreToolUse').join('\n');
+    // Lowercased, so a project wired under the guards' old lowercase names
+    // still counts as wired.
+    const wired = settingsCommands(root, 'PreToolUse').join('\n').toLowerCase();
     const shell = /^(Bash|PowerShell|Monitor)$/.test(tool);
-    if (!wired.includes('path-guard.mjs')) code = runGuard('path-guard.mjs', raw, root);
+    if (!wired.includes('path-guard.mjs')) code = runGuard('Path-guard.mjs', raw, root);
     else log('path-guard: stand down, wired in settings');
     if (code === 0 && shell) {
-      if (!wired.includes('destructive-guard.mjs')) code = runGuard('destructive-guard.mjs', raw, root);
+      if (!wired.includes('destructive-guard.mjs')) code = runGuard('Destructive-guard.mjs', raw, root);
       else log('destructive-guard: stand down, wired in settings');
     }
   }

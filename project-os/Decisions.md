@@ -19,7 +19,7 @@ chosen, so nobody re-argues it in six months and nobody quietly undoes it.
   it, not before — and move the entry verbatim: never rewritten, never
   summarized. Its Index line stays here, marked superseded, so the trail
   survives.
-- **This file also rotates, the way History does.** `project-os/rotate.ps1`
+- **This file also rotates, the way History does.** `project-os/Archive-old-rows.ps1`
   keeps the newest 25 entries live at `Go commit` and moves older ones into the
   same `Decisions-archive.md`, under its own `## Archived decisions` heading.
   Those entries still BIND the project; they only aged out of the live read, so

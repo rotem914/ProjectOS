@@ -17,8 +17,8 @@ adapt files; you cannot adapt what you have not read.
 Two exceptions, because reading is the biggest bill of the install and these
 files are never adapted by hand:
 
-- **The scripts are read by their header only.** `rotate.ps1`, `backup.ps1`,
-  `Find-heavy-files.mjs`, `install-hooks.mjs`, the two files under `project-os/guards/`
+- **The scripts are read by their header only.** `Archive-old-rows.ps1`, `Backup-whole-project.ps1`,
+  `Find-heavy-files.mjs`, `Install-project-hooks.mjs`, the two files under `project-os/guards/`
   and `hooks/dispatch.mjs` at the kit root (part of the plugin, never copied
   into a project) open with a
   comment that says what they do and how they are wired; read that and stop.
@@ -245,7 +245,7 @@ Do the setup steps the files carry, then clear the scaffolding:
   a commit, what is never staged, branch policy; who commits and who pushes
   are never asked and never rewritten, the assistant commits and the owner
   pushes, rule 22);
-- check the exclusion list at the top of project-os/backup.ps1 against this
+- check the exclusion list at the top of project-os/Backup-whole-project.ps1 against this
   stack: every regenerable folder (dependencies, build output, caches) is
   named there, and nothing this project commits on purpose is. Then add
   `/backups/` to the project's `.gitignore`, creating the file if there is
@@ -290,7 +290,7 @@ the path.
 So, as part of the install:
 
 - Read `project-os/Hooks.md`.
-- **Adapt the wording first.** Open `project-os/hooks-settings.json` and rewrite
+- **Adapt the wording first.** Open `project-os/Hooks-settings.json` and rewrite
   the standing-rules text for THIS project, using the rules it actually has and
   the mistakes it actually makes. The shipped wording is a generic default, and
   a generic reminder every message is worth little. You may edit that file
@@ -313,13 +313,13 @@ So, as part of the install:
 - **Run it**, from the project root:
 
 ```
-node project-os/install-hooks.mjs
+node project-os/Install-project-hooks.mjs
 ```
 
   It merges, never overwrites, backs the file up first, and leaves existing
   hooks alone unless re-run with `--force`. It proves the target folder is
   writable before it starts, and it says "added" only after the file is on
-  disk; a run that ends in a sentence starting "install-hooks:" and an error
+  disk; a run that ends in a sentence starting "Install-project-hooks:" and an error
   wrote nothing, and that sentence carries the remedy. Report what it added,
   in one line, quoting the "added:" line and never the "will add:" one.
 
@@ -351,7 +351,7 @@ node project-os/install-hooks.mjs
   it in the chat box with an exclamation mark in front:
 
 ```
-!node project-os/install-hooks.mjs
+!node project-os/Install-project-hooks.mjs
 ```
 
   Say where to type it, not only what. That turns a blocked install from a
@@ -370,7 +370,7 @@ in place, and never leave the hooks uninstalled merely because nobody asked.
 ## 6c. Check the rotation scripts run here
 
 One script ships in `project-os/` and keeps the growing docs from becoming a
-tax on every task: `rotate.ps1`, with three engines inside it (History rows and
+tax on every task: `Archive-old-rows.ps1`, with three engines inside it (History rows and
 the scan log; Decisions entries; the Backlog Done, Mistakes tail and BugAtlas
 tables). It MOVES old material into a sibling `*-archive.md`, never rewrites
 it, and it is wired into `Go commit`.
@@ -388,7 +388,7 @@ Core (`pwsh`) anywhere else. At install:
 - Never edit an entry to make a file smaller. Shrinking is the scripts' job,
   and theirs alone.
 
-The second script, `backup.ps1`, makes the `Go backup` snapshot. Run it once,
+The second script, `Backup-whole-project.ps1`, makes the `Go backup` snapshot. Run it once,
 after step 6 has settled its exclusion list and gitignored `backups/`. It
 prints the ZIP path and a count of files verified back out of the archive, or
 fails and leaves nothing; either is the proof. A ZIP that took minutes or
@@ -511,7 +511,7 @@ Sections, in this order:
    > Type this in the chat box, exclamation mark included, and it runs here:
    >
    > ```
-   > !node project-os/install-hooks.mjs
+   > !node project-os/Install-project-hooks.mjs
    > ```
    >
    > Then start a new session, and ask me what rules I was given this turn.

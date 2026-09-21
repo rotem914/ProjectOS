@@ -17,7 +17,7 @@ The owner-curated open-items list. One place to see what is still open.
 - When an item is done, **move its row to Done with the closing date**. Never
   delete a row — the record of what was decided is part of the value.
 - Full detail stays in the source it came from. This file stays one line per item.
-- **Done rotates, Open never does.** `project-os/rotate.ps1` keeps the
+- **Done rotates, Open never does.** `project-os/Archive-old-rows.ps1` keeps the
   newest 40 Done rows live at `Go commit` and moves older ones verbatim into
   `Backlog-archive.md`. Open is the part read at every pickup and is never
   touched. Nothing is deleted; the row just moves out of the live read.

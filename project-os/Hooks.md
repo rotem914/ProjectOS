@@ -19,7 +19,7 @@ A project running the kit with no hooks is running on good intentions.
 personal skills folder, `~/.claude/skills/projectos` (README, "Once per
 computer"), and Claude Code reads it as a plugin from then on. Its one hook,
 `hooks/dispatch.mjs` at the kit root, fires in every session and decides per
-project: it looks for `project-os/hooks-settings.json`, walking up from the
+project: it looks for `project-os/Hooks-settings.json`, walking up from the
 session's folder, and does nothing where that file is absent. Where it is
 present, it prints the reminder text it finds in that file (as data, never
 run) and runs the two guards from the plugin's own copy, with the project root
@@ -41,10 +41,10 @@ for the projects that have none.
 The installer step is one command, run from the project root:
 
 ```
-node project-os/install-hooks.mjs
+node project-os/Install-project-hooks.mjs
 ```
 
-It merges the ready-made hooks in `project-os/hooks-settings.json` into
+It merges the ready-made hooks in `project-os/Hooks-settings.json` into
 `.claude/settings.local.json`, and it never overwrites.
 
 **Hooks of the same kind run side by side.** That setting holds a LIST, so this
@@ -119,7 +119,7 @@ not.
 }
 ```
 
-That block is exactly what `project-os/hooks-settings.json` holds, and what
+That block is exactly what `project-os/Hooks-settings.json` holds, and what
 the command above installs.
 
 **Edit the wording freely.** That second string is the shortest useful version
@@ -136,11 +136,11 @@ A hook that says too much says nothing.
 These are the difference between a rule that is repeated and a rule that
 cannot be broken. They live in `project-os/guards/`, they install with the same
 command as level 1, and they are wired by absolute path: the installer replaces
-`{{ROOT}}` in `hooks-settings.json` with this project's real root, because a
+`{{ROOT}}` in `Hooks-settings.json` with this project's real root, because a
 hook runs from whatever folder the tool happens to be in and an environment
 variable in the command is not expanded on every shell.
 
-**The folder guard**, `guards/path-guard.mjs`. Fires before every file write
+**The folder guard**, `guards/Path-guard.mjs`. Fires before every file write
 and every shell command, and refuses anything aimed outside the project folder.
 It reads the command, including redirections, writing programs, inline shells
 and `cd` moves, and blocks what it cannot prove is inside. Without it, the rule
@@ -151,7 +151,7 @@ assistant's memory folder, markdown only. An `EXTRA_ROOTS` list at the top of
 the file, empty by default, is where the owner names any other folder writes
 may reach.
 
-**The destructive-command guard**, `guards/destructive-guard.mjs`. Fires before
+**The destructive-command guard**, `guards/Destructive-guard.mjs`. Fires before
 every shell command and blocks the one-way operations: recursive or forced
 deletes whose targets are not provably disposable, force pushes, history
 rewrites, hard resets, branch deletes. Its job is the command nobody meant to
@@ -195,7 +195,7 @@ once rather than assuming.
   The installer's dry run is the check that cannot be fooled:
 
   ```
-  node project-os/install-hooks.mjs --dry
+  node project-os/Install-project-hooks.mjs --dry
   ```
 
   Every event under "present:" is installed. Any event under "will add:" is
@@ -216,7 +216,7 @@ once rather than assuming.
   action needed. From the project root:
 
   ```
-  echo {"tool_name":"Bash","tool_input":{"command":"rm -rf src"}} | node project-os/guards/destructive-guard.mjs
+  echo {"tool_name":"Bash","tool_input":{"command":"rm -rf src"}} | node project-os/guards/Destructive-guard.mjs
   ```
 
   It should print one blocking line and exit with code 2. A guard that exits 0
@@ -230,11 +230,11 @@ JSON has a syntax error, or the command form does not survive your shell.
 **Where the plugin does not reach, stated plainly.** A session run in the
 cloud, a session whose setting sources exclude the personal folder, a managed
 policy that disables personal plugins, or a project folder that lacks
-`project-os/hooks-settings.json` (a worktree that excludes it, a folder above
+`project-os/Hooks-settings.json` (a worktree that excludes it, a folder above
 the project). In every one of those the per-project installer is the wiring,
 and the announcing line is absent, which is how you know. The plugin's guards
 also use the plugin copy's own settings, so an `EXTRA_ROOTS` list edited in a
-project's copy of `path-guard.mjs` applies only when that project's own wiring
+project's copy of `Path-guard.mjs` applies only when that project's own wiring
 is the one running.
 
 ## The trap that costs an afternoon

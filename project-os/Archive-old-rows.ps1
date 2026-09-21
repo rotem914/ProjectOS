@@ -1,4 +1,4 @@
-# rotate.ps1
+# Archive-old-rows.ps1
 # Why this exists: every ProjectOS file that accumulates forever is read at task
 # pickup, so each one needs a ceiling. This script gives all of them the same
 # mechanism: the live file keeps the newest material, everything older MOVES
@@ -19,8 +19,8 @@
 # "## Open" table. The Scan log is trimmed by count but never edited.
 #
 # Preview (writes nothing):
-#   powershell -NoProfile -ExecutionPolicy Bypass -File project-os/rotate.ps1 -DryRun
-#   pwsh -NoProfile -File project-os/rotate.ps1 -DryRun
+#   powershell -NoProfile -ExecutionPolicy Bypass -File project-os/Archive-old-rows.ps1 -DryRun
+#   pwsh -NoProfile -File project-os/Archive-old-rows.ps1 -DryRun
 # Apply for real: the same lines without -DryRun. It runs at `Go commit`.
 
 [CmdletBinding()]
@@ -113,7 +113,7 @@ function Find-SectionEnd($lines, $mask, $startIdx) {
 
 $grandMoved = 0
 $modeLabel  = if ($DryRun) { '[DRY RUN - no files written]' } else { '[LIVE RUN]' }
-Write-Host ("rotate.ps1  {0}" -f $modeLabel)
+Write-Host ("Archive-old-rows.ps1  {0}" -f $modeLabel)
 Write-Host ('-' * 78)
 
 # ===========================================================================
@@ -162,7 +162,7 @@ function Write-RowArchive($archPath, $liveName, $blurb, $hdr, $sep, $rows, $eol,
         $archiveLines.Add(('# {0} - {1}' -f $liveName, $blurb)) | Out-Null
         $archiveLines.Add('') | Out-Null
         $archiveLines.Add('NOT read by default - consult only when digging into old changes.') | Out-Null
-        $archiveLines.Add('Moved here verbatim by project-os/rotate.ps1. Movement only: rows are never rewritten, compressed, or deleted.') | Out-Null
+        $archiveLines.Add('Moved here verbatim by project-os/Archive-old-rows.ps1. Movement only: rows are never rewritten, compressed, or deleted.') | Out-Null
         $archiveLines.Add('') | Out-Null
         if ($hdr) { $archiveLines.Add($hdr) | Out-Null }
         if ($sep) { $archiveLines.Add($sep) | Out-Null }
@@ -383,9 +383,9 @@ foreach ($t in $historyTargets) {
         # NULL on feature targets, so it is guarded (Split-Path throws on null).
         $idx = @{}; foreach ($m in $allDropped) { $idx[$m.Index] = $true }
         $pointerPresent = @($lines | Where-Object { $_ -like '*Older rows archived*' }).Count -gt 0
-        $pointer = ('_Older rows archived -> see `{0}` (moved by project-os/rotate.ps1, not rewritten)._' -f (Split-Path $t.Arch -Leaf))
+        $pointer = ('_Older rows archived -> see `{0}` (moved by project-os/Archive-old-rows.ps1, not rewritten)._' -f (Split-Path $t.Arch -Leaf))
         $scanPointerPresent = @($lines | Where-Object { $_ -like '*Older scan rows archived*' }).Count -gt 0
-        $scanPointer = if ($t.ScanArch) { ('_Older scan rows archived -> see `{0}` (moved by project-os/rotate.ps1, not rewritten)._' -f (Split-Path $t.ScanArch -Leaf)) } else { $null }
+        $scanPointer = if ($t.ScanArch) { ('_Older scan rows archived -> see `{0}` (moved by project-os/Archive-old-rows.ps1, not rewritten)._' -f (Split-Path $t.ScanArch -Leaf)) } else { $null }
         $newLive = New-Object System.Collections.Generic.List[string]
         for ($i = 0; $i -lt $lines.Count; $i++) {
             if ($idx.ContainsKey($i)) { continue }
@@ -416,7 +416,7 @@ function Write-ArchiveSection($archPath, $liveName, $sectionName, $headLines, $p
         $lines.Add(('# {0} - Archive' -f $liveName)) | Out-Null
         $lines.Add('') | Out-Null
         $lines.Add('NOT read by default - consult only when digging into an old entry.') | Out-Null
-        $lines.Add('Moved here verbatim by project-os/rotate.ps1. Movement only: nothing is rewritten, compressed, or deleted.') | Out-Null
+        $lines.Add('Moved here verbatim by project-os/Archive-old-rows.ps1. Movement only: nothing is rewritten, compressed, or deleted.') | Out-Null
         $lines.Add('') | Out-Null
     }
     $existing = New-Object System.Collections.Generic.HashSet[string]
@@ -457,7 +457,7 @@ function Write-ArchiveSection($archPath, $liveName, $sectionName, $headLines, $p
 # collapsed; blank lines elsewhere are never touched.
 function Write-Live($target, $lines, $eol, $dropIdx, $secIdx, $archName, $enc, $dry) {
     $drop = @{}; foreach ($i in $dropIdx) { $drop[$i] = $true }
-    $pointer = ('_Older entries archived -> see `{0}` (moved by project-os/rotate.ps1, not rewritten)._' -f $archName)
+    $pointer = ('_Older entries archived -> see `{0}` (moved by project-os/Archive-old-rows.ps1, not rewritten)._' -f $archName)
     $pointerPresent = @($lines | Where-Object { $_ -like '*Older entries archived*' }).Count -gt 0
     $clean = New-Object System.Collections.Generic.List[string]
     $justDropped = $false

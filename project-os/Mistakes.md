@@ -39,7 +39,7 @@ Mistakes in HOW you worked:
   work continues. A mistake recorded later is a mistake recorded never.
 - **Read this file at task pickup.** It stays short on purpose, so there is no
   excuse to skip it.
-- **The two tails rotate, Open never does.** `project-os/rotate.ps1` keeps
+- **The two tails rotate, Open never does.** `project-os/Archive-old-rows.ps1` keeps
   the newest 30 rows in Promoted and in Retired at `Go commit`, moving older
   ones verbatim into `Mistakes-archive.md`. That is a ceiling, not permission
   to let this file grow: the rule above still governs.

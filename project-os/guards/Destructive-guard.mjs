@@ -1,11 +1,11 @@
-// destructive-guard.mjs - PreToolUse hook. Blocks destructive shell commands
+// Destructive-guard.mjs - PreToolUse hook. Blocks destructive shell commands
 // before the assistant runs them. Inspired by the rule packs of
 // Dicklesworthstone/destructive_command_guard (dcg), reimplemented as a
 // zero-dependency local script so there is nothing to install or maintain.
 //
-// Installed by `node project-os/install-hooks.mjs`, which wires it as:
+// Installed by `node project-os/Install-project-hooks.mjs`, which wires it as:
 //   PreToolUse, matcher "Bash|PowerShell|Monitor",
-//   command: node "<project root>/project-os/guards/destructive-guard.mjs"
+//   command: node "<project root>/project-os/guards/Destructive-guard.mjs"
 //
 // The hook feeds this script a JSON payload on stdin ({ tool_name,
 // tool_input: { command }, ... }). If the command matches a destructive

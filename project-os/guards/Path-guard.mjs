@@ -1,4 +1,4 @@
-// path-guard.mjs - PreToolUse hook. Refuses any file write aimed outside the
+// Path-guard.mjs - PreToolUse hook. Refuses any file write aimed outside the
 // project folder, before it happens.
 //
 // A rule in a document depends on the assistant reading and remembering it,
@@ -7,9 +7,9 @@
 // programs, cmdlets, wrappers, inline shells, inline scripts, `cd` moves) and
 // exits 2 on anything it cannot prove lands inside the project.
 //
-// Installed by `node project-os/install-hooks.mjs`, which wires it as:
+// Installed by `node project-os/Install-project-hooks.mjs`, which wires it as:
 //   PreToolUse, matcher "Write|Edit|NotebookEdit|Bash|PowerShell|Monitor",
-//   command: node "<project root>/project-os/guards/path-guard.mjs"
+//   command: node "<project root>/project-os/guards/Path-guard.mjs"
 //
 // The project root comes from the session (CLAUDE_PROJECT_DIR, then the
 // payload's cwd), never from where this file happens to sit, so one copy guards

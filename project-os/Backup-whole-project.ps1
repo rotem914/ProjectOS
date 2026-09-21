@@ -1,4 +1,4 @@
-# backup.ps1
+# Backup-whole-project.ps1
 # Why this exists: one local, self-contained ZIP snapshot of the whole project,
 # for offline disaster recovery that does NOT depend on any git host or sync
 # folder. Code, docs, content and the full git history in one file you can put
@@ -6,8 +6,8 @@
 # build folders are left out so the ZIP stays small and restorable.
 #
 # Run it, from the project root:
-#   powershell -NoProfile -ExecutionPolicy Bypass -File project-os/backup.ps1
-#   pwsh -NoProfile -File project-os/backup.ps1          (macOS / Linux)
+#   powershell -NoProfile -ExecutionPolicy Bypass -File project-os/Backup-whole-project.ps1
+#   pwsh -NoProfile -File project-os/Backup-whole-project.ps1          (macOS / Linux)
 # It is wired to the `Go backup` shortcut in CLAUDE.md.
 #
 # FAILURE CONTRACT. This script has exactly two outcomes:

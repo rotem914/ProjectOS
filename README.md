@@ -131,8 +131,8 @@ files big enough to delete) run through it, whatever language your project is
 written in. Nothing else in the kit uses it. The once-per-computer step also
 needs `git`, to clone the kit.
 
-**PowerShell, for two scripts only.** `rotate.ps1` trims the files that grow
-forever, and it runs at commit time, not during normal work. `backup.ps1`
+**PowerShell, for two scripts only.** `Archive-old-rows.ps1` trims the files that grow
+forever, and it runs at commit time, not during normal work. `Backup-whole-project.ps1`
 zips the whole project, git history included and secrets excluded, into one
 file you can put on a drive, when you say `Go backup`. Windows has PowerShell
 already; on macOS or Linux install PowerShell Core (`pwsh`) if you want them.

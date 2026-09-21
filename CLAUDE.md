@@ -121,7 +121,7 @@ cost of asking is one message; the cost of being wrong is unbounded.
 forever has a ceiling, and two scripts enforce it by MOVING old material into a
 sibling `*-archive.md` that is not read by default:
 
-- `project-os/rotate.ps1` — one script, three engines: History deep rows and
+- `project-os/Archive-old-rows.ps1` — one script, three engines: History deep rows and
   the History scan log; Decisions entries (newest 25 stay live); and the
   tables, the Backlog Done table (40), the Mistakes Promoted and Retired
   tables (30), and the BugAtlas Atlas table (30), the project one and any
@@ -257,9 +257,9 @@ scratchpad elsewhere on disk: outside the root is outside the root.
 Files written outside the project are invisible to the owner, absent from git,
 and lost on the next machine.
 
-**This rule is enforced, not only stated.** `project-os/guards/path-guard.mjs`
+**This rule is enforced, not only stated.** `project-os/guards/Path-guard.mjs`
 runs before every file write and every shell command and refuses what it cannot
-prove is inside the project; `project-os/guards/destructive-guard.mjs` refuses
+prove is inside the project; `project-os/guards/Destructive-guard.mjs` refuses
 the one-way commands the same way. Both are installed with the hooks
 (`project-os/Hooks.md`). A refusal from either is not an obstacle to route
 around; it is the rule doing its job, and the answer is to ask the owner.
@@ -636,13 +636,13 @@ Commit everything accumulated up to now, across sessions, not only this chat.
    On Windows:
 
    ```
-   powershell -NoProfile -ExecutionPolicy Bypass -File project-os/rotate.ps1
+   powershell -NoProfile -ExecutionPolicy Bypass -File project-os/Archive-old-rows.ps1
    ```
 
    On macOS or Linux, the same script through PowerShell Core:
 
    ```
-   pwsh -NoProfile -File project-os/rotate.ps1
+   pwsh -NoProfile -File project-os/Archive-old-rows.ps1
    ```
 
    If neither command exists on this machine, say so once and commit without
@@ -671,7 +671,7 @@ Commit everything accumulated up to now, across sessions, not only this chat.
 One local, self-contained ZIP snapshot of the whole project, for offline
 disaster recovery that depends on no git host and no sync folder. Flow:
 
-1. Run `project-os/backup.ps1` (PowerShell; `pwsh` on macOS or Linux). It zips
+1. Run `project-os/Backup-whole-project.ps1` (PowerShell; `pwsh` on macOS or Linux). It zips
    the whole project, git history included, and leaves out the regenerable
    folders named in its setup block, the assistant's machine-local folders, the
    `.tmp/` scratch folder and every real secret file (`.env*`, `.dev.vars*`;

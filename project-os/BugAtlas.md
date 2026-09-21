@@ -27,7 +27,7 @@ A one-off typo earns nothing. The atlas is for classes, not incidents.
 
 ## Rotation
 
-`project-os/rotate.ps1` keeps the newest 30 Atlas rows live and moves
+`project-os/Archive-old-rows.ps1` keeps the newest 30 Atlas rows live and moves
 older ones verbatim into `BugAtlas-archive.md` at `Go commit`. Rows are
 relocated, never edited, renumbered or deleted, so an archived row still
 answers a search.
