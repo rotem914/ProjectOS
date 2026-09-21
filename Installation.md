@@ -27,6 +27,12 @@ files are never adapted by hand:
 - **A tool folder the project will delete is deleted before it is read.** The
   `mcp/` folders exist only to be filled; if step 4's pile one already says a
   server is not used here, remove that folder first and read nothing in it.
+  **Remove it one file at a time, then the empty folder, never with a
+  recursive or forced delete.** The kit's own guard refuses those on purpose,
+  and on a real install that refusal turned this step into a command for the
+  owner to run. Each tool folder holds a single file, so it is two plain
+  deletes: the rules file, then the folder. If even that is refused, it goes
+  to Waiting-on-you with the one command, as before.
 
 ## 2. Merge with an existing CLAUDE.md
 
