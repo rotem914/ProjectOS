@@ -126,7 +126,7 @@ few more inside marked setup tables of their own.
 The rule files need nothing. The part that enforces them needs two things, and
 the install checks both and tells you if either is missing.
 
-**Node.** The hooks, their installer and `heavy.mjs` (the commit-time list of
+**Node.** The hooks, their installer and `find-heavy-files.mjs` (the commit-time list of
 files big enough to delete) run through it, whatever language your project is
 written in. Nothing else in the kit uses it. The once-per-computer step also
 needs `git`, to clone the kit.

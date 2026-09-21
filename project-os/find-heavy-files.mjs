@@ -1,4 +1,4 @@
-// heavy.mjs - lists the heavy files and folders in the project, so the owner
+// find-heavy-files.mjs - lists the heavy files and folders in the project, so the owner
 // can decide what to delete. It deletes nothing, ever.
 //
 // Why: a project quietly grows ten- and twenty-gigabyte things nobody needs, a
@@ -7,9 +7,9 @@
 // of thing each one is, and the owner deletes, or says the word. Wired into
 // `Go commit` (CLAUDE.md), and runnable any time:
 //
-//   node project-os/heavy.mjs            everything over 1 GB
-//   node project-os/heavy.mjs --min 200mb
-//   node project-os/heavy.mjs --root <folder>
+//   node project-os/find-heavy-files.mjs            everything over 1 GB
+//   node project-os/find-heavy-files.mjs --min 200mb
+//   node project-os/find-heavy-files.mjs --root <folder>
 //
 // Output, one line each, largest first:
 //   <size>  <kind>  <path>
@@ -70,7 +70,7 @@ function walk(dir, top) {
 
 let rootEntries;
 try { rootEntries = fs.readdirSync(ROOT, { withFileTypes: true }); } catch (err) {
-  console.log(`heavy: cannot read ${ROOT}: ${err.message}`);
+  console.log(`find-heavy-files: cannot read ${ROOT}: ${err.message}`);
   process.exit(0);
 }
 for (const e of rootEntries) {
@@ -93,12 +93,12 @@ for (const [name, size] of topSizes) {
 for (const f of bigFiles) rows.push({ size: f.size, kind: kindOf(f.rel), label: f.rel });
 rows.sort((a, b) => b.size - a.size);
 
-console.log(`heavy: ${ROOT}, everything over ${gb(MIN)}`);
+console.log(`find-heavy-files: ${ROOT}, everything over ${gb(MIN)}`);
 if (!rows.length) console.log('  nothing that big here');
 for (const r of rows) console.log(`  ${gb(r.size).padStart(10)}  ${r.kind.padEnd(11)} ${r.label}`);
 if (unreadable.length) {
   console.log(`  could not read ${unreadable.length} folder(s), so their size is missing:`);
   for (const u of unreadable) console.log(`    ${u}`);
 }
-console.log('heavy deletes nothing; the owner decides what goes.');
+console.log('find-heavy-files deletes nothing; the owner decides what goes.');
 process.exit(0);

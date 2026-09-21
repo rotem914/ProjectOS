@@ -18,7 +18,7 @@ Two exceptions, because reading is the biggest bill of the install and these
 files are never adapted by hand:
 
 - **The scripts are read by their header only.** `rotate.ps1`, `backup.ps1`,
-  `heavy.mjs`, `install-hooks.mjs`, the two files under `project-os/guards/`
+  `find-heavy-files.mjs`, `install-hooks.mjs`, the two files under `project-os/guards/`
   and `hooks/dispatch.mjs` at the kit root (part of the plugin, never copied
   into a project) open with a
   comment that says what they do and how they are wired; read that and stop.
