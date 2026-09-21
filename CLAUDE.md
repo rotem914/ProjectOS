@@ -486,15 +486,6 @@ the file.
 An assistant that pushes is an assistant whose mistakes reach production
 without a human between them and the world. The commit is the place to stop.
 
-**The same line covers where the code lives.** Cloning a repository, creating
-one, adding or changing a remote: each one decides where this project's code
-comes from and goes to, and that is the owner's call, made in their own account
-with their own credentials. Never clone, never `init`, never wire a remote,
-however convenient it looks, and never do it as a step of a setup. If a
-repository or a folder you need is not here, say what is missing and ask them
-to bring it. Reading a page on the web is fine; putting a copy of it on their
-disk is not.
-
 **The whole flow, in three lines, and no install answer changes it:**
 
 1. You finish the task, and the report's Next line tells the owner the work is

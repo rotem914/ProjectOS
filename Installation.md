@@ -8,16 +8,6 @@ report at the end.
 The install is not done until the report in the last section has been
 delivered.
 
-**The install never fetches anything.** No `git clone`, no `git init`, no
-remote added, no download of the kit or of anything else. The owner copies the
-kit's files into the project before the install starts, and those files are what
-the install reads. If CLAUDE.md, Installation.md or project-os/ is not in this
-project, the install cannot start: say exactly which is missing, tell the owner
-to copy it in, and stop there. It happened on a real install, which cloned the
-kit's repository on its own; the owner brings the code, always (CLAUDE.md
-rule 22). Being pointed at a link is permission to READ the page, never to put a
-copy of it on their disk.
-
 ## 1. Read everything first
 
 Read CLAUDE.md and every markdown file in project-os/, its mcp/ subfolder
