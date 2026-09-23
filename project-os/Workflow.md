@@ -109,6 +109,40 @@ Practical and short. A three-line plan is fine. No plan is not.
 
 Why: a plan written before the code is a prediction, so it can turn out wrong and teach you something. A summary written afterwards only ever agrees with what you did.
 
+### Check every "impossible" before it shapes the plan
+
+Some options get dropped because something seems to forbid them: a platform
+limit, a technical claim, an assumption carried over from an earlier doc.
+Before such an option leaves the table, or before you call a route impossible,
+unavoidable or the only way:
+
+1. Name the constraint in one sentence, and where it comes from. Checked means
+   documentation or a probe backs it; a doc, a memory or a habit is inherited,
+   and inherited is unchecked.
+2. Say which route it limits. A limit belongs to a route, not to the goal, so
+   ask what other route reaches the same goal, starting with what the project
+   already has. A route that needs something the project lacks is a question
+   for the owner (`CLAUDE.md` rule 21).
+3. If the option still goes, write down the reason and the routes checked, in
+   the saved plan or the Decisions entry that drops it.
+
+An option dropped for cost, taste or scope skips this check. An old written
+"impossible" that names no checked routes is unchecked too, so check it before
+new work leans on it.
+
+A route found goes to the owner as an option; it changes nothing on its own.
+No rule, owner ruling, guard or permission limit is a constraint to route
+around: when one blocks a better option, say so and ask. When the goal is
+permitted and only one tool failed or was denied, switching to another allowed
+tool is not routing around (`CLAUDE.md` rule 6); when a rule or guard forbids
+the act itself, it is forbidden through every tool (rules 12 and 22). In chat,
+run the check silently and give the result with its reason, not the steps.
+
+Why: a limit that is real for one route gets carried as if it held for every
+route. A design once called a line of client code unavoidable because browser
+walls forbade anything else; the walls were real for web pages, and a browser
+extension the project already had went straight through them.
+
 ## 6. Design the QA before you write code
 
 Decide how you will prove this works *before* it exists. Otherwise QA gets invented at the end to match whatever you happened to build, and it only ever confirms your own assumptions.

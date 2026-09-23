@@ -95,6 +95,11 @@ At pickup, name these six things:
 - What behavior must stay unchanged.
 - What QA must run before delivery.
 
+**A constraint is a claim until it is checked.** Before an option is set aside
+because a platform limit, a technical claim or an earlier assumption seems to
+forbid it, run the check in `project-os/Workflow.md` step 5, 'Check every
+"impossible" before it shapes the plan'.
+
 ### 2. Smallest safe change wins
 
 Prefer the smallest isolated change that solves the task. No side refactors, no
