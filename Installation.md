@@ -165,6 +165,7 @@ There are THREE outcomes, not two:
 ## 4. Ask once
 
 Ask only what the repo cannot tell you, in ONE message, never one at a time.
+The reply language is the one exception: it is always asked (see below).
 
 **Real questions go in the question panel, when the client has one.** Claude
 Code and its desktop app offer a built-in question panel, a form with the
@@ -189,7 +190,8 @@ moves to `project-os/Plan.md` (CLAUDE.md rule 13).
 
 **Pile two: needs a real answer, and the install waits.** Only what genuinely
 cannot be derived, and what would be wrong to guess. Number these.
-Typically: their role on this project, the language replies are written in, the
+Typically: their role on this project, the language replies are written in
+(always asked, see below), the
 commit policy (which checks gate a commit, straight to the branch or a branch
 per task, and nothing else: who commits, when, and who pushes are settled by
 rule 22 and are never asked: the assistant, on the owner's `Go commit` only,
@@ -210,7 +212,23 @@ law and ship as written; never ask how long replies should be, never show two
 sample answers, never turn an answer into numbers. An owner who wants a
 different limit edits that rule later, with the file in front of them.
 
-**One question has a shape that matters:**
+**Two questions have a shape that matters:**
+
+**The reply language. Always ask it, never work it out.** The language the
+owner writes in is not always the one they want to read: an owner can type in
+one language and want every answer in another. So it is a pile-two question on
+every install, with its own tab in the panel, even when the whole conversation
+so far has been in one language. Offer the language they have been writing in
+and one other likely one (English, or the language the project's own content is
+in). When the project's existing rules already name a reply language, offer
+that one first and mark it as recommended; it outranks the global instructions
+(step 2). If the owner picks a different one, the existing rule still wins for
+the install: write the existing language into the Language block, and list the
+owner's pick under Clashes, with a keep-or-override recommendation, for their
+verdict later. Only when no project rule names one and their global
+instructions do, put that one first and mark it as recommended. In every
+other case, the owner's answer fills the Language block in
+project-os/Conversations.md.
 
 **The project invariants.** Do not leave that section empty and move on. Read
 the code, propose the three to six things this project cannot afford to break,
