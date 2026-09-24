@@ -542,6 +542,11 @@ Sections, in this order:
    phrases that drive it, so list them: a title, then ONE line saying what it
    does. Nothing else, no flags, no explanation of the machinery.
 
+   **Every title is a capital first letter and the rest lowercase**, whatever
+   casing CLAUDE.md gives the phrase: `Go visual qa`, `Fast mode`,
+   `Full report`. The owner asked for it. The phrases work in any casing, so
+   this changes how the list reads, never how a phrase is typed.
+
    List every trigger this project actually has, which is every one in
    CLAUDE.md's Review, QA and Shortcuts sections. On a stock install:
 
@@ -556,16 +561,16 @@ Sections, in this order:
    > **Go code review**
    > Review the whole codebase and hand you the findings.
    >
-   > **GO visual qa**
+   > **Go visual qa**
    > Use the running app screen by screen and report what breaks.
    >
-   > **FAST MODE**
+   > **Fast mode**
    > Skip the paperwork and check each round yourself, until you say stop.
    >
    > **Backlog**
    > Put the thing we just discussed on the open-items list.
    >
-   > **full report**
+   > **Full report**
    > Lift the length limit when you want the long version of an answer.
 
    **Then the project's own phrases.** A plan-driven project is driven by its
