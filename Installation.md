@@ -107,6 +107,22 @@ No Node means the enforcement layer cannot run, whatever this project is
 written in. That is a Problems line in the report, and the owner needs to know
 the rules are documents only until it is installed.
 
+**Is this folder a git repository yet?** A brand-new project can be a blank
+folder with nothing in it but the kit. Check:
+
+```
+git rev-parse --is-inside-work-tree
+```
+
+If it is not one, the install still runs in full: no code means step 3's
+"nothing exists to run yet", and no git means only that `Go commit` has nothing
+to commit into. Do not create the repository and do not connect it anywhere;
+opening the project's repository on GitHub is the owner's step. Say it in the
+report as ONE Waiting-on-you line, "Open this project's repository on GitHub;
+`Go commit` works from then on", and write `Go commit` in "What you can say to
+me" as it will work, never as a promise with conditions. Every check above that
+reads git history (the CLAUDE.md one) says "no history yet" instead of failing.
+
 ## 3. Learn the repo before asking
 
 Work out from the repo itself everything you can: the project name, the stack
@@ -301,7 +317,23 @@ speaking checks; a `--dry` run would say "will add" and that is expected. Prove
 the guard with the fake-payload command in `Hooks.md`, aimed at the plugin's
 own dispatcher. In the report, "Your rules are switched on" says they come
 from the plugin on this computer, and that another computer needs the same
-once-per-computer command. If the line is absent, the rest of this section is
+once-per-computer command.
+
+**No line does not yet mean no plugin.** The plugin speaks only in a folder
+that carries the kit, and it decides at the moment the session opens. If the
+folder was blank then and the kit arrived during this session, the plugin was
+silent at the start and is active now. On a real install that silence made the
+install wire every hook into the project's settings as well. So when the line
+is absent, ask the plugin directly, from the project root:
+
+```
+node "$HOME/.claude/skills/projectos/hooks/dispatch.mjs" session
+```
+
+In PowerShell, `$env:USERPROFILE` instead of `$HOME`. If it prints the
+`[ProjectOS plugin] hooks active for` line naming this project, the plugin is
+on: follow the paragraph above. If the file does not exist or it prints
+nothing, the plugin is not on this computer, and the rest of this section is
 the path.
 
 So, as part of the install:
