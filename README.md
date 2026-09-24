@@ -128,7 +128,9 @@ the install checks both and tells you if either is missing.
 
 **Node.** The hooks, their installer and `Find-heavy-files.mjs` (the commit-time list of
 files big enough to delete) run through it, whatever language your project is
-written in. Nothing else in the kit uses it. The once-per-computer step also
+written in. So does the separate Chrome every install sets up for browser
+checks, which needs Node 20.19 or newer (22.12 or newer on the 22 line).
+Nothing else in the kit uses it. The once-per-computer step also
 needs `git`, to clone the kit.
 
 **PowerShell, for two scripts only.** `Archive-old-rows.ps1` trims the files that grow

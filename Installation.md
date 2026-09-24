@@ -97,7 +97,9 @@ On a real install this step produced three separate questions about the
 assistant's own notes, which the owner had no way to judge one by one.
 
 **Is Node available?** Everything that enforces the rules runs through it: the
-hooks themselves and their installer. Check:
+hooks themselves and their installer. So does the separate Chrome step 6d
+registers for browser checks, which needs Node 20.19 or newer (22.12 or newer
+on the 22 line), so note the version. Check:
 
 ```
 node --version
@@ -450,18 +452,45 @@ the project's first snapshot; tell the owner where it is in the report.
 Rule 6 says anything a person can see is verified in a running browser, and a
 project with no browser tool turns that rule into a manual checklist for the
 owner. The owner has asked, in so many words, for the assistant to have a
-browser in every project. So the install wires one, the same way it wires the
-hooks: as a step, not a suggestion.
+browser in every project, and for Chrome to be set up in every install, even
+when another browser already works. So the install runs all four steps below,
+every time, the same way it wires the hooks: as a step, not a suggestion.
+Finding one working browser never ends the step.
 
-1. **Look first.** Search the tool list for `browser` (a deferred tool is
-   invisible until searched for). The desktop app's built-in browser pane, or
-   the Claude in Chrome extension, counts when it actually loads a page. Note
-   which one you found in the report; if one works, stop here.
-2. **Otherwise register Chrome DevTools at project scope.** It drives its own
-   Chrome, needs no sign-in, and runs through Node, which the kit already
-   requires. Write `.mcp.json` at the project root, merging into an existing
-   one and never overwriting it; on Windows the command goes through `cmd`,
-   because a stdio server started as bare `npx` does not launch there:
+1. **Look first.** Search the tool list for `browser`, and again for `chrome`
+   (a deferred tool is invisible until searched for). A search may find only a
+   tool that switches one of them on; call it, then search again. The desktop
+   app's built-in browser pane counts when it actually loads a page; close
+   every tab you opened to test it. The Claude in Chrome extension counts only
+   for a Chrome on this computer: its connected-browsers tool lists one marked
+   as on this computer (the list covers every computer on the account). Where
+   that tool does not exist, it counts when its tab-context tool answers
+   without saying the extension is not connected; an empty tab list is normal
+   at install time. Never ask it to create a tab group, a window or a tab, so
+   the install opens nothing in the Chrome the owner is working in.
+   Note each one you found in the report.
+2. **Check the owner's own Chrome.** The Claude in Chrome extension drives the
+   Chrome the owner works in, with their sign-ins, so it is the browser for a
+   check that needs a logged-in session or what the owner actually sees. The
+   owner adds it once per computer, from the Chrome Web Store; the assistant
+   cannot. If it counted in step 1, say so under What was set, and that ends
+   this step. If it did not, put ONE Waiting-on-you line, adding that it is
+   already connected on another computer when that is so: "Add the Claude in
+   Chrome extension to your Chrome and sign in to it, then switch Chrome on in
+   Claude (in the terminal version, type /chrome). It works only when Claude
+   is signed in with a Claude plan, not an API key. I use it for checks that
+   need your own logins."
+3. **Register Chrome DevTools at project scope, always**, whatever steps 1 and
+   2 found. It drives its own Chrome, needs no sign-in, and runs through Node
+   20.19 or newer (22.12 or newer on the 22 line), so the project has a Chrome
+   that works even while the extension is missing. Write `.mcp.json` at the
+   project root, merging into an existing one and never overwriting it. If
+   the project gitignores `.mcp.json` and keeps a `.mcp.json.example`, add the
+   same entry to the example too, so a fresh copy of the project keeps it;
+   whoever copies the example on the other system switches that entry to the
+   other form below. The entry depends on the system: on Windows the command goes through `cmd`,
+   because a stdio server started as bare `npx` does not launch there, and
+   `cmd` does not exist on macOS or Linux:
 
    ```
    {"mcpServers":{"chrome-devtools":{"command":"cmd","args":["/c","npx","-y","chrome-devtools-mcp@latest"]}}}
@@ -473,12 +502,25 @@ hooks: as a step, not a suggestion.
    {"mcpServers":{"chrome-devtools":{"command":"npx","args":["-y","chrome-devtools-mcp@latest"]}}}
    ```
 
-3. **Tell the owner the one thing that is theirs.** A project-scope server is
+   A `chrome-devtools` entry already there stays as it is. If it is written
+   for the other system, it will not start on this one: say so in Problems,
+   and suggest keeping `.mcp.json` per machine, gitignored with the entry in
+   `.mcp.json.example`, rather than swapping the form, which would break the
+   other system. If writing the file is refused, do not retry and do not write
+   it another way: put one Problems line saying the separate Chrome is not set
+   up, with the block above and where it goes, and carry on.
+4. **Tell the owner the one thing that is theirs.** A project-scope server is
    read at session start and the assistant asks the owner once to approve it,
-   so it works from their next session. Put that in the report under What was
-   set, one line: which browser this project has and that it starts with the
-   next session. If Chrome is not installed on the machine, say so in Problems
-   instead; nothing here installs a browser.
+   so it works from their next session. When step 3 wrote an entry that can
+   start here, put that in the report under What was set, one line: which
+   browsers this project has, which system the entry is written for, and that
+   the separate Chrome starts with the next session once the owner approves
+   its prompt. Declining it leaves the project without that Chrome; running
+   `claude mcp reset-project-choices` in the project folder brings the prompt
+   back at the next session, for every server in the project. If Chrome is
+   not installed on the machine, or step 2b found no Node or a version the
+   separate Chrome refuses (older than 20.19, or a 22 older than 22.12), say
+   so in Problems instead; nothing here installs a browser.
 
 Never write the server into the owner's personal configuration, and never copy
 another project's connection (rule 21). The project file is the whole setup.

@@ -187,12 +187,20 @@ server and say so in the reply (rule 16); never treat a down server as the end
 of the browser pass.
 
 **Every project has a browser tool, by install.** The install (Installation.md
-6d) either finds one that loads a page, the desktop app's built-in pane or the
-Chrome extension, or registers Chrome DevTools at project scope in `.mcp.json`,
-which drives its own Chrome. So "no browser tool here" is a setup that was
+6d) notes what the session already has, the desktop app's built-in pane or the
+Chrome extension, checks for the owner's own Chrome, and always registers
+Chrome DevTools at project scope in `.mcp.json`, which drives its own Chrome.
+So "no browser tool here" is a setup that was
 skipped, not a state to report: if the search comes back empty in a project
-that carries this kit, run that step now, in the same task, and ask the owner
-for the one approval it needs.
+that carries this kit and `.mcp.json` has no `chrome-devtools` entry, run that
+step now, in the same task, and ask the owner for the one approval it needs.
+If the entry is there and still nothing loads, say why in the reply, then hand
+over the manual checklist. The usual reasons: the entry was written this
+session and loads from the next one; it is written for the other system (`cmd`
+on macOS or Linux, a bare `npx` on Windows; Installation.md 6d step 3); the
+server was declined, which `claude mcp reset-project-choices` in the project
+folder undoes at the next session; or Chrome is missing, or Node is missing or
+too old (20.19 or newer, 22.12 or newer on the 22 line).
 
 **Close every tab you opened, in the same task.** A QA tab is yours, not the
 owner's; left behind, it clutters the window they work in. Never close a tab

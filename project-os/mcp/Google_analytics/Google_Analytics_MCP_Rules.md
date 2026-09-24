@@ -38,8 +38,17 @@ read, and then answer the question that was asked.
 - **Not in git, for two different reasons.** `.venv/` is gitignored because it
   is ~100 MB of regenerable dependencies (rebuild recipe in §4). `.mcp.json` is
   gitignored because it names the key file's location on disk; commit
-  `.mcp.json.example` with placeholders instead, and a fresh clone copies it
-  and fills its two paths.
+  `.mcp.json.example` with placeholders instead, and a fresh clone copies it,
+  fills its two paths, and sets the browser entry to its own system's form
+  (Installation.md 6d step 3). After a ProjectOS install `.mcp.json` is usually
+  already in git, since the install writes a browser entry into it, and
+  gitignoring a file git already tracks does not keep it out. So before the
+  key path goes in, copy its other entries into `.mcp.json.example`, then
+  untrack it with `git rm --cached .mcp.json`. That keeps the file on this
+  machine only: once the commit is pushed, every other copy of the project
+  loses its `.mcp.json` at its next pull, browser and Figma entries included.
+  Say so in the reply: another computer copies `.mcp.json.example` to
+  `.mcp.json` again after pulling.
 
 ## 2. Authorization
 

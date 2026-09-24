@@ -207,9 +207,11 @@ Before you ever write that no browser tool exists:
 2. If anything matches, load it and use it. No exceptions, and no "the owner can check
    this manually".
 3. Only if the search returns nothing, say that you searched and found none. In a project
-   that carries this kit, an empty search means the install's browser step was skipped
-   (Installation.md 6d, CLAUDE.md rule 6): run it now and ask for its one approval. The
-   manual check list is for the session where even that cannot happen.
+   that carries this kit, an empty search with no `chrome-devtools` entry in `.mcp.json`
+   means the install's browser step was skipped (Installation.md 6d, CLAUDE.md rule 6): run
+   it now and ask for its one approval. With the entry there, say why nothing loaded, as
+   rule 6 lists. The manual check list is for the session
+   where even that cannot happen.
 
 A tool that loaded but was **refused** is a different case. Name the tool, say it was
 refused, use another route, and never report it as "no tools available".
