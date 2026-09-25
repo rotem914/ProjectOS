@@ -20,10 +20,10 @@
 #
 # WHAT IS NEVER IN THE ZIP, whatever the list below says: the backups/ folder
 # itself, the assistant's machine-local folders (.claude, .codex), the scratch
-# folder (.tmp), atomic-write leftovers (*.tmp, *.tmp.*), and real secret files
-# (.env, .env.*, .dev.vars, .dev.vars.*; the .example templates are kept). A
-# snapshot must be safe to carry to external storage, so secrets stay out and a
-# restore recreates them by hand from the templates.
+# folder (.tmp), atomic-write leftovers (*.tmp, *.tmp.*), and the env files
+# (.env*, .dev.vars*; the .env.example and .dev.vars.example templates are
+# kept), so a restore recreates them by hand from the templates. Any other key
+# file inside the project travels in the ZIP, so keep keys outside the project.
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 

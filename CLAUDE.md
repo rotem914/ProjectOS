@@ -58,6 +58,8 @@ Read this file first. Then the docs in `project-os/`, in this order:
 12. `project-os/Hooks.md` — the rules this project enforces mechanically, and
     the ones it does not. Read it to know which of the rules above are merely
     written down. You install those hooks during setup, without being asked.
+13. `project-os/Plan.md`, when it exists: the build plan the owner tracks
+    (rule 13). Read it at task pickup.
 
 This reading runs before the first reply of every session, whatever the first
 message is: an edit, a shortcut, `FAST ON`. A hook's summary of a file is a
@@ -86,7 +88,7 @@ Do not write code before you understand the request, the files involved, the
 current behavior, and what proves the change works. A change built on a guess
 costs more to unwind than it saved.
 
-At pickup, name these six things:
+Before the first edit, settle these six things:
 
 - What type of task this is.
 - Which part of the product owns it.
@@ -94,6 +96,10 @@ At pickup, name these six things:
 - Which files must not be touched.
 - What behavior must stay unchanged.
 - What QA must run before delivery.
+
+The pickup line names the task, its type, the area and the risk level
+(rule 17), plus any invariant it touches (rule 11); the rest shows in the
+History row.
 
 **A constraint is a claim until it is checked.** Before an option is set aside
 because a platform limit, a technical claim or an earlier assumption seems to
@@ -271,8 +277,9 @@ Files written outside the project are invisible to the owner, absent from git,
 and lost on the next machine.
 
 **This rule is enforced, not only stated.** `project-os/guards/Path-guard.mjs`
-runs before every file write and every shell command and refuses what it cannot
-prove is inside the project; `project-os/guards/Destructive-guard.mjs` refuses
+runs before every file write and every shell command and refuses the writes it
+recognises whose target it cannot prove is inside the project (a command it does
+not recognise runs unchecked, so it is a safety net, not a wall); `project-os/guards/Destructive-guard.mjs` refuses
 the one-way commands the same way. Both are installed with the hooks
 (`project-os/Hooks.md`). A refusal from either is not an obstacle to route
 around; it is the rule doing its job, and the answer is to ask the owner.
@@ -667,7 +674,15 @@ Commit everything accumulated up to now, across sessions, not only this chat.
    move says so. It comes after step 1 on purpose, so the fast-mode catch-up row
    is already in the file before rotation decides what is old. Stage whatever
    they changed with the rest.
-3. `git status` plus `git diff`: see the whole uncommitted scope.
+3. If the folder is not a git repository yet
+   (`git rev-parse --is-inside-work-tree` fails), run `git init -b main` first
+   and say so in one line of the report; it is local, and deleting `.git`
+   undoes it. Never create a GitHub repository and never add a remote. If the
+   commit stops because git has no name or email on this computer, ask the
+   owner for their name and email, then set them for this repository only
+   (`git config user.name` and `git config user.email`, never `--global`), and
+   say so in one line; never make them up. Then `git status` plus `git diff`:
+   see the whole uncommitted scope.
 3b. **List the heavy things** (rule 4): `node project-os/Find-heavy-files.mjs`. Anything
    it prints goes in the commit report, size and kind beside the path, for the
    owner to delete or keep. It deletes nothing and never blocks the commit.
@@ -692,18 +707,20 @@ disaster recovery that depends on no git host and no sync folder. Flow:
 1. Run `project-os/Backup-whole-project.ps1` (PowerShell; `pwsh` on macOS or Linux). It zips
    the whole project, git history included, and leaves out the regenerable
    folders named in its setup block, the assistant's machine-local folders, the
-   `.tmp/` scratch folder and every real secret file (`.env*`, `.dev.vars*`;
-   the `.example` templates travel). It either verifies every file back out of
-   the finished archive or fails and leaves no ZIP at all; there is no "mostly
-   worked".
+   `.tmp/` scratch folder and the env files (`.env*`, `.dev.vars*`; the
+   `.env.example` and `.dev.vars.example` templates travel). Any other key file
+   inside the project travels in the ZIP, so keep keys outside the project. It
+   either verifies every file back out of the finished archive or fails and
+   leaves no ZIP at all; there is no "mostly worked".
 2. The ZIP lands in `backups/` at the project root, which is gitignored.
 3. Never commit or push a ZIP.
 4. Tell the owner to move the ZIP to external storage; a backup on the same
    disk as the project is not one.
 
-**Secrets never travel.** Real env files are excluded on purpose, so a full
-restore recreates them by hand from the templates. Say so when reporting a
-restore, never as a surprise during one.
+**Env files never travel.** They are excluded on purpose, so a full restore
+recreates them by hand from the templates. Say so when reporting a restore,
+never as a surprise during one. The script recognises env files only: a key
+file kept anywhere else in the project goes into the ZIP with everything else.
 
 **Restore.** Unzip the chosen `backups/*.zip` into a NEW folder, never over the
 live tree; reinstall dependencies; recreate the env files from their

@@ -17,6 +17,9 @@ did that change do, and how do I undo it".
 - Keep appendix rows short — a few lines, not an essay. The full story is in the
   commit diff; a real decision belongs in `project-os/Decisions.md`.
 - Record the commit SHA from **before** the change. That is the rollback target.
+  Before the project's first commit there is no SHA yet. Write `none yet`
+  there instead, and make Rollback say how to undo the change by hand: what to
+  delete, or what to put back and from which backup.
 - Never rewrite or delete a past row. Correct a wrong one by adding a new row —
   an edited log cannot be trusted about anything.
 - A `medium` or `high` risk row names its review result under **What was
@@ -67,4 +70,4 @@ Appendix:
 
 | Date | Task | What changed | What was checked | Result | Risk | Commit before | Rollback |
 |---|---|---|---|---|---|---|---|
-| YYYY-MM-DD | Show a failed-login error | `login.ts` returns the failure reason; the form renders it under the password field and clears it on input. No change to what the server logs. | Wrong password → message shown, no console error. Right password → still signs in. Empty password → field-required message, request not sent. Reloaded, retried: no stale message. Review: 2 findings, both fixed (the message survived a route change; the error was announced twice to screen readers). 1 pre-existing flagged — rate limiting is still per-process. | Pass | medium | `a1b2c3d` | `git revert` the commit; nothing persisted, no migration to undo. |
+| YYYY-MM-DD | Show a failed-login error | `login.ts` returns the failure reason; the form renders it under the password field and clears it on input. No change to what the server logs. | Wrong password → message shown, no console error. Right password → still signs in. Empty password → field-required message, request not sent. Reloaded, retried: no stale message. Review: 2 findings, both fixed (the message survived a route change; the error was announced twice to screen readers). 1 pre-existing flagged: rate limiting is still per-process. | Pass | medium | `a1b2c3d` | `git revert` the commit; nothing persisted, no migration to undo. |

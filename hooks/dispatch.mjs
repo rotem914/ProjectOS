@@ -21,6 +21,19 @@
 // .claude/settings.local.json already carries a hook this plugin would add
 // (the installer's fallback wiring), the plugin stands down for that hook, so
 // nothing fires twice. Checked per event, and per guard for PreToolUse.
+// Only the settings Claude Code actually loaded count, so they are read from
+// the session folder: CLAUDE_PROJECT_DIR when it is set, the found root only
+// when it is not. On Windows a session opened in a subfolder loads only that
+// folder's settings, while on macOS and Linux it also loads the git root's
+// settings.local.json, so there that file is read too (the git root is the
+// first folder holding .git, walking up from the session folder). A reminder
+// stands down when any of those files carries it. A guard counts as wired
+// only when the script the settings name is on disk, read the way Claude Code
+// runs it (${CLAUDE_PROJECT_DIR}, $CLAUDE_PROJECT_DIR, %CLAUDE_PROJECT_DIR% and
+// a relative path all taken from the session folder), because a moved or
+// renamed project keeps a path to a guard that is gone. Anything not proven
+// that way runs the plugin's copy: at worst a guard runs twice, and both block
+// the same.
 //
 // WHAT IT RUNS. Only code from the plugin's own folder: the reminder TEXT is
 // read out of the project's Hooks-settings.json as data (the string inside the
@@ -90,23 +103,127 @@ function isKitItself(root) {
     && fs.existsSync(path.join(root, 'hooks', 'dispatch.mjs'));
 }
 
-function hookCommands(settings, event) {
+// Every command hook one settings object carries for this event.
+function hookEntries(settings, event) {
   const out = [];
   const groups = settings && settings.hooks && settings.hooks[event];
   for (const g of Array.isArray(groups) ? groups : []) {
     for (const h of (g && Array.isArray(g.hooks)) ? g.hooks : []) {
-      if (h && typeof h.command === 'string') {
-        out.push(Array.isArray(h.args) ? `${h.command} ${h.args.join(' ')}` : h.command);
-      }
+      if (h && typeof h.command === 'string') out.push(h);
     }
   }
   return out;
 }
 
-// Every hook command the project's own settings carry for this event.
-function settingsCommands(root, event) {
-  const files = ['settings.json', 'settings.local.json'].map((f) => path.join(root, '.claude', f));
-  return files.flatMap((f) => hookCommands(readJson(f), event));
+function hookCommands(settings, event) {
+  return hookEntries(settings, event)
+    .map((h) => (Array.isArray(h.args) ? `${h.command} ${h.args.join(' ')}` : h.command));
+}
+
+// The folder whose .claude settings Claude Code loaded for this session: the
+// session's own project folder when it is known, else the found root.
+function settingsDir(root) {
+  const pd = process.env.CLAUDE_PROJECT_DIR;
+  return pd ? path.resolve(pd) : root;
+}
+
+// A git worktree has a .git FILE pointing into the main repository, and Claude
+// Code reads the personal settings of the main checkout for it. Follow that; a
+// submodule (whose shared folder is not named .git) stays its own root.
+function mainCheckout(dir, dotGit) {
+  try {
+    if (!fs.statSync(dotGit).isFile()) return dir;
+    const m = /^gitdir:\s*(.+)$/m.exec(fs.readFileSync(dotGit, 'utf8'));
+    if (!m) return dir;
+    const gitdir = path.resolve(dir, m[1].trim());
+    const commonFile = path.join(gitdir, 'commondir');
+    if (!fs.existsSync(commonFile)) return dir;
+    const common = path.resolve(gitdir, fs.readFileSync(commonFile, 'utf8').trim());
+    return path.basename(common) === '.git' ? path.dirname(common) : dir;
+  } catch {
+    return dir;
+  }
+}
+
+// The first folder at or above `start` that holds .git (the main checkout for
+// a worktree), or null.
+function gitRootFrom(start) {
+  let dir = path.resolve(String(start));
+  for (let i = 0; i < 64; i++) {
+    const dotGit = path.join(dir, '.git');
+    if (fs.existsSync(dotGit)) return mainCheckout(dir, dotGit);
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+  return null;
+}
+
+// Every settings file Claude Code loaded for a session in `dir`: that folder's
+// two, plus on macOS and Linux the git root's settings.local.json when `dir`
+// is a subfolder of the repository.
+function settingsFiles(dir) {
+  const files = ['settings.json', 'settings.local.json'].map((f) => path.join(dir, '.claude', f));
+  if (process.platform !== 'win32') {
+    const git = gitRootFrom(dir);
+    if (git && git !== path.resolve(dir)) files.push(path.join(git, '.claude', 'settings.local.json'));
+  }
+  return files;
+}
+
+// Every hook command the loaded settings carry for this event.
+function settingsCommands(dir, event) {
+  return settingsFiles(dir).flatMap((f) => hookCommands(readJson(f), event));
+}
+
+// The path a settings hook gives for a guard: the args element for the exec
+// form, else the double-quoted, single-quoted or bare token of the command.
+// Only a token whose last part is the guard's own name counts, in any case,
+// so a project wired under the guards' old lowercase names still counts.
+function guardTokens(hook, name) {
+  const endsInName = (t) => {
+    const s = String(t).replace(/\\/g, '/');
+    const base = s.slice(s.lastIndexOf('/') + 1);
+    return base.toLowerCase() === name.toLowerCase();
+  };
+  if (Array.isArray(hook.args)) {
+    return hook.args.filter((a) => typeof a === 'string' && endsInName(a)).map((text) => ({ text, bare: false }));
+  }
+  const tokens = [];
+  const re = /"([^"]*)"|'([^']*)'|([^\s"']+)/g;
+  let m;
+  while ((m = re.exec(hook.command)) !== null) tokens.push({ text: m[1] ?? m[2] ?? m[3], bare: m[3] !== undefined });
+  return tokens.filter((t) => endsInName(t.text));
+}
+
+// Fill in the session folder the way Claude Code and the shell would, and
+// resolve a relative path from it. Null when a variable, a backtick or a home
+// folder is left over, or when an unquoted path holds a space the shell would
+// split on, because then the path cannot be proven from here: inside the
+// double quotes of a hook command the shell reads a $ or a backtick as code.
+function resolveGuardPath(token, dir) {
+  const p = token.text
+    .replace(/\$\{CLAUDE_PROJECT_DIR\}/g, () => dir)
+    .replace(/\$CLAUDE_PROJECT_DIR(?![A-Za-z0-9_])/g, () => dir)
+    .replace(/%CLAUDE_PROJECT_DIR%/gi, () => dir);
+  if (/[$`]|%[A-Za-z0-9_]+%|^~/.test(p)) return null;
+  if (token.bare && /\s/.test(p)) return null;
+  return path.resolve(dir, p);
+}
+
+// True only when the loaded settings wire this guard AND the script they name
+// is on disk. A moved project, a path from another computer, or a variable
+// this cannot fill in all come out false, and the plugin runs its own copy.
+function guardWired(dir, name) {
+  const hooks = settingsFiles(dir).flatMap((f) => hookEntries(readJson(f), 'PreToolUse'));
+  for (const h of hooks) {
+    for (const token of guardTokens(h, name)) {
+      const p = resolveGuardPath(token, dir);
+      if (p && fs.existsSync(p)) return true;
+      log(`${name}: settings name ${token.text}, not proven on disk, plugin runs its copy`);
+    }
+  }
+  return false;
 }
 
 // The text inside the kit's `node -e "console.log('...')"` reminder form.
@@ -118,7 +235,7 @@ function reminderText(command) {
 function runReminders(root, event) {
   const kit = readJson(markerIn(root) || '');
   const ours = hookCommands(kit, event);
-  const theirs = settingsCommands(root, event);
+  const theirs = settingsCommands(settingsDir(root), event);
   const lines = [];
   for (const cmd of ours) {
     if (theirs.includes(cmd)) { log(`${event}: stand down, wired in settings`); continue; }
@@ -169,15 +286,13 @@ try {
     if (lines.length) process.stdout.write(`[ProjectOS plugin] ${lines.join('\n')}\n`);
   } else if (mode === 'pretool') {
     const tool = String(payload.tool_name || '');
-    // Lowercased, so a project wired under the guards' old lowercase names
-    // still counts as wired.
-    const wired = settingsCommands(root, 'PreToolUse').join('\n').toLowerCase();
+    const dir = settingsDir(root);
     const shell = /^(Bash|PowerShell|Monitor)$/.test(tool);
-    if (!wired.includes('path-guard.mjs')) code = runGuard('Path-guard.mjs', raw, root);
-    else log('path-guard: stand down, wired in settings');
+    if (!guardWired(dir, 'Path-guard.mjs')) code = runGuard('Path-guard.mjs', raw, root);
+    else log('path-guard: stand down, wired in settings and on disk');
     if (code === 0 && shell) {
-      if (!wired.includes('destructive-guard.mjs')) code = runGuard('Destructive-guard.mjs', raw, root);
-      else log('destructive-guard: stand down, wired in settings');
+      if (!guardWired(dir, 'Destructive-guard.mjs')) code = runGuard('Destructive-guard.mjs', raw, root);
+      else log('destructive-guard: stand down, wired in settings and on disk');
     }
   }
 } catch (err) {

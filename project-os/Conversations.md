@@ -26,7 +26,8 @@ has to re-learn the vocabulary each time.
 ## In-flight narration
 
 Nothing is written between tool calls.
-One line at pickup says what the task is; the next text is the report.
+One line at pickup names the task, its type, the area it touches and its risk
+level, plus any invariant it touches; the next text is the report.
 No plan of the next edit, no summary of the last one, no "I'll do X now".
 That one line follows the tone rules, never the layout: no divider, no heading.
 The one exception is a question that blocks the work, and it ends the turn.
@@ -231,8 +232,8 @@ One sentence with two questions in it gets one answer, and the second ask is los
 ----
 # Next
 
-1) The empty state on the list page — fix, drop, or backlog?
-2) The same treatment on the search page — do you want it?
+1) Fix, drop, or backlog the empty state on the list page?
+2) Do you want the same treatment on the search page?
 ~~~
 
 ~~~
@@ -322,10 +323,10 @@ A1 the list page.
 A2 entry identity.
 
 **Half done**
-A5 backups — waiting on your account.
+A5 backups, waiting on your account.
 
 **Not started**
-A7 the export button — say "do A7".
+A7 the export button, say "do A7".
 ~~~
 
 ### 12 · Verbatim text goes in a fence
@@ -509,14 +510,11 @@ cannot see or edit.
 
 ~~~
 That rule is already rule 6 here.
-Nothing to record — I broke a rule that exists.
+Nothing to record.
+I broke a rule that exists.
 ~~~
 
 ### 17 · Never a long dash
-
-The `## YYYY-MM-DD · Title` heading in Decisions.md uses a middle dot for the
-same reason, and the rotation script accepts any separator there, so an older
-entry written with a dash still rotates.
 
 Never write a dash longer than a hyphen: not `—`, not `–`, not a `--` pair.
 Use a comma, a period, a colon, or a new line instead.
@@ -528,6 +526,10 @@ Two thoughts joined by a long dash are two sentences, which rules 5 and 6
 already demand; the dash mostly hides a chain this file bans elsewhere. Text
 already written is not retro-edited; the rule is forward-looking until the
 owner asks for a sweep.
+
+The `## YYYY-MM-DD · Title` heading in Decisions.md uses a middle dot for the
+same reason, and the rotation script accepts any separator there, so an older
+entry written with a dash still rotates.
 
 ~~~
 Never:

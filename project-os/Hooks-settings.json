@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node -e \"console.log('PROJECT RULES: read CLAUDE.md and the files in project-os before doing anything in this session. Conversations.md governs every reply you write. Workflow.md governs every task. Read them now, in full, if you have not.')\"",
+            "command": "node -e \"console.log('PROJECT RULES: before doing anything in this session, read the files CLAUDE.md lists under Read these before you work, as that list says. Conversations.md governs every reply you write. Workflow.md governs every task.')\"",
             "timeout": 10,
             "suppressOutput": true
           }
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"{{ROOT}}/project-os/guards/Path-guard.mjs\""
+            "command": "node \"${CLAUDE_PROJECT_DIR}/project-os/guards/Path-guard.mjs\""
           }
         ]
       },
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"{{ROOT}}/project-os/guards/Destructive-guard.mjs\""
+            "command": "node \"${CLAUDE_PROJECT_DIR}/project-os/guards/Destructive-guard.mjs\""
           }
         ]
       }

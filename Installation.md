@@ -60,9 +60,9 @@ resolves the two anyway. Say it in the report as one line under What was set
 something the owner has to rule on: a regular owner has no way to answer that
 question, and it should not be asked.
 
-## 2b. Two checks before you go further
+## 2b. Checks before you go further
 
-Both take seconds, and each one catches a failure that is invisible afterwards.
+Each one catches a failure that is invisible afterwards.
 
 **Did copying the kit overwrite an existing rules file?** The merge law above
 only works if the project's own CLAUDE.md still exists. If the files were
@@ -117,13 +117,19 @@ git rev-parse --is-inside-work-tree
 ```
 
 If it is not one, the install still runs in full: no code means step 3's
-"nothing exists to run yet", and no git means only that `Go commit` has nothing
-to commit into. Do not create the repository and do not connect it anywhere;
-opening the project's repository on GitHub is the owner's step. Say it in the
-report as ONE Waiting-on-you line, "Open this project's repository on GitHub;
-`Go commit` works from then on", and write `Go commit` in "What you can say to
-me" as it will work, never as a promise with conditions. Every check above that
-reads git history (the CLAUDE.md one) says "no history yet" instead of failing.
+"nothing exists to run yet", and no git means only that the version history
+starts at the owner's first `Go commit`, which creates it in this folder
+(CLAUDE.md, `Go commit`). The install itself creates nothing: no repository,
+and no connection to GitHub or anywhere else. Say it in the report as ONE item
+under What was set, never under Waiting on you, one sentence per line:
+"No version history yet."
+"Your first Go commit starts it in this folder."
+"Putting it on GitHub is yours, whenever you want a copy off this computer."
+"Publish this folder there, not into a new repository that already has files."
+Write `Go commit` in
+the report's "What to say" section exactly as on any other install: it works
+as written. Every check above that reads git history (the CLAUDE.md one) says
+"no history yet" instead of failing.
 
 ## 3. Learn the repo before asking
 
@@ -145,7 +151,7 @@ install command in pile two of step 4 for the owner to approve, and when they
 do, check free space before running it. A one-shot check that needs nothing
 installed, or whose packages are already there, runs as written.
 
-There are THREE outcomes, not two:
+Pass and fail are not the only outcomes:
 
 - **It passes.** It becomes the standing check.
 - **It fails.** That is a Problems line and a question for the owner, never the
@@ -156,6 +162,10 @@ There are THREE outcomes, not two:
   it, and mark every table that carries it "nothing to run before that step".
   The report's Problems section says so in one fixed line: "No check exists yet;
   it arrives at step N of the plan." The same shape applies to the dev address.
+  With no plan either, write "none yet" wherever the command or the dev address
+  goes, do not ask the owner for one, and the Problems line reads: "No check
+  exists yet; there is no code." The change that first creates a check command
+  or a dev address writes it into those rows.
 - **It was refused, so it never ran.** A permission system can deny an unfamiliar
   build command, and a session with nobody to approve it gets no answer at all.
   Say REFUSED, name the command, and put it in Waiting-on-you. A command that
@@ -164,7 +174,8 @@ There are THREE outcomes, not two:
 
 ## 4. Ask once
 
-Ask only what the repo cannot tell you, in ONE message, never one at a time.
+Ask only what the repo cannot tell you, in one sitting, before any setup work.
+That is one panel, or several panels back to back with nothing done in between.
 The reply language is the one exception: it is always asked (see below).
 
 **Real questions go in the question panel, when the client has one.** Claude
@@ -176,6 +187,13 @@ rows with one line each on what they mean, and a free-text way out. Pile one
 never goes in it: those are statements to be waved through, not choices. In a
 client with no such panel, the feed carries both piles as written below.
 
+The panel holds a limited number of questions: today at most four per panel,
+each with two to four options. A longer pile two goes in panels sent one after
+another, the questions that block the install first. Never drop a question or
+postpone it to make it fit. The invariants go as multi-select tick lists, at
+most four candidates per tab, so six take two tabs. The question text says
+that a box left unticked is a no.
+
 **Send it as TWO piles, and label them.** A batch of nine questions reads as
 nine decisions when half of them are things you already worked out and only
 need waved through. Separating them halves what the owner has to think about.
@@ -183,10 +201,11 @@ need waved through. Separating them halves what the owner has to think about.
 **Pile one: confirm, and silence means yes.** Everything you derived and are
 confident in. State each as a fact with its source, not as a question. The
 owner reads them, and answers only the ones you got wrong.
-Typically: their name from the version history, the command that runs the app
-and the address it serves on, the command that checks the project, whether a
-tool folder is needed, and, if a build plan sits loose in the repo, that it
-moves to `project-os/Plan.md` (CLAUDE.md rule 13).
+Typically: their name from the version history (with no history yet, from
+git's configured user name; with neither, it moves to pile two), the command
+that runs the app and the address it serves on, the command that checks the
+project, whether a tool folder is needed, and, if a build plan sits loose in
+the repo, that it moves to `project-os/Plan.md` (CLAUDE.md rule 13).
 
 **Pile two: needs a real answer, and the install waits.** Only what genuinely
 cannot be derived, and what would be wrong to guess. Number these.
@@ -197,12 +216,13 @@ per task, and nothing else: who commits, when, and who pushes are settled by
 rule 22 and are never asked: the assistant, on the owner's `Go commit` only,
 and the owner), who starts the dev server and where it runs (CLAUDE.md
 rule 16 has three honest answers and is rewritten from this one), and anything
-step 3 came up empty on.
+step 3 came up empty on, except the "none yet" rows of a folder with no code
+and no plan, which are never asked.
 
 Say which pile blocks the install and which does not, in one line, so nobody
 answers eight things to unblock one.
 
-**This message, like the closing report, is exempt from the reply-length
+**This batch, like the closing report, is exempt from the reply-length
 ceiling.** It must be complete, since a question left out is a setup block
 filled by a guess. Every layout rule still applies. The same exemption is
 written into Conversations.md rule 1, so the two files agree.
@@ -239,7 +259,7 @@ as a technical noun cannot be judged by the person who has to approve it, so
 the yes it gets back is worthless.
 
 Every marked setup block in the kit is a question waiting to be asked. Walk
-them ALL before sending this message, and fold each one into the right pile. A
+them ALL before asking anything, and fold each one into the right pile. A
 setup block reached in step 6 with no answer means step 4 was written short.
 
 **The hooks are not a question.** They are installed for you in step 6b, on
@@ -273,6 +293,11 @@ The two tool files under project-os/mcp/ carry a few more (the Figma file key
 and target page, the Cloud project, the GA4 property), each inside a marked
 setup table with its own instruction.
 
+Leave `project-os/Hooks-settings.json` out of this step: it has nothing to
+replace. Its two guard lines carry `${CLAUDE_PROJECT_DIR}` on purpose: the
+installer writes this project's own path in its place in the personal settings
+file, and keeps it in a committed one. Keep those lines exactly as they are.
+
 **A repo with more than one app gets more than one row.** `{{DEV_URL}}` and
 `{{CHECK_COMMAND}}` are written as single values, which is right for a single
 app and wrong for a workspace: picking the one app you were pointed at leaves
@@ -301,8 +326,9 @@ Do the setup steps the files carry, then clear the scaffolding:
 - check the exclusion list at the top of project-os/Backup-whole-project.ps1 against this
   stack: every regenerable folder (dependencies, build output, caches) is
   named there, and nothing this project commits on purpose is. Then add
-  `/backups/` to the project's `.gitignore`, creating the file if there is
-  none, so a snapshot can never be committed;
+  `/backups/` and `/.tmp/` to the project's `.gitignore` in the same edit,
+  creating the file if there is none and skipping a line already there, so
+  neither a snapshot nor scratch output can ever be committed;
 - replace the skeleton tree in project-os/Map.md with the real one and fill
   its Data and Ownership tables;
 - delete the example blocks at the end of Map.md, History.md, Decisions.md,
@@ -327,36 +353,69 @@ An enforcement layer that waits for someone to notice a request at the bottom
 of a report is an enforcement layer that never gets switched on.
 
 **First, check whether they are already on.** If the owner did the
-once-per-computer step (README, "Once per computer"), the kit runs as a plugin
-on this machine, and this session's start carried a line beginning
-`[ProjectOS plugin] hooks active for` naming this project. If that line is in
-your context, the hooks ARE on, for this project, from the first message:
-adapt the wording exactly as below (the plugin reads the same file), write
-NOTHING under `.claude`, do not run the installer, and skip the wiring and
-speaking checks; a `--dry` run would say "will add" and that is expected. Prove
-the guard with the fake-payload command in `Hooks.md`, aimed at the plugin's
-own dispatcher. In the report, "Your rules are switched on" says they come
-from the plugin on this computer, and that another computer needs the same
-once-per-computer command.
+once-per-computer step (README, "Once per computer"), the kit can run as a
+plugin on this machine. When the kit was already in the folder as this session
+opened, the session's start carried a line beginning
+`[ProjectOS plugin] hooks active for` naming this project. That line, or the
+hand run below, points to the plugin. The live check after them is the proof
+that it is on.
 
 **No line does not yet mean no plugin.** The plugin speaks only in a folder
 that carries the kit, and it decides at the moment the session opens. If the
 folder was blank then and the kit arrived during this session, the plugin was
-silent at the start and is active now. On a real install that silence made the
-install wire every hook into the project's settings as well. So when the line
-is absent, ask the plugin directly, from the project root:
+silent at the start and may be active now. On a real install that silence made
+the install wire every hook into the project's settings as well. So when the
+line is absent, ask the plugin directly, from the project root:
 
 ```
 node "$HOME/.claude/skills/projectos/hooks/dispatch.mjs" session
 ```
 
 In PowerShell, `$env:USERPROFILE` instead of `$HOME`. If it prints the
-`[ProjectOS plugin] hooks active for` line naming this project, the plugin is
-on: follow the paragraph above. If the file does not exist or it prints
-nothing, the plugin is not on this computer, and the rest of this section is
-the path.
+`[ProjectOS plugin] hooks active for` line naming this project, the plugin
+folder is there, and that is all a hand run can show. It prints the same line
+when Claude Code has not loaded the plugin: switched off, cloned during this
+session, or left out by a setting. Go on to the live check. If the file does
+not exist or it prints nothing, the plugin is not on this computer, and the
+installer path below is the path.
 
-So, as part of the install:
+**The live check: one real, harmless command.** When the line was in your
+context or the hand run printed it, make one real tool call, from the project
+root:
+
+```
+rm -rf projectos-live-probe
+```
+
+In PowerShell the same call is
+`Remove-Item -Recurse -Force projectos-live-probe`, and the guard refuses it
+the same way. Keep the name exactly as written: never under `.tmp` and never
+ending in `.tmp`, because the guard lets those through as disposable. Nothing
+by that name exists, so nothing can be lost. This is the one approved probe of
+the install: the owner's request to install ProjectOS covers it, so CLAUDE.md
+rule 4 does not turn it into a question. Read the result:
+
+- **Refused with `destructive-guard: blocked`**, while neither
+  `.claude/settings.json` nor `.claude/settings.local.json` wires a destructive
+  guard of its own: the plugin is live, and the plugin path applies. Claude
+  Code usually adds that the hook comes from the `projectos@skills-dir` plugin.
+  That is confirmation, not the key.
+- **The command simply runs:** nothing was lost, the plugin is not live in this
+  session, and the installer path applies.
+- **Anything else**, a refusal that does not say `destructive-guard: blocked`
+  or one while the project's settings already wire the guard: the installer
+  path is the safe fallback.
+
+**The plugin path.** When the live check proved the plugin on: read
+`Hooks.md` and adapt the wording exactly as the installer path below says (the
+plugin reads the same file), write NOTHING under `.claude`, do not run the
+installer, and skip the wiring, speaking and guard checks below. A `--dry`
+run would say "will add" and that is expected, and the refusal you just got is
+the guard proof. In the report, "# Rules switched on" says they come from the
+plugin on this computer, and that another computer needs the same
+once-per-computer command.
+
+**The installer path**, as part of the install:
 
 - Read `project-os/Hooks.md`.
 - **Adapt the wording first.** Open `project-os/Hooks-settings.json` and rewrite
@@ -372,6 +431,9 @@ So, as part of the install:
     apostrophe ends the string. Write "do not", never the contraction.
   - No dollar-brace variables. The shell on Windows prints them as literal
     text. Use names relative to the project, "project-os/Conversations.md".
+    This is about the rules text only: the two guard lines in the same file
+    carry `${CLAUDE_PROJECT_DIR}` on purpose (step 5), so leave them as they
+    are.
   - Run the finished command once in the shell before installing, and once
     more in the other shell if the machine has both, and read what comes out.
 - **Check whether hooks are already installed.** Read
@@ -386,17 +448,19 @@ node project-os/Install-project-hooks.mjs
 ```
 
   It merges, never overwrites, backs the file up first, and leaves existing
-  hooks alone unless re-run with `--force`. It proves the target folder is
+  hooks alone unless re-run with `--replace`. It proves the target folder is
   writable before it starts, and it says "added" only after the file is on
   disk; a run that ends in a sentence starting "Install-project-hooks:" and an error
   wrote nothing, and that sentence carries the remedy. Report what it added,
   in one line, quoting the "added:" line and never the "will add:" one.
 
 - **Prove it is wired, not only that the scripts run.** Run the installer once
-  more with `--dry`. Every event it lists under "present:" is installed; any
-  event under "will add:" is not, whatever the two checks below say. Those two
-  run the scripts by hand and pass on an unwired project just the same, which
-  is how an install reported working hooks that were never in the settings.
+  more with `--dry`, adding `--shared` when that is how the hooks were
+  installed, since the dry run checks the file it would write to. Every event
+  it lists under "present:" is installed; any event under "will add:" is not,
+  whatever the two checks below say. Those two run the scripts by hand and
+  pass on an unwired project just the same, which is how an install reported
+  working hooks that were never in the settings.
 
 - **Prove one hook actually speaks.** Installing is not evidence. Run the hook's
   own command once in a shell, exactly as it is written in the settings, and
@@ -414,7 +478,7 @@ node project-os/Install-project-hooks.mjs
   refused and move on. Fallback, never the plan. But a refused install is not
   one item among eight: the kit's own line is that a project without hooks
   runs on good intentions, so the remedy takes the slot in the report where
-  "Your rules are switched on" would have gone, as its opening section (see
+  "# Rules switched on" would have gone, as its opening section (see
   section 8), not a Waiting-on-you entry. The remedy is one command, and in
   Claude Code the owner can run it without leaving the conversation, by typing
   it in the chat box with an exclamation mark in front:
@@ -531,9 +595,11 @@ Finding one working browser never ends the step.
    read at session start and the assistant asks the owner once to approve it,
    so it works from their next session. When step 3 wrote an entry that can
    start here, put that in the report under What was set, one line: which
-   browsers this project has, which system the entry is written for, and that
+   browsers this project has, which system the entry is written for, that
    the separate Chrome starts with the next session once the owner approves
-   its prompt. Declining it leaves the project without that Chrome; running
+   its prompt, and that the entry fetches chrome-devtools-mcp from npm on
+   first start and takes new releases by itself. Declining it leaves the
+   project without that Chrome; running
    `claude mcp reset-project-choices` in the project folder brings the prompt
    back at the next session, for every server in the project. If Chrome is
    not installed on the machine, or step 2b found no Node or a version the
@@ -580,27 +646,34 @@ Sections, in this order:
 5. **The rules are on.** Second to last in the report, always. Short, and
    written for someone who does not read code. Use this shape:
 
-   > **Your rules are switched on**
+   > ----
+   > # Rules switched on
    >
    > I installed the part that keeps me following them.
    > From now on your rules are repeated to me on every message you send,
    > instead of fading as the conversation gets long.
    >
-   > One thing is yours: close this session and start a new one, because that
-   > setting is read when a session opens.
+   > One thing is yours:
+   > close this session and start a new one,
+   > because that setting is read when a session opens.
    >
    > To check it worked, ask me in the new session:
-   > "what rules were you given this turn?"
-
-   When the hooks came from the plugin (6b, the announcing line was in
-   context), the block says so instead, and asks nothing of the owner here:
-
-   > **Your rules are switched on**
    >
-   > They come from the ProjectOS plugin on this computer, so they were on
-   > from the first message and nothing had to be installed in this project.
-   > Another computer needs the same one-time command, in the kit's README
-   > under "Once per computer".
+   > ```
+   > what rules were you given this turn?
+   > ```
+
+   When the plugin was proven live in 6b, the block says so instead, and asks
+   nothing of the owner here:
+
+   > ----
+   > # Rules switched on
+   >
+   > They come from the ProjectOS plugin on this computer,
+   > so nothing had to be installed in this project.
+   > Every new session starts with them on.
+   > Another computer needs the same one-time command,
+   > in the kit's README under "Once per computer".
    > If I read your rules back to you, it is working.
 
    If the install could not write that setting, this section is REPLACED, in
@@ -611,10 +684,11 @@ Sections, in this order:
    Waiting-on-you among the other items; on a refused install it is the one
    thing in the report that matters.
 
-   > **Your rules are not enforced yet**
+   > ----
+   > # Rules not enforced
    >
-   > I could not switch on the part that keeps me following them; this
-   > environment blocks me from writing that setting.
+   > I could not switch on the part that keeps me following them.
+   > This environment blocks me from writing that setting.
    > Until it is on, your rules are documents I may forget in a long session.
    >
    > Type this in the chat box, exclamation mark included, and it runs here:
@@ -629,7 +703,7 @@ Sections, in this order:
    default, and team-wide is available on request. Do not turn it into a
    question.
 
-6. **What you can say to me.** The closing section, after the rules are on.
+6. **What to say.** The closing section, after the rules are on.
    The owner has just been handed a folder of rules and knows none of the
    phrases that drive it, so list them: a title, then ONE line saying what it
    does. Nothing else, no flags, no explanation of the machinery.
@@ -640,15 +714,20 @@ Sections, in this order:
    this changes how the list reads, never how a phrase is typed.
 
    List every trigger this project actually has, which is every one in
-   CLAUDE.md's Review, QA and Shortcuts sections. On a stock install:
+   CLAUDE.md's Review, QA and Shortcuts sections, plus Full report from
+   Conversations.md rule 1. On a stock install:
 
-   > **What you can say to me**
+   > ----
+   > # What to say
    >
    > **Go commit**
    > I run the checks, commit everything so far, and leave you the push.
    >
    > **Go backup**
    > Zip the whole project into one file you can put on a drive.
+   >
+   > **Go commit and backup**
+   > Commit everything, then zip the whole project, in one go.
    >
    > **Go code review**
    > Review the whole codebase and hand you the findings.
@@ -675,17 +754,23 @@ Sections, in this order:
    does not exist here. A trigger the owner never learns is a trigger nobody
    uses.
 
-Also tell the owner once that the phrase "full report" lifts the reply-length
-ceiling when they want the long version.
-
 If a rule in the kit contradicts how this project actually works, it belongs
 in Clashes too, said plainly, instead of quietly adapting the kit.
 
 ## 9. Clean up
 
 When the report is delivered, this file has done its job, and it STAYS. Other
-files point at it by name (Hooks.md, the installer's header, Conversations.md),
-so deleting it leaves a reader following a pointer to nothing. Say once in the
-report that it is kept as the record of how the install was done, and that the
-owner may delete it later if they want; if they do, the pointers are theirs to
-update. CLAUDE-kit.md, if there was one, is already gone (step 2).
+files point at it by name, so deleting it leaves a reader following a pointer
+to nothing. To find them all, search the whole project for `Installation.md`;
+the search is the list, since files change. Today it finds CLAUDE.md rule 6,
+`project-os/QA.md` section 11 and `project-os/Workflow.md` step 9, which all
+send the assistant to step 6d when a browser search comes back empty, and also
+`project-os/Hooks.md`, `project-os/Conversations.md`, the header of
+`project-os/Install-project-hooks.mjs` and
+`project-os/mcp/Google_analytics/Google_Analytics_MCP_Rules.md`. Say once in
+the report that it is kept as the record of how the install was done, and that
+the owner may delete it later if they want; if they do, every pointer the
+search finds is theirs to update. For the ones that send the assistant to
+step 6d, updating means copying that step into one of them first, since the
+Chrome DevTools entries for `.mcp.json` are written nowhere else.
+CLAUDE-kit.md, if there was one, is already gone (step 2).

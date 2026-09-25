@@ -53,27 +53,17 @@ This is not commentary. Medium or high **arms the automatic review in step 12**,
 
 ## 3. Read the context
 
-Before touching anything, read:
-
-- `CLAUDE.md` — project context and working rules.
-- `project-os/Workflow.md` — this file.
-- `project-os/Map.md` — architecture and where things live.
-- `project-os/QA.md` — what must be checked.
-- `project-os/History.md` — what changed recently.
-- `project-os/Decisions.md` — why things are the way they are.
-- `project-os/Conversations.md` — how to write the reply at the end.
-- `project-os/Backlog.md` — scan the open items; flag any that this task touches.
-- `project-os/Mistakes.md` — the corrections you were given, waiting to become rules.
+Before touching anything, read the files `CLAUDE.md` lists under "Read these before you work", as that list says. That list is the one home of the reading order, so this file does not repeat it.
 
 Read them before you form an opinion. An opinion formed without them is a guess that happens to be typed confidently.
 
-Two more are read on demand rather than every time, because most tasks never reach them: `project-os/Code_review.md` when step 12 arms a review, and `project-os/Visual_QA.md` when the task changes something a person can see.
+Some files on that list are read on demand rather than every time, because most tasks never reach them: `project-os/Code_review.md`, for one, only when step 12 arms a review. The list says when each one applies.
 
 If the task touches an area with its own notes in `project-os/Map.md`, follow that pointer too.
 
 ## 4. Define boundaries
 
-Before planning, write down:
+Before planning, settle:
 
 - what is in scope,
 - what is out of scope,
@@ -87,9 +77,9 @@ If scope is ambiguous, ask before implementing — unless the owner already said
 
 Why: most bad changes are not wrong code. They are correct code applied to the wrong surface.
 
-## 5. Write a short plan
+## 5. Settle a short plan
 
-Before implementing, state:
+Before implementing, settle:
 
 - the goal,
 - files likely to change,
@@ -107,7 +97,7 @@ Before implementing, state:
 
 Practical and short. A three-line plan is fine. No plan is not.
 
-Why: a plan written before the code is a prediction, so it can turn out wrong and teach you something. A summary written afterwards only ever agrees with what you did.
+Why: a plan made before the code is a prediction, so it can turn out wrong and teach you something. A summary written afterwards only ever agrees with what you did.
 
 ### Check every "impossible" before it shapes the plan
 
@@ -203,7 +193,7 @@ Drive {{DEV_URL}} with a browser-automation tool and check:
 Before calling any visible change done, complete one of these two paths and say which one in the delivery summary.
 
 - [ ] **Path A — the check ran.** You opened the app in a browser-automation tool, ran the flow, and inspected console, network, and DOM. List each concrete check and its result.
-- [ ] **Path B — no tool was available.** You searched the available tooling for a browser automation tool and found none. State the search you ran and its empty result, then hand the owner a manual QA list.
+- [ ] **Path B: no tool was available.** You searched the available tooling for a browser automation tool and found none. Follow `CLAUDE.md` rule 6 for what that means here: run Installation.md 6d when `.mcp.json` has no `chrome-devtools` entry, otherwise say why nothing loaded. Then state the search you ran and its empty result, and hand the owner a manual QA list.
 
 A task claiming neither path is not done.
 

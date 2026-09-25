@@ -211,9 +211,9 @@ Two layers:
 ```
 T# · <short title>          (+ severity marker)
 Where:   file:line
-Problem: one line — the defect, not a lecture
+Problem: one line naming the defect, not a lecture
 Fix:     the concrete change (or two options, if there is a real choice)
-Verify:  the one check that proves it fixed — a test, a search, {{CHECK_COMMAND}}, or a manual step
+Verify:  the one check that proves it fixed: a test, a search, {{CHECK_COMMAND}}, or a manual step
 Status:  [ ] open · [x] done
 ```
 

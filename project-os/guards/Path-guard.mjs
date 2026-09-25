@@ -1,11 +1,12 @@
-// Path-guard.mjs - PreToolUse hook. Refuses any file write aimed outside the
-// project folder, before it happens.
+// Path-guard.mjs - PreToolUse hook. Refuses the file writes it recognises that
+// are aimed outside the project folder, before they happen.
 //
 // A rule in a document depends on the assistant reading and remembering it,
 // and a permission prompt only ASKS. This does not ask. It reads every write the
 // file tools make and every Bash / PowerShell command (redirections, writing
 // programs, cmdlets, wrappers, inline shells, inline scripts, `cd` moves) and
-// exits 2 on anything it cannot prove lands inside the project.
+// exits 2 on any write it recognises whose target it cannot prove is inside
+// the project.
 //
 // Installed by `node project-os/Install-project-hooks.mjs`, which wires it as:
 //   PreToolUse, matcher "Write|Edit|NotebookEdit|Bash|PowerShell|Monitor",
@@ -28,7 +29,9 @@
 //                        into, named literally; agent config and env files stay
 //                        refused even there. Empty by default.
 //
-// What it does NOT cover, stated plainly: the assistant's own storage (session
+// What it does NOT cover, stated plainly: it recognises the common ways a
+// command writes a file, and a command it does not recognise runs unchecked, so
+// it is a safety net, not a wall. The assistant's own storage (session
 // transcripts, sub-agent logs, overflow of long tool output) is written by the
 // application, not by the assistant, and cannot be redirected.
 import fs from 'node:fs';
@@ -255,23 +258,51 @@ function splitSegmentsByLine(command) {
  * the one-line inline-script literal scan reads it, so that check gives the
  * verdicts it always gave (a review found a one-line script that only READ
  * `C:\Users\...` refused once the backslashes survived).
+ *
+ * Two more things happen here (review 2026-09-25):
+ *  - In bash, a word holding an unquoted brace list becomes every word the
+ *    shell makes of it: `touch {a,/c/x}.txt` touches `a.txt` AND `/c/x.txt`,
+ *    so each is judged on its own (see braceWords). The word after a
+ *    redirection stays one token and carries the words in `alts`.
+ *  - An unquoted `)` that closes nothing opened in its word closes a subshell,
+ *    a `$( )` or a PowerShell group begun earlier, so it ends the file name a
+ *    redirection writes to: `x=$(git rev-parse HEAD 2>/dev/null)` writes to
+ *    /dev/null, not to a file called "/dev/null)".
  */
 function tokenize(segment, shell) {
   const bashEscapes = shell === 'bash';
   const tokens = [];
   let cur = '';
   let legacy = '';
+  let lit = []; // per character of cur: 0 as typed, 1 quoted, 2 backslash-escaped
+  let depth = 0; // unquoted ( still open in this word
+  let cut = -1; // where the first unquoted ) that closes nothing in this word sits
   let has = false;
   let q = null;
-  const add = (s) => {
+  const add = (s, how = 0) => {
     cur += s;
     legacy += s;
+    lit.push(how);
     has = true;
   };
   const push = () => {
-    if (has) tokens.push({ text: cur, legacy });
+    if (has) {
+      const prev = tokens[tokens.length - 1];
+      if (prev && prev.redirect) {
+        const end = cut < 0 ? cur.length : cut;
+        const text = cur.slice(0, end);
+        tokens.push({ text: cur, legacy, alts: bashEscapes ? braceWords(text, lit.slice(0, end)) : [text] });
+      } else {
+        const words = bashEscapes && cur.includes('{') ? braceWords(cur, lit) : [cur];
+        if (words.length === 1 && words[0] === cur) tokens.push({ text: cur, legacy });
+        else for (const w of words) tokens.push({ text: w, legacy: w });
+      }
+    }
     cur = '';
     legacy = '';
+    lit = [];
+    depth = 0;
+    cut = -1;
     has = false;
   };
   for (let i = 0; i < segment.length; i++) {
@@ -283,20 +314,28 @@ function tokenize(segment, shell) {
         // backslashes (2026-09-24: dropping them turned a `cd` into the project
         // into an unknown folder).
         const n = segment[i + 1];
-        if (n !== undefined && '$`"\\\n'.includes(n)) { add(n); i++; continue; }
+        if (n !== undefined && '$`"\\\n'.includes(n)) { add(n, 1); i++; continue; }
         cur += ch; // kept in the text, dropped in the legacy reading
+        lit.push(1);
         has = true;
         continue;
       }
       if (ch === q) { q = null; continue; }
-      add(ch);
+      add(ch, 1);
       continue;
     }
     if (ch === "'" || ch === '"') { q = ch; has = true; continue; }
     if (ch === '\\' && bashEscapes) {
       const n = segment[i + 1];
       // A backslash-escaped space is part of the path, not a separator.
-      if (n !== undefined) { add(n); i++; }
+      if (n !== undefined) { add(n, 2); i++; }
+      continue;
+    }
+    if (ch === '(') { add(ch); depth++; continue; }
+    if (ch === ')') {
+      if (depth > 0) depth--;
+      else if (cut < 0) cut = cur.length;
+      add(ch);
       continue;
     }
     if (ch === '>' || (ch === '&' && segment[i + 1] === '>')) {
@@ -323,6 +362,133 @@ function tokenize(segment, shell) {
   return tokens;
 }
 
+// A brace list with more words than this is not spelled out; the word is then
+// unprovable, like a path built from a variable.
+const BRACE_CAP = 1024;
+const UNPROVABLE = '\u0000';
+const TOO_MANY = new Error('brace list too long');
+
+/**
+ * Every word bash makes of one word by brace expansion (review 2026-09-25).
+ *
+ * `touch {a,/c/x}.txt` touches a.txt and /c/x.txt, and `cp a.txt {.tmp,/c/x}`
+ * copies into /c/x. Read as one path, the word was joined under the project
+ * and judged inside. This follows bash's own rules, so a quoted or escaped
+ * brace (`lit`, from tokenize) stays literal, `${...}` and `$( )` are left
+ * alone, `{a}` and `{}` are not lists, `{1..3}` and `{a..c}` are sequences, and
+ * an empty word is dropped. A list longer than BRACE_CAP, or one too deeply
+ * nested to read, comes back as one word marked UNPROVABLE.
+ */
+function braceWords(text, lit) {
+  if (!text.includes('{')) return text === '' ? [] : [text];
+  try {
+    return expandBraces(text, lit).filter((w) => w !== '');
+  } catch {
+    return [UNPROVABLE + text];
+  }
+}
+
+/** One step of bash's brace expansion: the first list in `text`, then the rest of the word. */
+function expandBraces(text, lit) {
+  let open = -1;
+  let close = -1;
+  for (let from = 0; ;) {
+    const o = braceScan(text, lit, from, '{');
+    if (o < 0) break;
+    const c = braceScan(text, lit, o + 1, '}');
+    if (c >= 0) { open = o; close = c; break; }
+    from = o + 1;
+  }
+  if (open < 0) return [text];
+  const amble = text.slice(open + 1, close);
+  const ambleLit = lit.slice(open + 1, close);
+  let middle;
+  if (ambleLit.some((how, j) => how !== 2 && amble[j] === ',')) {
+    middle = [];
+    for (let start = 0; ;) {
+      const comma = braceScan(amble, ambleLit, start, ',');
+      const end = comma < 0 ? amble.length : comma;
+      middle.push(...expandBraces(amble.slice(start, end), ambleLit.slice(start, end)));
+      if (middle.length > BRACE_CAP) throw TOO_MANY;
+      if (comma < 0) break;
+      start = comma + 1;
+    }
+  } else {
+    middle = braceSequence(amble, ambleLit);
+    if (!middle) {
+      if (close + 1 >= text.length) return [text];
+      middle = [text.slice(open, close + 1)];
+    }
+  }
+  const pre = text.slice(0, open);
+  const post = close + 1 < text.length ? expandBraces(text.slice(close + 1), lit.slice(close + 1)) : [''];
+  const out = [];
+  for (const m of middle) {
+    for (const p of post) {
+      out.push(pre + m + p);
+      if (out.length > BRACE_CAP) throw TOO_MANY;
+    }
+  }
+  return out;
+}
+
+/**
+ * Where the next unquoted `satisfy` at the top level sits, from `i`, the way
+ * bash's brace_gobbler finds it; -1 when there is none. A `}` only closes a
+ * list once a comma or a `..` has been seen at its level.
+ */
+function braceScan(text, lit, i, satisfy) {
+  let level = 0;
+  let commas = satisfy === '}' ? 0 : 1;
+  for (; i < text.length; i++) {
+    if (lit[i]) continue;
+    const c = text[i];
+    const next = lit[i + 1] ? '' : text[i + 1];
+    if (c === '$' && next === '{') { level++; i++; continue; }
+    if ((c === '$' || c === '<') && next === '(') {
+      // A `$( )` is passed over whole.
+      let d = 0;
+      for (i++; i < text.length; i++) {
+        if (lit[i]) continue;
+        if (text[i] === '(') d++;
+        else if (text[i] === ')' && --d === 0) break;
+      }
+      continue;
+    }
+    if (c === satisfy && level === 0 && commas > 0) {
+      // A `{` alone, or `{}` at the start of the word, is not a list.
+      if (c === '{' && i === 0 && (i + 1 === text.length || next === '}')) continue;
+      return i;
+    }
+    if (c === '{') level++;
+    else if (c === '}' && level > 0) level--;
+    else if (satisfy === '}' && level === 0 && (c === ',' || (c === '.' && next === '.' && text[i + 2] !== '}'))) commas++;
+  }
+  return -1;
+}
+
+/** `{1..9}`, `{a..e}` and `{1..9..2}`, as bash spells them out; null when `amble` is not one. */
+function braceSequence(amble, ambleLit) {
+  if (ambleLit.some(Boolean)) return null;
+  const num = /^([+-]?\d+)\.\.([+-]?\d+)(?:\.\.([+-]?\d+))?$/.exec(amble);
+  const chr = num ? null : /^([A-Za-z])\.\.([A-Za-z])(?:\.\.([+-]?\d+))?$/.exec(amble);
+  const m = num || chr;
+  if (!m) return null;
+  const from = num ? Number(m[1]) : m[1].charCodeAt(0);
+  const to = num ? Number(m[2]) : m[2].charCodeAt(0);
+  const step = Math.abs(Number(m[3] ?? 1)) || 1;
+  if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to)) return null;
+  if (Math.floor(Math.abs(to - from) / step) + 1 > BRACE_CAP) throw TOO_MANY;
+  const pad = num && [m[1], m[2]].some((s) => /^[+-]?0\d/.test(s)) ? Math.max(m[1].length, m[2].length) : 0;
+  const out = [];
+  for (let n = from; from <= to ? n <= to : n >= to; n += from <= to ? step : -step) {
+    if (!num) out.push(String.fromCharCode(n));
+    else if (pad) out.push((n < 0 ? '-' : '') + String(Math.abs(n)).padStart(pad - (n < 0 ? 1 : 0), '0'));
+    else out.push(String(n));
+  }
+  return out;
+}
+
 /** Can this token act as a flag or a subcommand? Never used on path arguments. */
 const isWord = (t) => t.text.length > 0 && !/\s/.test(t.text);
 
@@ -334,9 +500,16 @@ const isWord = (t) => t.text.length > 0 && !/\s/.test(t.text);
 const isFlag = (t, shell) =>
   shell === 'bash' ? /^-/.test(t.text) : /^-/.test(t.text) || /^\/[A-Za-z?]{1,3}$/.test(t.text);
 
-/** Path-argument candidates: everything that is not a flag or an operator. */
+/**
+ * Path-argument candidates: everything that is not a flag or an operator, and
+ * not the word right after a redirection. That word is where the redirection
+ * points (`2>&1`, `> log.txt`), and step 1 of checkSegment checks it on its
+ * own. Read as a positional, the `1` of a trailing `2>&1` became the LAST
+ * argument, so cp, mv, rsync and git clone took it for their destination and
+ * never looked at the real one (review 2026-09-25).
+ */
 const positionals = (tokens, shell) =>
-  tokens.filter((t) => !t.redirect && t.text.length > 0 && !isFlag(t, shell));
+  tokens.filter((t, i) => !t.redirect && !(i > 0 && tokens[i - 1].redirect) && t.text.length > 0 && !isFlag(t, shell));
 
 // ---------------------------------------------------------------------------
 // Where the project is, and whether a path is inside it
@@ -367,7 +540,7 @@ const SINKS = new Set(['-', '/dev/null', '/dev/stdout', '/dev/stderr', '$null', 
  * both missed real escapes and refused the project's own path.
  */
 function resolveStatic(target, root) {
-  if (/[$`]|%[^%\s]*%|^~|\$\(|\{\{/.test(target)) return { dynamic: true };
+  if (/[$`\u0000]|%[^%\s]*%|^~|\$\(|\{\{/.test(target)) return { dynamic: true };
   let raw = norm(target);
 
   // `C:file` — relative to that DRIVE's current directory, which is per-process
@@ -441,7 +614,7 @@ function checkTarget(target, root, what, base = root) {
   const rootKey = root.toLowerCase();
   const r = resolveStatic(target, base.toLowerCase());
   if (r.dynamic) {
-    return `${what} writes to "${target}", a path built at runtime — it cannot be proven to be inside the project folder. Use a literal path under the project, or the Write tool`;
+    return `${what} writes to "${target.replace(/\u0000/g, '')}", a path built at runtime, so it cannot be proven to be inside the project folder. Use a literal path under the project, or the Write tool`;
   }
   if (inside(r.full, rootKey)) return null;
   if (isMemoryFile(r.full)) return null;
@@ -466,7 +639,7 @@ const BASH_FLAG_TARGETS = {
 };
 // Programs that carry a whole script in an argument — scanned as text, since a
 // real parse is out of reach.
-const INLINE_SCRIPT = { node: /^(-e|--eval|-p|--print)$/, python: /^-c$/, python3: /^-c$/, perl: /^-e$/, ruby: /^-e$/, deno: /^eval$/ };
+const INLINE_SCRIPT = { node: /^(-e|--eval|-p|--print)$/, python: /^-c$/, python3: /^-c$/, py: /^-c$/, perl: /^-e$/, ruby: /^-e$/, deno: /^eval$/ };
 
 // PowerShell. Aliases included: `cp`/`mv`/`rni` really are Copy/Move/Rename-Item.
 const PS_WRITE_FIRST = new Set([
@@ -916,15 +1089,18 @@ function inlineScriptRisk(body, prog, root, base) {
 
 function checkSegment(tokens, root, shell, base) {
   // 1. Redirections, in either shell. `>&` / `&>` followed by a digit or `-` is
-  //    a descriptor dup, not a file.
+  //    a descriptor dup, not a file. Every word the target can be is checked
+  //    (a bash brace list, see tokenize), without a `)` that closes a subshell.
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
     if (!t.redirect) continue;
     const target = tokens[i + 1];
     if (!target || target.redirect) continue;
-    if (t.text.endsWith('&') && /^(\d+|-)$/.test(target.text)) continue;
-    const reason = checkTarget(target.text, root, 'a redirection', base);
-    if (reason) return reason;
+    for (const text of target.alts ?? [target.text]) {
+      if (t.text.endsWith('&') && /^(\d+|-)$/.test(text)) continue;
+      const reason = checkTarget(text, root, 'a redirection', base);
+      if (reason) return reason;
+    }
   }
 
   const pi = programIndex(tokens, shell);
@@ -950,6 +1126,68 @@ function checkSegment(tokens, root, shell, base) {
       }
       const risk = inlineScriptRisk(body, prog, root, base);
       if (risk) return risk;
+    }
+  }
+
+  // 3. git makes a folder of its own, in either shell. PowerShell clones were
+  //    never read before 2026-09-25, so a whole repository could land in the
+  //    home folder while the same command in bash was refused. A clone with no
+  //    destination lands in the current folder, so that folder is what counts.
+  //
+  //    The words are read the way git reads them (review 2026-09-25). The value
+  //    of an option that takes one (`-b main`, `--depth 1`, `-c k=v`) is not
+  //    a folder, so it is skipped: read as one, `clone -b main <source>` was
+  //    refused and `worktree add -b feat <outside>` was allowed. A `-C <dir>`
+  //    before the subcommand moves git into that folder, so the destination is
+  //    read from there. `git init` makes a repository too, in the folder it is
+  //    given or in the current one.
+  if (prog === 'git') {
+    const VALUE_OPT = /^(-[bBcCjou]|--(?:branch|revision|origin|config|config-env|depth|reference(?:-if-able)?|upload-pack|template|separate-git-dir|jobs|shallow-since|shallow-exclude|server-option|bundle-uri|initial-branch|object-format|ref-format|reason|git-dir|work-tree|namespace|filter))$/;
+    let here = base;
+    const ps = [];
+    for (let k = 0; k < rest.length; k++) {
+      const t = rest[k];
+      if (t.redirect) { k++; continue; }
+      if (!t.text) continue;
+      if (!isFlag(t, shell)) { ps.push(t); continue; }
+      const glued = /^--separate-git-dir=(.+)$/.exec(t.text);
+      if (glued) { const r = checkTarget(glued[1], root, '`git`', here); if (r) return r; continue; }
+      if (!VALUE_OPT.test(t.text) || !rest[k + 1]) continue;
+      const v = rest[++k].text;
+      if (t.text === '-C' && ps.length === 0) {
+        const moved = resolveStatic(v, here);
+        here = moved.dynamic || !moved.full ? '\u0000unknown' : moved.full;
+      } else if (t.text === '--separate-git-dir') {
+        const r = checkTarget(v, root, '`git`', here);
+        if (r) return r;
+      }
+    }
+    const sub = ps[0] ? ps[0].text.toLowerCase() : '';
+    if (sub === 'clone' && ps.length >= 2) return checkTarget(ps[2] ? ps[2].text : '.', root, '`git clone`', here);
+    if (sub === 'init') return checkTarget(ps[1] ? ps[1].text : '.', root, '`git init`', here);
+    if (sub === 'worktree' && ps.length >= 3 && ps[1].text.toLowerCase() === 'add') {
+      return checkTarget(ps[2].text, root, '`git worktree add`', here);
+    }
+    return null;
+  }
+
+  //    A project starter writes into the current folder, and into any folder
+  //    it is named, in either shell: npm, pnpm, yarn or bun init or create,
+  //    and npx, bunx or pnpm dlx running create-*, degit, giget or tiged.
+  {
+    const pos = positionals(rest, shell);
+    const sub = pos[0] ? pos[0].text.toLowerCase() : '';
+    let at = -1;
+    let what = '';
+    if (['npm', 'pnpm', 'yarn', 'bun'].includes(prog) && ['init', 'create'].includes(sub)
+      && !rest.some((t) => isWord(t) && /^(-g|--global)$/.test(t.text))) { at = 1; what = `\`${prog} ${sub}\``; }
+    const dlx = ['npx', 'bunx'].includes(prog) ? 0 : prog === 'pnpm' && sub === 'dlx' ? 1 : -1;
+    if (dlx >= 0 && pos[dlx] && /^(create-|@[^/]+\/create|degit|giget|tiged)/i.test(pos[dlx].text)) { at = dlx + 1; what = `\`${prog} ${pos[dlx].text}\``; }
+    if (at >= 0) {
+      for (const target of ['.', ...pos.slice(at).map((t) => t.text)]) {
+        const r = checkTarget(target, root, what, base);
+        if (r) return r;
+      }
     }
   }
 
@@ -983,25 +1221,12 @@ function checkSegment(tokens, root, shell, base) {
       }
       return null;
     }
+    // Every `of=` is checked: dd writes to the last one, and `of={a,b}` is two.
     if (prog === 'dd') {
       for (const t of rest) {
         const m = t.text.match(/^of=(.*)$/i);
-        if (m) return checkTarget(m[1], root, '`dd`', base);
-      }
-      return null;
-    }
-    if (prog === 'git') {
-      const sub = positionals(rest, shell)[0];
-      const subName = sub ? sub.text.toLowerCase() : '';
-      if (subName === 'clone') {
-        const ps = positionals(rest, shell);
-        if (ps.length >= 3) return checkTarget(ps[ps.length - 1].text, root, '`git clone`', base);
-      }
-      if (subName === 'worktree') {
-        const ps = positionals(rest, shell);
-        if (ps.length >= 3 && ps[1].text.toLowerCase() === 'add') {
-          return checkTarget(ps[2].text, root, '`git worktree add`', base);
-        }
+        const reason = m && checkTarget(m[1], root, '`dd`', base);
+        if (reason) return reason;
       }
       return null;
     }
@@ -1073,7 +1298,72 @@ function checkSegment(tokens, root, shell, base) {
 
 const BASH_SHELLS = new Set(['bash', 'sh', 'zsh', 'dash']);
 const PS_SHELLS = new Set(['powershell', 'pwsh']);
-const CD_PROGRAMS = new Set(['cd', 'pushd', 'chdir', 'set-location', 'sl']);
+const CD_PROGRAMS = new Set(['cd', 'pushd', 'chdir', 'set-location', 'sl', 'push-location']);
+const PUSH_PROGRAMS = new Set(['pushd', 'push-location']);
+const POP_PROGRAMS = new Set(['popd', 'pop-location']);
+const UNKNOWN_DIR = '\u0000unknown';
+// PowerShell's common parameters: these take a value, these are switches.
+const PS_COMMON_VALUE = /^(erroraction|ea|warningaction|wa|informationaction|infa|progressaction|proga|errorvariable|ev|warningvariable|wv|informationvariable|iv|outvariable|ov|outbuffer|ob|pipelinevariable|pv)$/;
+const PS_COMMON_SWITCH = /^(verbose|vb|debug|db)$/;
+
+/**
+ * Where a cd, pushd, Set-Location or Push-Location goes: `dest` is the folder
+ * word, or null when the move cannot be followed; `push` saves the current
+ * folder for a later popd; `lost` means the directory stack can no longer be
+ * followed either. `args` are the words after the program, redirections left
+ * out.
+ *
+ * Only the plain forms are followed (review 2026-09-25). A pushd with no
+ * folder swaps the top two entries, `pushd -n` saves without moving, `+N` and
+ * `-N` rotate the stack, and a PowerShell -StackName (any spelling) works on a
+ * stack of its own: none of them is modelled, so the folder and the stack both
+ * become unknown. PowerShell's -Path and -LiteralPath are read first, the
+ * values of the common parameters (-ErrorAction and the like) are skipped, and
+ * any other parameter makes the folder unknown, because its value could have
+ * been read as the folder (`-StackName s C:\x` went to a folder called "s").
+ */
+function locationMove(prog, args, shell) {
+  const push = PUSH_PROGRAMS.has(prog);
+  if (shell === 'bash') {
+    const flags = args.filter((t) => isFlag(t, shell) && t.text !== '--');
+    const words = positionals(args, shell);
+    if (push) {
+      if (flags.length > 0 || words.length !== 1 || /^\+\d+$/.test(words[0].text)) return { dest: null, lost: true };
+      return { dest: words[0].text, push };
+    }
+    // `cd a b` fails with "too many arguments" and stays where it was.
+    return { dest: words.length === 1 ? words[0].text : null };
+  }
+  let named = null;
+  let stack = false;
+  let bad = false;
+  const pos = [];
+  for (let k = 0; k < args.length; k++) {
+    const t = args[k];
+    const m = isWord(t) ? /^-([A-Za-z]+)(:(.*))?$/.exec(t.text) : null;
+    if (!m) {
+      if (/^-/.test(t.text)) bad = true;
+      else if (!isFlag(t, shell)) pos.push(t);
+      continue;
+    }
+    const name = m[1].toLowerCase();
+    const value = () => (m[2] !== undefined ? m[3] : args[k + 1] ? args[++k].text : '');
+    if ('stackname'.startsWith(name)) {
+      stack = true;
+      value();
+    } else if ((name.length >= 3 && 'path'.startsWith(name)) || 'literalpath'.startsWith(name) || name === 'pspath' || name === 'lp') {
+      named = value();
+    } else if (PS_COMMON_VALUE.test(name)) {
+      value();
+    } else if (!PS_COMMON_SWITCH.test(name) && !(name.length >= 3 && 'passthru'.startsWith(name))) {
+      bad = true;
+    }
+  }
+  if (stack || (push && pos.some((t) => /^\+\d+$/.test(t.text)))) return { dest: null, lost: true };
+  const dest = named !== null ? (pos.length === 0 ? named : '') : pos.length === 1 ? pos[0].text : '';
+  if (bad || !dest) return { dest: null, lost: push };
+  return { dest, push };
+}
 
 /**
  * Bash subshell parentheses in one segment: how many open at its start and how
@@ -1121,27 +1411,58 @@ function subshellParens(segment) {
 function analyze(command, shell, root, depth = 0, cwd = root) {
   if (depth > MAX_DEPTH) return null;
   let here = cwd;
-  const outer = []; // the folder each open bash subshell will return to
+  // What each open bash subshell returns to: its folder and a COPY of the
+  // directory stack, since a popd inside ( ) takes an entry the outer shell
+  // still has (review 2026-09-25).
+  const outer = [];
+  let pushed = []; // the folders pushd and Push-Location will return to
+  let stackKnown = true; // false once the stack moved in a way this cannot follow
+  const loseStack = () => {
+    pushed = [];
+    stackKnown = false;
+  };
   for (const segment of splitSegments(command, shell)) {
     const tokens = tokenize(segment, shell);
     if (tokens.length === 0) continue;
     const parens = shell === 'bash' ? subshellParens(segment) : { opens: 0, closes: 0 };
-    for (let k = 0; k < parens.opens; k++) outer.push(here);
+    for (let k = 0; k < parens.opens; k++) outer.push({ here, pushed: pushed.slice(), stackKnown });
     const leave = () => {
-      for (let k = 0; k < parens.closes && outer.length > 0; k++) here = outer.pop();
+      for (let k = 0; k < parens.closes && outer.length > 0; k++) ({ here, pushed, stackKnown } = outer.pop());
     };
 
     const pi = programIndex(tokens, shell);
     const prog = pi >= 0 ? programName(tokens[pi]) : '';
+    const after = pi >= 0 ? tokens.slice(pi + 1) : [];
+    const args = after.filter((t, i) => !t.redirect && !(i > 0 && after[i - 1].redirect));
 
     // A directory change relocates every later relative write in the same
     // command. Follow it; if it cannot be followed, later writes are unprovable.
-    if (CD_PROGRAMS.has(prog)) {
-      const arg = positionals(tokens.slice(pi + 1), shell)[0];
-      if (arg) {
-        const moved = resolveStatic(arg.text, here);
-        here = moved.dynamic || !moved.full ? '\u0000unknown' : moved.full;
+    // A bare `cd` goes home, which cannot be proven inside. PowerShell also
+    // moves with its own `cd..`, `cd\`, `cd~` and a bare drive like `C:`.
+    const psLoc = shell !== 'bash' && pi >= 0 ? /^(cd\.\.|cd\\|cd~|[a-z]:)$/i.exec(tokens[pi].text) : null;
+    // popd and Pop-Location go back to where the matching push left from.
+    // Following the push without the pop sent every later relative path to
+    // the pushed folder (review 2026-09-25). Only a bare one is followed: with
+    // any argument (`-n`, `+N`, -StackName) the folder and the stack are
+    // unknown, and so is every pop after the stack was lost.
+    if (POP_PROGRAMS.has(prog)) {
+      if (args.length > 0 || !stackKnown) {
+        here = UNKNOWN_DIR;
+        loseStack();
+      } else if (pushed.length > 0) {
+        here = pushed.pop();
       }
+      leave();
+      continue;
+    }
+    // `dirs -c` empties the stack, and `dirs` with any flag is not modelled.
+    if (shell === 'bash' && prog === 'dirs' && args.length > 0) loseStack();
+    if (CD_PROGRAMS.has(prog) || psLoc) {
+      const move = psLoc ? { dest: /^cd\.\.$/i.test(psLoc[1]) ? '..' : null } : locationMove(prog, args, shell);
+      if (move.lost) loseStack();
+      if (move.push) pushed.push(here);
+      const moved = move.dest === null ? null : resolveStatic(move.dest, here);
+      here = !moved || moved.dynamic || !moved.full ? UNKNOWN_DIR : moved.full;
       leave();
       continue;
     }
@@ -1233,6 +1554,11 @@ function main() {
   }
   return ALLOW;
 }
+
+// Shared with the destructive guard beside this file: it reads inline scripts
+// with these same helpers. Exporting runs nothing; only the direct run below
+// reads stdin and exits.
+export { INLINE_SCRIPT, SCRIPT_SPAWN_CALLS, maskStrings, callArgs, destShape, receiverBefore, spawnedCommands };
 
 // Importable for the test; only the direct run touches stdin and exits.
 if (process.argv[1] && norm(path.resolve(process.argv[1])).toLowerCase() === norm(fileURLToPath(import.meta.url)).toLowerCase()) {

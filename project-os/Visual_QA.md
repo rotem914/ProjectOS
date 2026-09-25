@@ -37,11 +37,10 @@ screenshot only tells you it looks grey.
 They fight over focus and windows, and the pass turns into debugging the harness
 instead of the product.
 
-**Search for a tool before concluding you have none.** Tooling is often loaded on
-demand and invisible until you look for it, and a wrongly declared absence cancels
-the whole pass without anyone noticing. `project-os/Workflow.md` holds the gate
-you have to satisfy either way: run the pass, or state the search that came up
-empty and hand over a manual checklist. Never report a pass you did not run.
+**Search for a tool before concluding you have none.** `CLAUDE.md` rule 6 says
+how, and what an empty search means in a project that carries this kit.
+`project-os/Workflow.md` step 9 holds the gate you have to satisfy either way.
+Never report a pass you did not run.
 
 ## Severity bar
 

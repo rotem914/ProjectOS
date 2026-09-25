@@ -41,7 +41,7 @@ Each one ships with its structure already in place and a worked example at the e
 
 **Two tool files.** `project-os/mcp/Figma/Figma_MCP_Rules.md` holds working rules for the Figma MCP server: the call budget discipline, the hard caps, and the traps that fail silently. `project-os/mcp/Google_analytics/Google_Analytics_MCP_Rules.md` holds the wiring and reading rules for the official GA4 MCP server: key-outside-the-repo authorization, and never quoting a number that did not come from a tool call. Every rule in them was paid for in real use. Delete the folder of any server your project never touches; a different server earns its own folder there the first time it bites.
 
-**One enforcement file.** `project-os/Hooks.md` is the part that makes the rest hold. Rule files are followed while they are remembered; hooks fire on every message and every tool call whether anything remembers them or not. It ships a ready setup that needs no path editing and works on any machine: your core rules re-stated on every single message, plus two guards that do not ask, one that refuses any file written outside the project and one that refuses a destructive command before it runs. The install switches it on for you, as a step and not as a suggestion; your only part is starting a new session afterwards, since the setting is read when a session opens. A project running this kit without it is running on good intentions.
+**One enforcement file.** `project-os/Hooks.md` is the part that makes the rest hold. Rule files are followed while they are remembered; hooks fire on every message and every tool call whether anything remembers them or not. It ships a ready setup that needs no path editing and works on any machine: your core rules re-stated on every single message, plus two guards that do not ask: one refuses the file writes outside the project it recognises, and one refuses the destructive commands it recognises before they run. They are a safety net, not a wall. The install switches it on for you, as a step and not as a suggestion; your only part is starting a new session afterwards, since the setting is read when a session opens. A project running this kit without it is running on good intentions.
 
 **One install file.** `Installation.md` is the complete install law: the merge rules for a project that already has a `CLAUDE.md`, the placeholder list, the setup steps, and the closing report the install owes you, problems and clashes included. Used once, then kept or deleted at your word.
 
@@ -91,9 +91,9 @@ install must end with, problems and clashes included.
 3. Answer its questions. It asks once, in one batch.
 4. Read its closing report: what was set, what broke, and where your existing
    rules clash with the kit's process.
-5. Commit the result.
-6. Start a new session. With the once-per-computer step done, the hooks were
-   already on from the first message. Without it the install switches them on
+5. Say `Go commit`, and your assistant commits the result.
+6. Start a new session. With the once-per-computer step done, the hooks switch
+   on as soon as the kit is in the folder. Without it the install switches them on
    for you, and they are read when a session opens, so the next one is where
    they take effect. See `project-os/Hooks.md` for what they do and how to
    check they worked.
@@ -135,8 +135,10 @@ needs `git`, to clone the kit.
 
 **PowerShell, for two scripts only.** `Archive-old-rows.ps1` trims the files that grow
 forever, and it runs at commit time, not during normal work. `Backup-whole-project.ps1`
-zips the whole project, git history included and secrets excluded, into one
-file you can put on a drive, when you say `Go backup`. Windows has PowerShell
+zips the whole project, git history included, into one file you can put on a
+drive, when you say `Go backup`. It leaves out the standard settings files that
+hold passwords and keys, but any other key file saved inside the project goes
+along, so keep those outside it. Windows has PowerShell
 already; on macOS or Linux install PowerShell Core (`pwsh`) if you want them.
 Skipping it costs you nothing except that those files keep growing and the
 backup is yours to make by hand.
@@ -158,6 +160,10 @@ The hooks in `project-os/Hooks.md` are the exception: they are Claude Code's own
 **If your project has an architecture worth protecting, write one more file for it.** One document, stating the rules the system depends on: what the data is allowed to look like, what cannot change without a migration, which boundaries are load-bearing. Then say in `CLAUDE.md` that it gets read before any structural work.
 
 Write it as law, not as advice. An assistant follows a stated invariant exactly. It cannot infer one from the code, and it will cheerfully refactor a constraint nobody told it about.
+
+## Use at your own risk
+
+ProjectOS is provided as is, without any warranty. Using it is entirely your own responsibility: how you use it, and everything that happens in your projects while you do, including anything an AI assistant does while following these rules. The creator of the kit is not responsible for anything.
 
 ## License
 
