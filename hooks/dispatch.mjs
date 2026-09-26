@@ -12,28 +12,48 @@
 //
 // WHICH PROJECTS. Only a project that carries the kit: the marker is
 // project-os/Hooks-settings.json, the file the owner copies in with the rest of
-// project-os/. The project root is found by walking up from the session's
-// project folder (CLAUDE_PROJECT_DIR), then from the payload's cwd, then from
-// the process cwd, so a session opened in a subfolder still finds it. No
-// marker: exit 0, print nothing. The kit repository itself is skipped too.
+// project-os/. The project root is found by walking up from the folder the
+// session was opened in (CLAUDE_PROJECT_DIR), so a session opened in a
+// subfolder still finds it. When that folder is known it alone decides: a
+// session opened on a parent folder that holds several projects stays inert
+// there, even after its shell moves into one of them, instead of switching on
+// for whichever project the shell visited last. Only a run with no session
+// folder (a check run by hand) walks up from the payload's cwd, then from the
+// process cwd. No marker: exit 0, print nothing. The kit repository itself is
+// skipped too.
 //
 // SETTINGS WIRING WINS. If the project's own .claude/settings.json or
 // .claude/settings.local.json already carries a hook this plugin would add
 // (the installer's fallback wiring), the plugin stands down for that hook, so
-// nothing fires twice. Checked per event, and per guard for PreToolUse.
+// nothing fires twice. Checked per event, and per guard and per tool for
+// PreToolUse.
 // Only the settings Claude Code actually loaded count, so they are read from
 // the session folder: CLAUDE_PROJECT_DIR when it is set, the found root only
 // when it is not. On Windows a session opened in a subfolder loads only that
 // folder's settings, while on macOS and Linux it also loads the git root's
 // settings.local.json, so there that file is read too (the git root is the
 // first folder holding .git, walking up from the session folder). A reminder
-// stands down when any of those files carries it. A guard counts as wired
-// only when the script the settings name is on disk, read the way Claude Code
-// runs it (${CLAUDE_PROJECT_DIR}, $CLAUDE_PROJECT_DIR, %CLAUDE_PROJECT_DIR% and
-// a relative path all taken from the session folder), because a moved or
+// stands down when any of those files carries a reminder for that event, the
+// same one or an older wording of it, so a reworded reminder never arrives
+// beside the old list it replaces. A guard counts as wired only for a tool
+// the settings actually send to it: the group naming the guard must have a
+// matcher that covers this call's tool (none, "*", or a plain list of names
+// such as "Write|Edit" that includes it; any other matcher is a pattern this
+// does not read, so it counts as not proven). The script the settings name
+// must also be on disk, read the way Claude Code runs it
+// (${CLAUDE_PROJECT_DIR}, $CLAUDE_PROJECT_DIR, %CLAUDE_PROJECT_DIR% and a
+// relative path all taken from the session folder), because a moved or
 // renamed project keeps a path to a guard that is gone. Anything not proven
 // that way runs the plugin's copy: at worst a guard runs twice, and both block
 // the same.
+//
+// A BROKEN MARKER. When project-os/Hooks-settings.json is not valid JSON the
+// plugin has no reminder text to send. It says so instead of going quiet: the
+// session line reads "reminders OFF" in place of "hooks active", and every
+// prompt carries one short line saying the same. Where the project's own
+// settings still carry a copy of the reminders, that copy keeps printing, so
+// the session line says the reminders come only from there and the prompt
+// line is left out. The guards do not read that file, so they keep running.
 //
 // WHAT IT RUNS. Only code from the plugin's own folder: the reminder TEXT is
 // read out of the project's Hooks-settings.json as data (the string inside the
@@ -89,9 +109,11 @@ function findRootFrom(start) {
   return null;
 }
 
+// The session folder decides when it is known (see WHICH PROJECTS above);
+// the payload's cwd and the process cwd are only for a run by hand.
 function findRoot(payload) {
-  const candidates = [process.env.CLAUDE_PROJECT_DIR, payload && payload.cwd, process.cwd()];
-  for (const c of candidates) {
+  if (process.env.CLAUDE_PROJECT_DIR) return findRootFrom(process.env.CLAUDE_PROJECT_DIR);
+  for (const c of [payload && payload.cwd, process.cwd()]) {
     const found = findRootFrom(c);
     if (found) return found;
   }
@@ -103,16 +125,32 @@ function isKitItself(root) {
     && fs.existsSync(path.join(root, 'hooks', 'dispatch.mjs'));
 }
 
+// The hook groups one settings object carries for this event.
+function hookGroups(settings, event) {
+  const groups = settings && settings.hooks && settings.hooks[event];
+  return (Array.isArray(groups) ? groups : []).filter((g) => g && typeof g === 'object');
+}
+
+// Every command hook in one group.
+function groupCommandHooks(g) {
+  return (Array.isArray(g.hooks) ? g.hooks : []).filter((h) => h && typeof h.command === 'string');
+}
+
 // Every command hook one settings object carries for this event.
 function hookEntries(settings, event) {
-  const out = [];
-  const groups = settings && settings.hooks && settings.hooks[event];
-  for (const g of Array.isArray(groups) ? groups : []) {
-    for (const h of (g && Array.isArray(g.hooks)) ? g.hooks : []) {
-      if (h && typeof h.command === 'string') out.push(h);
-    }
-  }
-  return out;
+  return hookGroups(settings, event).flatMap(groupCommandHooks);
+}
+
+// Whether a PreToolUse group is sent this tool. Claude Code reads a missing or
+// empty matcher and "*" as every tool, and a matcher of only letters, digits,
+// _ and | as one exact name or a list of names. Any other matcher is a
+// pattern, which this does not try to read, so it counts as not covering: the
+// plugin then runs its own copy, and at worst the guard runs twice.
+function covers(group, tool) {
+  if (group.matcher === undefined || group.matcher === null) return true;
+  if (typeof group.matcher !== 'string') return false;
+  const m = group.matcher.trim();
+  return m === '' || m === '*' || (/^[\w|]+$/.test(m) && m.split('|').includes(tool));
 }
 
 function hookCommands(settings, event) {
@@ -211,16 +249,23 @@ function resolveGuardPath(token, dir) {
   return path.resolve(dir, p);
 }
 
-// True only when the loaded settings wire this guard AND the script they name
-// is on disk. A moved project, a path from another computer, or a variable
-// this cannot fill in all come out false, and the plugin runs its own copy.
-function guardWired(dir, name) {
-  const hooks = settingsFiles(dir).flatMap((f) => hookEntries(readJson(f), 'PreToolUse'));
-  for (const h of hooks) {
-    for (const token of guardTokens(h, name)) {
-      const p = resolveGuardPath(token, dir);
-      if (p && fs.existsSync(p)) return true;
-      log(`${name}: settings name ${token.text}, not proven on disk, plugin runs its copy`);
+// True only when the loaded settings wire this guard for this tool AND the
+// script they name is on disk. A matcher that leaves the tool out, a moved
+// project, a path from another computer, or a variable this cannot fill in
+// all come out false, and the plugin runs its own copy.
+function guardWired(dir, name, tool) {
+  const groups = settingsFiles(dir).flatMap((f) => hookGroups(readJson(f), 'PreToolUse'));
+  for (const g of groups) {
+    for (const h of groupCommandHooks(g)) {
+      for (const token of guardTokens(h, name)) {
+        if (!covers(g, tool)) {
+          log(`${name}: settings wire it under matcher ${JSON.stringify(g.matcher)}, not proven for ${tool || 'this call'}, plugin runs its copy`);
+          continue;
+        }
+        const p = resolveGuardPath(token, dir);
+        if (p && fs.existsSync(p)) return true;
+        log(`${name}: settings name ${token.text}, not proven on disk, plugin runs its copy`);
+      }
     }
   }
   return false;
@@ -232,15 +277,28 @@ function reminderText(command) {
   return m ? m[1] : null;
 }
 
-function runReminders(root, event) {
-  const kit = readJson(markerIn(root) || '');
+// A settings file that carries any reminder for this event stands in for
+// ours, whatever its wording: an install copies the text, so after a reword
+// the copy there is older, and printing ours as well would send both lists.
+// The leading label of a reminder's text: its first two capitalised words, such
+// as STANDING RULES or PROJECT RULES. It tells the kit's own reminder, reworded
+// or not, from a reminder the project wrote for something else.
+const reminderLabel = (text) => (/^\s*([A-Z][A-Z]+ [A-Z][A-Z]+)/.exec(text || '') || [])[1] || null;
+
+function runReminders(kit, root, event) {
   const ours = hookCommands(kit, event);
   const theirs = settingsCommands(settingsDir(root), event);
+  // Stand down only for the kit's own reminder: the exact command, or one in
+  // the settings that carries the same label (a reworded copy). A project's
+  // unrelated reminder never silences the kit's (review 2026-09-26).
+  const labels = new Set(['PROJECT RULES', 'STANDING RULES', ...ours.map((c) => reminderLabel(reminderText(c)))].filter(Boolean));
+  const theirsRemind = theirs.some((c) => labels.has(reminderLabel(reminderText(c))));
   const lines = [];
   for (const cmd of ours) {
-    if (theirs.includes(cmd)) { log(`${event}: stand down, wired in settings`); continue; }
+    if (theirs.includes(cmd) || theirsRemind) { log(`${event}: stand down, wired in settings`); continue; }
     const text = reminderText(cmd);
     if (text) lines.push(text);
+    else log(`${event}: a hook in the marker is not in the console.log('...') form, nothing printed for it`);
   }
   return lines;
 }
@@ -277,22 +335,35 @@ try {
     log('no marker, inert');
   } else if (isKitItself(root)) {
     log('kit repository itself, inert');
-  } else if (mode === 'session') {
-    const lines = runReminders(root, 'SessionStart');
-    lines.push(`[ProjectOS plugin] hooks active for ${norm(root)} from ${norm(PLUGIN_ROOT)}; nothing to install in this project.`);
-    process.stdout.write(lines.join('\n') + '\n');
-  } else if (mode === 'prompt') {
-    const lines = runReminders(root, 'UserPromptSubmit');
-    if (lines.length) process.stdout.write(`[ProjectOS plugin] ${lines.join('\n')}\n`);
+  } else if (mode === 'session' || mode === 'prompt') {
+    const marker = markerIn(root);
+    const kit = readJson(marker);
+    const markerName = norm(path.relative(root, marker));
+    // With a broken marker, a reminder the project's settings carry still
+    // prints on its own, so "OFF" is said only where nothing else sends one.
+    const settingsRemind = (event) => settingsCommands(settingsDir(root), event).some((c) => reminderText(c) !== null);
+    if (mode === 'session') {
+      const lines = kit ? runReminders(kit, root, 'SessionStart') : [];
+      if (kit) lines.push(`[ProjectOS plugin] hooks active for ${norm(root)} from ${norm(PLUGIN_ROOT)}; nothing to install in this project.`);
+      else if (settingsRemind('SessionStart') || settingsRemind('UserPromptSubmit')) lines.push(`[ProjectOS plugin] ${markerName} is not valid JSON in ${norm(root)}: the reminders come only from this project's settings, in the wording they were installed with. Guards still active.`);
+      else lines.push(`[ProjectOS plugin] reminders OFF for ${norm(root)}: ${markerName} is not valid JSON, so the plugin sends none. Guards still active.`);
+      process.stdout.write(lines.join('\n') + '\n');
+    } else if (!kit) {
+      log('marker is not valid JSON, reminders off');
+      if (!settingsRemind('UserPromptSubmit')) process.stdout.write(`[ProjectOS plugin] reminders OFF: ${markerName} is not valid JSON. Guards still active.\n`);
+    } else {
+      const lines = runReminders(kit, root, 'UserPromptSubmit');
+      if (lines.length) process.stdout.write(`[ProjectOS plugin] ${lines.join('\n')}\n`);
+    }
   } else if (mode === 'pretool') {
     const tool = String(payload.tool_name || '');
     const dir = settingsDir(root);
     const shell = /^(Bash|PowerShell|Monitor)$/.test(tool);
-    if (!guardWired(dir, 'Path-guard.mjs')) code = runGuard('Path-guard.mjs', raw, root);
-    else log('path-guard: stand down, wired in settings and on disk');
+    if (!guardWired(dir, 'Path-guard.mjs', tool)) code = runGuard('Path-guard.mjs', raw, root);
+    else log(`path-guard: stand down, wired in settings for ${tool} and on disk`);
     if (code === 0 && shell) {
-      if (!guardWired(dir, 'Destructive-guard.mjs')) code = runGuard('Destructive-guard.mjs', raw, root);
-      else log('destructive-guard: stand down, wired in settings and on disk');
+      if (!guardWired(dir, 'Destructive-guard.mjs', tool)) code = runGuard('Destructive-guard.mjs', raw, root);
+      else log(`destructive-guard: stand down, wired in settings for ${tool} and on disk`);
     }
   }
 } catch (err) {

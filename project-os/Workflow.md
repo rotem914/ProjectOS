@@ -10,6 +10,8 @@ This workflow applies to every task. No exceptions.
 
 Task size does not unlock a shortcut. Adjusting one line of padding walks the same path as building a new screen.
 
+What changes the steps is the owner: a shortcut they type, such as FAST MODE, or their own words for the task at hand (`CLAUDE.md`, "When two rules pull different ways", which also names the rules that bend to neither). `CLAUDE.md` says what each shortcut changes and for how long. Nothing you decide on your own does.
+
 What scales with size is the *depth of the writing*, not the number of steps. A tiny change gets a one-line plan and a one-line history row — but it still gets both.
 
 Why: the shortcuts are always taken on the small changes, and small changes are what break things quietly. A process you skip when it feels unnecessary is not a process.
@@ -45,7 +47,7 @@ The label does not let you skip steps. It tells you which context to read, which
 |---|---|
 | Low | Docs. Isolated changes with no behavior attached. |
 | Medium | UI behavior, new interaction, multi-file change, anything that changes how you yourself work. |
-| High | Data, schema, auth, user records, irreversible actions, security, money. Anything that breaks a project invariant. |
+| High | Data, schema, auth, user records, irreversible actions, security, money. Anything that touches a project invariant (`CLAUDE.md` rule 11). |
 
 This table is the scale's one home — every other file points here.
 
@@ -57,7 +59,7 @@ Before touching anything, read the files `CLAUDE.md` lists under "Read these bef
 
 Read them before you form an opinion. An opinion formed without them is a guess that happens to be typed confidently.
 
-Some files on that list are read on demand rather than every time, because most tasks never reach them: `project-os/Code_review.md`, for one, only when step 12 arms a review. The list says when each one applies.
+Some files on that list are read on demand rather than every time, because most tasks never reach them: `project-os/Code_review.md`, for one, only when step 12 arms a review or a blast-radius trace. The list says when each one applies.
 
 If the task touches an area with its own notes in `project-os/Map.md`, follow that pointer too.
 
@@ -86,7 +88,7 @@ Before implementing, settle:
 - files not to touch,
 - the risk level,
 - the QA you expect to run,
-- the rollback point,
+- how this task would be undone by hand,
 - the docs that will need updating,
 - and, when the plan runs to more than one step, the model suggested for each
   one with three words on why (CLAUDE.md rule 13). The most capable one for
@@ -149,7 +151,7 @@ Derive the checks from the goal, the user flows, the states, the data, and the r
 - regression checks on whatever sits next to the change,
 - the done criteria.
 
-Add anything new to `project-os/QA.md`. Checks specific to this task belong there next to the global ones — one file, no second home.
+Checks only this task needs go in its History row (`CLAUDE.md` rule 7). Add to `project-os/QA.md` only a check that future tasks of the same kind should also run.
 
 ## 7. Implement the smallest safe change
 
@@ -190,17 +192,18 @@ Drive {{DEV_URL}} with a browser-automation tool and check:
 
 ### Verification gate — mandatory before "done"
 
-Before calling any visible change done, complete one of these two paths and say which one in the delivery summary.
+Before calling any visible change done, complete one of these three paths and record which one, with each check and its result, in the History row. The reply names the path only for Path B or Path C.
 
-- [ ] **Path A — the check ran.** You opened the app in a browser-automation tool, ran the flow, and inspected console, network, and DOM. List each concrete check and its result.
+- [ ] **Path A: the check ran.** You opened the app in a browser-automation tool, ran the flow, and inspected console, network, and DOM. List each concrete check and its result in the History row.
 - [ ] **Path B: no tool was available.** You searched the available tooling for a browser automation tool and found none. Follow `CLAUDE.md` rule 6 for what that means here: run Installation.md 6d when `.mcp.json` has no `chrome-devtools` entry, otherwise say why nothing loaded. Then state the search you ran and its empty result, and hand the owner a manual QA list.
+- [ ] **Path C: blocked.** A tool was there, and every route failed: the one you started with and every other browser tool you have. Name each tool you tried and the error it gave, hand the owner the manual QA list, and say in the reply's Known limitation line that the visual check did not run. An app that will not load is not Path C by itself: `CLAUDE.md` rule 16 says who starts the server, and only once that route is spent too is it Path C.
 
-A task claiming neither path is not done.
+A task claiming none of the three paths is not done.
 
 Two traps to avoid:
 
 - **Assuming the tool is missing.** Tools are often loaded on demand and invisible until you look for them. Search before you declare an absence.
-- **A tool that exists but was blocked.** That is not Path B. Name the blocked tool, try the other route, and say what happened.
+- **A tool that exists but was blocked.** That is not Path B. Name the blocked tool and try the other routes. Only when all of them fail is it Path C.
 
 Why the gate is written as a checkbox: "I verified it" is the single easiest sentence to write without having done it. Naming the path makes the claim falsifiable.
 
@@ -208,7 +211,7 @@ Why the gate is written as a checkbox: "I verified it" is the single easiest sen
 
 Go through `project-os/QA.md`.
 
-If a check the task needed does not exist there yet, add it now. That is how the checklist grows into something worth reading.
+If a check that future tasks of this kind will need is missing there, add it now. A check only this task needs goes in its History row, not here, so the checklist stays worth reading.
 
 ## 11. Fix loop
 
@@ -225,14 +228,14 @@ Why step 3: a fix is itself a change. It earns the same suspicion as the change 
 
 If step 2 rated this medium or high, the task is not finished. Run the review now — after your own QA is green, before any documentation.
 
-1. Load `project-os/Code_review.md` and review this task's diff plus whatever it touched.
+1. Load `project-os/Code_review.md` and review this task's own edits plus whatever they touched.
 2. Fix every finding this change introduced, at every severity. Re-verify each fix. If a fix affects something visible, re-verify it in the browser.
 3. Report pre-existing findings; never auto-fix them. They wait for the owner's verdict.
-4. Name the review result in the History row and the delivery summary: found, fixed, pre-existing flagged.
+4. Name the review result in the History row: found, fixed, pre-existing flagged. The reply names only the findings that wait for the owner's verdict; a clean result stays out of it.
 
 A medium-risk task with no review result recorded is unfinished, not sloppily documented.
 
-Low-risk tasks skip this step.
+Low-risk tasks skip this step, with one exception: a change that touches something shared (a component, token, spacing or type value, schema or helper used in more than one place) still loads `project-os/Code_review.md` and runs its blast-radius trace, whatever the rating. The trace only, not the rest of the review, and its impact class goes in the History row.
 
 ## 13. Decisions checkpoint
 
@@ -257,7 +260,9 @@ Update only what needs to change.
 | A working rule or project context changed | `CLAUDE.md` |
 | The process itself changed | `project-os/Workflow.md` |
 | Structure, routes, or file ownership changed | `project-os/Map.md` |
-| A check was added, changed, or retired | `project-os/QA.md` |
+| A check future tasks will reuse was added, changed, or retired | `project-os/QA.md` |
+| The check command or dev address changed, or exists for the first time | `CLAUDE.md` "Where things are" and `Go commit` step 4, plus every file that repeats the old value (search for it) |
+| A bug pattern came back | `project-os/BugAtlas.md` |
 | A non-obvious choice was made | `project-os/Decisions.md` |
 | Reply format or tone rules changed | `project-os/Conversations.md` |
 | The review bar or its scope changed | `project-os/Code_review.md` |
@@ -274,7 +279,7 @@ Why: two copies drift apart, and once they disagree neither one is worth trustin
 
 Every completed change gets two rows in `project-os/History.md`: one in the scan table, one in the appendix. No exceptions, including docs-only changes.
 
-The scan row names the behavior that changed, for a reader who was not there. The appendix row carries the date, the task, what changed and where, what was checked and its result, the risk level, the commit to roll back to — and, for medium or high risk, the review result.
+The scan row names the behavior that changed, for a reader who was not there. The appendix row carries the date, the task, what changed and where, what was checked and its result, the risk level, how to undo this one task by hand, and, for medium or high risk, the review result.
 
 Keep it to an index entry, not an essay. Someone reading it later needs to know what happened and where to look, not to relive it.
 
@@ -283,8 +288,11 @@ Keep it to an index entry, not an essay. Someone reading it later needs to know 
 Close with a short summary:
 
 - what changed,
-- what was checked,
-- what was not checked or is still risky,
+- a check only when it failed or could not run, the Path B or Path C outcome
+  from step 9, and review findings waiting for the owner's verdict. A passed
+  check and a clean review stay out of the reply; the History row holds the
+  full list,
+- what is still risky,
 - the next step. When the task left uncommitted work, the next step says so
   and names the phrase: `Go commit`, whenever the owner wants. You never commit
   before that phrase, and the push after it is theirs alone (CLAUDE.md rule 22).

@@ -12,18 +12,28 @@
 #
 # FAILURE CONTRACT. This script has exactly two outcomes:
 #   success  -> exit 0, a `<project>_<stamp>.zip` exists in backups/, and every
-#               file the walk found was read back OUT of that archive by name.
-#   failure  -> exit 1, the reason on stderr, and NO .zip left behind.
+#               file the walk found is listed in that archive by name. Names
+#               are checked, not contents: a damaged entry is not caught.
+#   failure  -> exit 1, the reason on stderr, and no ZIP from this run left
+#               behind (a ZIP of the same name from an EARLIER run can be).
 # There is deliberately no third "mostly worked" outcome. A backup that quietly
 # skipped a locked file or an unreadable folder is the one kind that hurts you,
 # because the gap shows up only when you are already restoring.
+# On success it also prints "Left out by name:", every folder the walk skipped
+# because of its name. A source folder on that line means the list below needs
+# changing.
 #
-# WHAT IS NEVER IN THE ZIP, whatever the list below says: the backups/ folder
-# itself, the assistant's machine-local folders (.claude, .codex), the scratch
-# folder (.tmp), atomic-write leftovers (*.tmp, *.tmp.*), and the env files
-# (.env*, .dev.vars*; the .env.example and .dev.vars.example templates are
-# kept), so a restore recreates them by hand from the templates. Any other key
-# file inside the project travels in the ZIP, so keep keys outside the project.
+# WHAT IS NEVER IN THE ZIP, whatever the list below says: the backups/ and .tmp/
+# (scratch) folders at the project root, the assistant's machine-local folders
+# (.claude, .codex) at any depth, atomic-write leftovers (*.tmp, *.tmp.*), and
+# the env files (.env*, .dev.vars*; the .env.example and .dev.vars.example
+# templates are kept), so a restore recreates them by hand from the templates.
+# Any other key file inside the project travels in the ZIP, so keep keys
+# outside the project.
+#
+# A git worktree or submodule is refused: its .git is a file pointing at
+# history kept in another folder, so the ZIP would hold no history. Commit
+# there, then run this from the main project folder.
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
@@ -33,9 +43,11 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path.TrimEnd('\')
 # --- Setup block: check this list against the stack at install ---------------
 # Folders that never belong in a restore snapshot because they are regenerated
 # from what IS in it (dependencies, build output, caches). The walk prunes them
-# as it descends, so it never even enters them. Add the stack's own; remove a
-# name only if this project commits that folder on purpose. Add '.git' here for
-# a smaller, working-tree-only ZIP without the history.
+# as it descends, so it never even enters them. A listed name is skipped at
+# EVERY depth, so a source folder such as src/build is skipped too; the
+# "Left out by name" line of each run shows what was. Add the stack's own;
+# remove a name only if this project commits that folder on purpose. Add '.git'
+# here for a smaller, working-tree-only ZIP without the history.
 $ExcludeDirs = @(
     'node_modules'   # npm / pnpm / yarn dependencies
     'dist'           # build output
@@ -56,13 +68,16 @@ $ExcludeDirs = @(
 # is safe everywhere.
 $RepoName = ((Split-Path $root -Leaf) -replace '\s+', '_')
 
-# Forced regardless of the list above: the backup output (never nest the ZIP
-# inside itself), the assistant's machine-local folders, and the scratch folder.
-# Those are per-machine state; a restore recreates them. Forced so the
-# secrets and local-state posture cannot be widened by editing the list.
-foreach ($force in @('backups', '.claude', '.codex', '.tmp')) {
+# Forced regardless of the list above: the assistant's machine-local folders at
+# any depth, and at the project root only, the backup output (never nest the
+# ZIP inside itself) and the scratch folder. Those are per-machine state; a
+# restore recreates them. Forced so the secrets and local-state posture cannot
+# be widened by editing the list. A folder called backups or .tmp deeper down
+# is ordinary project content and travels.
+foreach ($force in @('.claude', '.codex')) {
     if ($ExcludeDirs -notcontains $force) { $ExcludeDirs = @($ExcludeDirs) + $force }
 }
+$RootOnlyDirs = @('backups', '.tmp')
 
 $stamp   = Get-Date -Format 'yyyy-MM-dd_HH-mm'
 $backups = Join-Path $root 'backups'
@@ -71,6 +86,7 @@ $zipPath = Join-Path $backups "${RepoName}_${stamp}.zip"
 New-Item -ItemType Directory -Force -Path $backups | Out-Null
 
 $script:enumErrors = @()
+$script:pruned     = @()
 
 function Get-BackupFiles($dir) {
     # Enumeration failure is FATAL, never silent. With -ErrorAction
@@ -87,7 +103,12 @@ function Get-BackupFiles($dir) {
     }
     foreach ($entry in $entries) {
         if ($entry.PSIsContainer) {
-            if ($ExcludeDirs -contains $entry.Name) { continue }
+            if (($ExcludeDirs -contains $entry.Name) -or
+                (($dir -eq $root) -and ($RootOnlyDirs -contains $entry.Name))) {
+                # Recorded, so a skipped source folder shows in the output.
+                $script:pruned += $entry.FullName.Substring($root.Length + 1).Replace('\', '/')
+                continue
+            }
             Get-BackupFiles $entry.FullName
             continue
         }
@@ -102,8 +123,8 @@ function Get-BackupFiles($dir) {
 
 # Everything below writes to a PARTIAL name and only renames to the real .zip
 # once the archive has been proved complete. A file called
-# `<project>_<stamp>.zip` therefore means "verified"; a failed run leaves no
-# such file, so a later restore can never pick up a half-written snapshot
+# `<project>_<stamp>.zip` therefore means "verified"; a failed run never leaves
+# one of its own, so a later restore can never pick up a half-written snapshot
 # believing it is good.
 $partial = "$zipPath.partial"
 if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
@@ -119,6 +140,17 @@ function Stop-WithFailure([string]$summary, [string[]]$details) {
         Remove-Item -LiteralPath $partial -Force -ErrorAction SilentlyContinue
     }
     exit 1
+}
+
+# A .git FILE (not a folder) means a git worktree or submodule: its history
+# lives in another folder, so a ZIP of this one would hold no history. Unless
+# the setup block left .git out on purpose (a working-tree-only ZIP).
+$dotGit = Join-Path $root '.git'
+if (($ExcludeDirs -notcontains '.git') -and (Test-Path -LiteralPath $dotGit -PathType Leaf)) {
+    $pointer = ''
+    try { $pointer = [string](Get-Content -LiteralPath $dotGit -TotalCount 1 -ErrorAction Stop) } catch { }
+    $pointer = $pointer -replace '^gitdir:\s*', ''
+    Stop-WithFailure "this folder's .git is a file that points elsewhere (a git worktree or submodule), so a ZIP of it would hold no history" @("history lives in: $pointer", "commit the work here, then run Go backup from the main project folder")
 }
 
 $files = @(Get-BackupFiles $root)
@@ -167,8 +199,10 @@ if ($skipped.Count -gt 0) {
 }
 
 # Independent read-back: trust what the archive HOLDS, not what the writer
-# thought it wrote. Catches a silent truncation, a mid-write crash, and any
-# entry-name mangling.
+# thought it wrote. Catches a missing entry, an archive a mid-write crash left
+# unreadable, and any entry-name mangling. It reads names only: an entry whose
+# content was damaged still passes, and so does anything the walk itself
+# skipped, since the expected list comes from that same walk.
 $actual = New-Object 'System.Collections.Generic.HashSet[string]'
 try {
     $verify = [System.IO.Compression.ZipFile]::OpenRead($partial)
@@ -186,7 +220,26 @@ if ($missing.Count -gt 0) {
     Stop-WithFailure "$($missing.Count) expected file(s) are absent from the finished archive" $missing
 }
 
-Move-Item -LiteralPath $partial -Destination $zipPath -Force
+# The rename is checked like every other step: a failed one used to print OK
+# over an older ZIP of the same name, or over no ZIP at all. Another program
+# can hold the name for a moment, so it is retried before it fails.
+$moved   = $false
+$lastErr = ''
+for ($i = 0; $i -lt 5 -and -not $moved; $i++) {
+    try {
+        Move-Item -LiteralPath $partial -Destination $zipPath -Force -ErrorAction Stop
+        $moved = $true
+    } catch {
+        $lastErr = $_.Exception.Message
+        Start-Sleep -Milliseconds 500
+    }
+}
+if (-not $moved -or -not (Test-Path -LiteralPath $zipPath)) {
+    Stop-WithFailure "the verified archive could not be renamed to its final name" @($lastErr, "Any $zipPath already in backups is from an EARLIER run and does not hold this run's changes. Close whatever has it open and re-run.")
+}
 
 Write-Host "OK: $zipPath"
-Write-Host "Added $added file(s), all $($actual.Count) verified present in the archive."
+Write-Host "Added $added file(s), all $($actual.Count) verified present in the archive by name."
+if ($script:pruned.Count -gt 0) {
+    Write-Host ("Left out by name: " + ((@($script:pruned) | Sort-Object) -join ', '))
+}

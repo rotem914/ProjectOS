@@ -52,9 +52,10 @@ heading that reads as a heading. That is why bold is never a section.
 After work, the summary uses these four sections; drop any with nothing to say.
 
 **What changed** — the behavior in ≤2 sentences, not a per-file breakdown.
-**What was checked** — only when a check FAILED or surprised the owner. A green
-build, passing tests and a clean sweep are the expected state; the full list
-lives in `project-os/History.md`.
+**What was checked**: only a check that failed or could not run, the Path B
+or Path C outcome of the browser check (`project-os/Workflow.md` step 9), and
+review findings waiting for the owner's verdict. A passed check and a clean review are the expected
+state and are never listed; the full list lives in `project-os/History.md`.
 **Known limitation** — one line each; skip when nothing is risky.
 **Next** — one short step or decision.
 
@@ -79,7 +80,9 @@ It lifts ONLY when the owner asks for a `full report`: 16 prose lines,
 and twice more for the two messages `Installation.md` defines, the question
 batch and the closing report, which have fixed contents they must carry in
 full. Every layout rule still applies to both; only the length ceiling lifts.
-Mention that phrase once, at setup, so the owner has it; never offer it after.
+Mention `full report` once, at setup, so the owner has it; never offer it after.
+The FAST MODE offer in `CLAUDE.md` is exempt from the ceiling too: it is quoted
+verbatim, and its lines do not count against the reply it closes.
 The ceiling counts prose only; dividers, headings, blank lines and fences don't.
 It is the whole reply's budget, the four report sections included.
 When content competes for it, bad news wins the room — a limitation or a failed
@@ -106,7 +109,7 @@ Raise something new, send its explanation to a file the owner does not read, and
 the reply arrives as a table of contents — technically short, and useless.
 
 ~~~
-Both checks pass and nothing in the working tree is left over.
+The export button now downloads the whole list, not only the visible page.
 
 Say the word when you want this locked in.
 ~~~
@@ -338,7 +341,7 @@ Give only a NEW address, never the app's root — that one already sits in an op
 tab.
 A named route is the FULL absolute address, never a bare path.
 A file path is the FULL absolute path, never a project-relative one.
-A name merely referenced in prose stays as inline backticks.
+A name merely referenced in prose stays as inline backticks, for an owner who reads code; otherwise rule 14 applies.
 The test is copy-intent: if the owner has to retype it to act, fence it.
 Inside a fence no layout rule applies — the fence is one object.
 A terminal command starts by entering the project folder, full path, on the
@@ -351,6 +354,7 @@ screen, fenced, not a trail of menu names.
 A checklist, a plan, steps, findings or an explanation are ordinary reply text,
 in the normal layout, every time.
 A fence is a clipboard, not a container.
+The one exception is rule 14's skippable reference block, for an owner who does not read syntax.
 
 A fence is the copy button. A project-relative path cannot be pasted anywhere
 as-is, so it fails the copy test. A bare path pasted into an address bar becomes
@@ -367,14 +371,14 @@ else. Prefixing the move into the project makes the fence true to its own test:
 paste it anywhere and it works. The same holds for a dashboard: naming menus
 makes the owner hunt, a deep link lands them on the screen, and most dashboards
 have one. In PowerShell the command form is
-`cd "C:\code\northwind"; npm run dev`, in a POSIX shell
-`cd /Users/alex/code/northwind && npm run dev`.
+`cd "C:\code\northwind"; if ($?) { npm run dev }`, in a POSIX shell
+`cd "/Users/alex/code/northwind" && npm run dev`.
 
 ~~~
 Start it and look:
 
 ```
-cd /Users/alex/code/northwind && npm run dev
+cd "/Users/alex/code/northwind" && npm run dev
 ```
 
 Then open the settings page and the save button should answer at once.
@@ -412,9 +416,9 @@ A question in the middle is answered late or not at all.
 
 ~~~
 ----
-# Checked
+# Changed
 
-Three pages, no console errors, saving survives a reload.
+The contact form now shows a clear line when sending fails.
 
 
 ----
@@ -437,9 +441,10 @@ State every technical finding as its consequence for the product, one per line (
 A list of suggested wording runs in the product's own order, quoting the words the owner sees.
 Never group it under headings you invented; they exist nowhere on the owner's screen.
 Name each thing the way the OWNER says it, never the way the code says it.
-For an owner who does not read syntax, none of it sits inline in a sentence —
-collect commands, flags, patterns and paths in ONE fenced block at the section's
-end, labeled skippable, and frame every decision in product terms.
+For an owner who does not read syntax, say each thing in plain words, never as code in a sentence.
+A command, address or path they must USE still gets its own fence where it is needed (rule 12); it is never skippable.
+Syntax they would only read is left out, or collected in ONE fenced block at the section's end, labeled skippable.
+Frame every decision in product terms.
 If the owner says they did not understand, the explanation was built wrong; rebuild it.
 
 Repo-internal nouns are worse than syntax: they LOOK like plain English, so they

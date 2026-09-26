@@ -1,26 +1,37 @@
-# Hooks — the part that actually enforces the rules
+# Hooks: reminders and guards
 
 Every other file here is a rule the assistant is asked to follow.
-This one is about rules the machine enforces whether it follows them or not.
+This one is about what the machine adds on top: reminders that repeat the core
+rules on every message, and two guards that block a known set of commands
+whether the assistant follows the rules or not.
 
 **Why it matters more than it looks.** A folder of markdown holds for a while
 and then drifts: the rules sit at the top of a long session, the work moves on,
 and by the fiftieth message they are quietly gone. Nothing announces it. The
 replies just start getting longer, the History row stops being written, and a
-change touches things nobody asked for. Hooks are what stop that, because they
-fire on every message and every tool call, forever, at no cost to anyone's
-memory.
+change touches things nobody asked for. Hooks push back against that, because
+they fire on every message and every tool call, forever, at no cost to anyone's
+memory. A reminder makes drift less likely; it does not prove a rule was
+followed. Only the guards block anything, and only the commands they recognise.
 
 A project running the kit with no hooks is running on good intentions.
 
 ## Two ways the hooks get wired
 
 **Once per computer: the kit as a plugin.** The owner clones the kit into their
-personal skills folder, `~/.claude/skills/projectos` (README, "Once per
-computer"), and Claude Code reads it as a plugin from then on. Its one hook,
+personal skills folder, `~/.claude/skills/projectos`, with one command. It runs
+in the chat box with `!` in front, in Windows PowerShell, or in a macOS or
+Linux terminal (not the old Command Prompt):
+
+```
+git clone https://github.com/rotem914/ProjectOS "$HOME/.claude/skills/projectos"
+```
+
+Claude Code reads it as a plugin from then on. Its one hook,
 `hooks/dispatch.mjs` at the kit root, fires in every session and decides per
 project: it looks for `project-os/Hooks-settings.json`, walking up from the
-session's folder, and does nothing where that file is absent. Where it is
+folder the session was opened in (never from a folder the shell moved into
+later), and does nothing where that file is absent. Where it is
 present, it prints the reminder text it finds in that file (as data, never
 run) and runs the two guards from the plugin's own copy, with the project root
 set to the project it found. No install step, no settings write, so no
@@ -34,15 +45,18 @@ a suggestion at the end of it. A kit whose enforcement layer waits for the
 owner to notice a request is a kit that runs unenforced.
 
 **Settings wiring wins, when it is proven.** When both exist, the plugin
-stands down for a reminder the project's own settings already carry with the
-same text, and for a guard only when those settings name it and the file they
-name exists on disk. Only the settings Claude Code loads for that session
-count: those of the folder the session was opened in and, on macOS and Linux,
+stands down for a reminder whenever the project's own settings already carry
+one for that moment, whatever its wording, so a session never gets two lists.
+For a guard it stands down only when those settings name it under a matcher
+that covers the tool being called (no matcher, `*`, or a plain list such as
+`Bash|PowerShell` that names that tool) and the file they name exists on disk.
+Only the settings Claude Code loads for that session count: those of the folder the session was opened in and, on macOS and Linux,
 also the personal file at the root of the git repository, which Claude Code
 loads there even for a session opened in a subfolder (see `--shared` below).
 Anything not proven runs the plugin's own copy: a moved or renamed
-project, or a path from another computer. At worst a guard runs twice, which
-blocks the same thing. A project can keep its own wiring forever.
+project, a path from another computer, or a matcher that leaves the tool out.
+At worst a guard runs twice, which blocks the same thing. A project can keep
+its own wiring forever.
 
 The installer step is one command, run from the project root:
 
@@ -81,10 +95,12 @@ Flags, all of them optional:
 - `--replace` removes an event's existing hooks instead of running beside them.
   For a hook known to be broken, never as a default.
 
-A hook already in the committed file is not added again to the personal one: a
-default run reads both files before it judges anything missing, and a guard
-counts as the same guard when both files lead to the same script, however each
-spells the path. `--shared` never skips a hook because the personal file has
+A hook already in the committed file is not added again to the personal one,
+except the guards on macOS and Linux, which go into the personal file too so a
+session opened in a subfolder still gets them. A default run reads both files
+before it judges anything missing, and a guard counts as the same guard when
+both files lead to the same script, however each spells the path. `--shared`
+never skips a hook because the personal file has
 it. It always fills the committed file, reminders included, because only the
 committed file reaches teammates and the cloud. So a default run followed by
 a `--shared` one leaves the guards in both files, and on this machine each
@@ -97,15 +113,17 @@ and carry on. That is the fallback, never the plan.
 
 **The owner's only step is a restart.** Hooks are read when a session starts,
 so the newly installed ones take effect in the NEXT session, not this one. Say
-that clearly, and give the one question that proves it worked: ask the
-assistant what rules it was given this turn, and see whether it reads them
+that clearly, and give the one question that proves the reminders arrive: ask
+the assistant what rules it was given this turn, and see whether it reads them
 back.
 
 If you would rather wire it by hand, the reminders are in the block below. The
 guards are the PreToolUse part of `project-os/Hooks-settings.json`. As it
 stands it names each guard through `${CLAUDE_PROJECT_DIR}`, which works for a
 session opened at the project root; for the personal file, put the project's
-own path in its place, as the installer does. A guard whose command does not lead to its file fails
+own path in its place, as the installer does. Keep each guard's matcher as
+that file has it: the plugin steps aside only for the tools a matcher covers.
+A guard whose command does not lead to its file fails
 open and blocks nothing, so run the checks at the end of this file after wiring.
 
 ## Level 1 — works in any project, needs no files
@@ -138,7 +156,7 @@ not.
         "hooks": [
           {
             "type": "command",
-            "command": "node -e \"console.log('STANDING RULES for this reply and this task: 1) Reply exactly as project-os/Conversations.md prescribes, layout and length included. 2) Change only what was asked, nothing else, however tempting. 3) Prefer the smallest safe change. 4) When something is unclear, or the decision belongs to the owner, ask instead of deciding. 5) After any completed change, add its History row. 6) Never write a file outside this project folder. 7) Never say a check passed unless it was actually run.')\"",
+            "command": "node -e \"console.log('STANDING RULES for this reply and this task: 1) Reply exactly as project-os/Conversations.md prescribes, layout and length included. 2) Change only what was asked, nothing else, however tempting. 3) Prefer the smallest safe change. 4) When something is unclear, or the decision belongs to the owner, ask instead of deciding. 5) After any completed change, add its History row; in FAST MODE, one row for the whole burst, when it ends. 6) Never write a file outside this project folder. 7) Never say a check passed unless it was actually run.')\"",
             "timeout": 10,
             "suppressOutput": true
           }
@@ -154,10 +172,21 @@ That block is the kit's default wording for the reminder half of
 (level 2 below), and the command above installs all of it. Once the wording is
 adapted for a project, that file, not this block, is what counts.
 
-**Edit the wording freely.** That second string is the shortest useful version
+**Edit the wording freely**, using only the characters that "The trap that
+costs an afternoon" below allows. That second string is the shortest useful version
 of your own rules; a project with different sore points should say different
 things. Keep it to a few lines: this text is paid for on every message, and a
 long block gets skimmed exactly like a long rule file.
+
+**A reword where the installer wired the hooks needs one more step.** There the
+reminder is a copy inside `.claude/settings.local.json` (or `settings.json`
+after `--shared`), that copy is the one sent, and the plugin stays quiet
+beside it. So a reword reaches sessions only after the installer is re-run for
+that file with `--replace`; until then the old wording is the one sent. A
+plain re-run would put the new wording beside the old, and both would be sent.
+`--replace` swaps only the kinds of hook whose wording changed, but it also
+drops any other hook of that kind the project had, so read the file first and
+name what it removes.
 
 **Keep it under roughly 10 KB.** Longer output is not inlined; it is written to
 a file with a short preview, and the end of your text never reaches the model.
@@ -179,12 +208,15 @@ its own project folder.
 and every shell command, and refuses writes aimed outside the project folder.
 It reads the command, including redirections, writing programs, inline shells
 and `cd` moves, and blocks a write it recognises whose target it cannot prove
-is inside. It recognises the common ways a command writes; a command it does
+is inside. A delete outside the folder counts as a write, and so does moving a
+file in from outside, since the move deletes it there; copy it in instead. It
+recognises the common ways a command writes; a command it does
 not recognise runs unchecked, so it is a safety net, not a wall. Without it,
 the rule about staying inside the project is a sentence in a document, and
 stray files land in the home folder and in the agent's own configuration. It
 runs on Windows, macOS and Linux; the one exception it allows on its own is the
-assistant's memory folder, markdown only. An `EXTRA_ROOTS` list at the top of
+assistant's memory folder for a project, `~/.claude/projects/<project>/memory/`,
+markdown only. An `EXTRA_ROOTS` list at the top of
 the file, empty by default, is where the owner names any other folder writes
 may reach.
 
@@ -193,8 +225,8 @@ every shell command and blocks the one-way operations: recursive or forced
 deletes whose targets are not provably disposable, force pushes, history
 rewrites, hard resets, branch deletes. Its job is the command nobody meant to
 run. A dry-run flag passes; a delete inside `node_modules`, a build folder, the
-OS temp folder or a `*.tmp` leftover passes; everything else stops with the
-reason.
+project's `.tmp/` scratch folder, the OS temp folder or a `*.tmp` leftover
+passes; everything else stops with the reason.
 
 Both are the same shape: read the tool call from standard input, exit 0 to
 allow, exit 2 with one line on standard error to block, and on any error of
@@ -278,11 +310,16 @@ once rather than assuming.
 If nothing happens, the usual causes are: the session was not restarted, the
 JSON has a syntax error, or the command form does not survive your shell.
 
+**A session opened in a folder above the project gets no hooks at all.** The
+plugin stays silent there by design, and Claude Code does not load the
+project's own `.claude` settings for it, even after the shell moves into the
+project. Open the session in the project folder.
+
 **Where the plugin does not reach, stated plainly.** A session run in the
 cloud, a session whose setting sources exclude the personal folder, a managed
 policy that disables personal plugins, or a project folder that lacks
-`project-os/Hooks-settings.json` (a worktree that excludes it, a folder above
-the project). In every one of those the per-project installer is the wiring,
+`project-os/Hooks-settings.json` (a worktree that excludes it). In
+every one of those the per-project installer is the wiring,
 and the announcing line is absent, which is how you know (except in the
 session the kit arrived in, where a missing line proves nothing; see
 `Installation.md` 6b). A cloud session works from a fresh copy of the
@@ -302,5 +339,10 @@ rules simply never arrive, and the assistant looks like it is ignoring a file
 it was never shown.
 
 The `node -e "console.log('...')"` form above is used instead because it
-survives both shells unchanged. Inside that text use no apostrophes, since they
-would close the string.
+survives both shells unchanged. Inside that text use no apostrophes, double
+quotes, backticks, dollar signs or backslashes, anywhere. Each one either
+closes the string or is read by a shell as code, and the reminder then arrives
+with words missing, or not at all, while the install still reports it on.
+Write "do not" rather than the short form, and name files without quotes. The
+guard lines carry `${CLAUDE_PROJECT_DIR}` on purpose; this list is for the
+reminder text only.

@@ -67,6 +67,23 @@ function t(name, payload, shouldBlock) {
   }
 }
 
+/** A refused case whose reason must name `needle`: the path really at fault. */
+function tWhy(name, payload, needle) {
+  checks += 1;
+  let reason;
+  try {
+    reason = verdict({ cwd: ROOT, ...payload });
+  } catch (err) {
+    failures += 1;
+    console.error(`  FAIL ${name}: the guard threw: ${err.message}`);
+    return;
+  }
+  if (!reason || !reason.includes(needle)) {
+    failures += 1;
+    console.error(`  FAIL ${name}: expected a refusal naming "${needle}", got ${reason ? `"${reason}"` : 'ALLOW'}`);
+  }
+}
+
 const bash = (command) => ({ tool_name: 'Bash', tool_input: { command } });
 const ps = (command) => ({ tool_name: 'PowerShell', tool_input: { command } });
 const mon = (command) => ({ tool_name: 'Monitor', tool_input: { command } });
@@ -81,9 +98,23 @@ t('Write to the global Claude config', write(`${HOME}/.claude/CLAUDE.md`), true)
 t('Edit inside the project', { tool_name: 'Edit', tool_input: { file_path: `${ROOT}/src/lib/media.ts` } }, false);
 t('Edit outside the project', { tool_name: 'Edit', tool_input: { file_path: 'C:/Windows/System32/hosts' } }, true);
 t('NotebookEdit outside the project', { tool_name: 'NotebookEdit', tool_input: { notebook_path: `${OUT}/a.ipynb` } }, true);
-t('a memory file is the one allowed exception', write(`${HOME}/.claude/projects/J--Projects-Rotem-E/memory/x.md`), false);
-t('but not a non-markdown file in the memory folder', write(`${HOME}/.claude/projects/J--Projects-Rotem-E/memory/x.js`), true);
-t('and not a sibling of the memory folder', write(`${HOME}/.claude/projects/J--Projects-Rotem-E/notes/x.md`), true);
+// The memory cases run from a project root of the same kind as the home folder,
+// so a macOS or Linux home is not read against a Windows drive root.
+const MEM_CWD = /^[A-Za-z]:/.test(HOME) ? ROOT : '/home/u/app';
+const mem = (payload) => ({ ...payload, cwd: MEM_CWD });
+t('a memory file is the one allowed exception', mem(write(`${HOME}/.claude/projects/J--Projects-Rotem-E/memory/x.md`)), false);
+t('[R9] a memory file written with backslashes', mem(write(`${HOME.replace(/\//g, '\\')}\\.claude\\projects\\J--Projects-Rotem-E\\memory\\x.md`)), false);
+t('but not a non-markdown file in the memory folder', mem(write(`${HOME}/.claude/projects/J--Projects-Rotem-E/memory/x.js`)), true);
+t('and not a sibling of the memory folder', mem(write(`${HOME}/.claude/projects/J--Projects-Rotem-E/notes/x.md`)), true);
+// [R9] Only ~/.claude/projects/<project>/memory/ counts. Any other folder called
+// memory under ~/.claude holds skills, rules or commands every session loads.
+t('[R9] a skill in a folder called memory is refused', mem(write(`${HOME}/.claude/skills/memory/SKILL.md`)), true);
+t('[R9] a user rule in a folder called memory is refused', mem(write(`${HOME}/.claude/rules/memory/always.md`)), true);
+t('[R9] a command in a folder called memory is refused', mem(write(`${HOME}/.claude/commands/memory/go.md`)), true);
+t('[R9] an agent in a folder called memory is refused', mem(write(`${HOME}/.claude/agents/memory/helper.md`)), true);
+t('[R9] a memory folder one level too deep is refused', mem(write(`${HOME}/.claude/projects/a/b/memory/x.md`)), true);
+t('[R9] a memory folder right under .claude is refused', mem(write(`${HOME}/.claude/memory/x.md`)), true);
+t('[R9] a shell write to a rules folder called memory is refused', mem(bash(`echo x > "${HOME}/.claude/rules/memory/always.md"`)), true);
 // EXTRA_ROOTS, the second allowed exception, ships empty: a folder beside the
 // project is refused like any other outside folder until the owner names it.
 t('EXTRA_ROOTS empty refuses a sibling folder', write('J:/Projects/Sibling App/project-os/Conversations.md'), true);
@@ -311,7 +342,7 @@ console.log('path-guard: writing cmdlets (PowerShell)');
 t('Copy-Item out of the project', ps(`Copy-Item a.png ${OUT}/a.png`), true);
 t('Copy-Item with -Destination out of the project', ps(`Copy-Item -Path a.png -Destination ${OUT}/a.png`), true);
 t('[R] Copy-Item INTO the project from outside', ps(`Copy-Item -Path ${OUT}/shot.png -Destination public/media/shot.png`), false);
-t('[R] Move-Item INTO the project from outside', ps(`Move-Item -LiteralPath ${OUT}/shot.png -Destination public/media/shot.png`), false);
+t('[R9] Move-Item INTO the project from outside deletes it outside, so it is refused', ps(`Move-Item -LiteralPath ${OUT}/shot.png -Destination public/media/shot.png`), true);
 t('Set-Content out of the project', ps(`Set-Content -Path ${OUT}/x.txt -Value hi`), true);
 t('Set-Content inside the project', ps('Set-Content -Path src/data/x.json -Value hi'), false);
 t('Out-File out of the project', ps(`Get-Date | Out-File ${OUT}/d.txt`), true);
@@ -502,6 +533,127 @@ t('[R8] an escaped ) is part of the file name', bash('(echo a > /dev/null\\))'),
 t('[R8] PowerShell: an outside target in a group', ps('(Get-Date > C:\\Users\\User\\x.txt)'), true);
 t('[R8] PowerShell: an outside target in a group with a property after it', ps('$n = (Get-Date > C:/Users/User/x.txt).Length'), true);
 
+// [R9] Kit review 2026-09-25: the escape character and line continuations are
+// read per shell, mkdir and deletes count as writes, a PowerShell comma list is
+// every path in it, archives read their source, a move checks its source, and
+// flag-valued destinations are read in every spelling.
+console.log('path-guard: escapes and line continuations, per shell');
+t('[R9] PowerShell: a quoted folder ending in a backslash does not hide the next command', ps('Set-Location "J:\\Projects\\Rotem E\\"; Set-Content C:\\Users\\User\\x.txt hi'), true);
+t('[R9] PowerShell: the unquoted form', ps('Get-ChildItem C:\\Users\\User\\;Set-Content C:\\Users\\User\\x.txt hi'), true);
+t('[R9] PowerShell: a delete after a quoted folder ending in a backslash', ps('Get-ChildItem "C:\\Users\\User\\"; Remove-Item C:\\Users\\User\\x.txt'), true);
+t('[R9] PowerShell: a trailing backslash, then a write inside the project', ps('Set-Location "J:\\Projects\\Rotem E\\"; Set-Content .tmp\\x.txt hi'), false);
+t('[R9] PowerShell: a listing ending in a backslash, then a write inside', ps('Get-ChildItem "C:\\Users\\User\\"; Set-Content .tmp\\x.txt hi'), false);
+t('[R9] bash: a download split over two lines', bash('curl -L https://e.com/x.zip \\\n  -o C:/Users/User/Downloads/x.zip'), true);
+t('[R9] bash: a clone split over two lines', bash('git clone --depth 1 \\\n  https://e.com/r.git C:/Users/User/r'), true);
+t('[R9] bash: a copy split over two lines, inside the project', bash('cp -r src \\\n  .tmp/x'), false);
+t('[R9] bash: a redirect on the line after a multi-line script and a continuation', bash(`node -e "\nconsole.log(1)\n" \\\n  > ${OUT}/x.txt`), true);
+t('[R9] bash: an escaped backslash at the end of a line is not a continuation', bash('echo a\\\\\ntouch /c/Users/User/x'), true);
+t('[R9] bash: a comment ending in a backslash does not swallow the next line', bash('# see C:\\x\\\ntouch /c/Users/User/x'), true);
+tWhy('[R9] PowerShell: a copy split over two lines is refused for its real destination', ps('Copy-Item -Path src `\n  -Destination C:\\Users\\User\\x'), 'C:\\Users\\User\\x');
+t('[R9] PowerShell: a copy split over two lines, inside the project', ps('Copy-Item -Path src `\n  -Destination .tmp\\src-copy -Recurse'), false);
+t('[R9] PowerShell: a new folder split over two lines, inside the project', ps('New-Item -ItemType Directory `\n  -Path .tmp\\x'), false);
+t('[R9] PowerShell: a write split over two lines', ps('Set-Content `\n  -Path C:\\Users\\User\\x.txt -Value hi'), true);
+t('[R9] PowerShell: a comment ending in a backtick does not swallow the next line', ps('# note `\nSet-Content C:\\Users\\User\\x.txt hi'), true);
+
+console.log('path-guard: folders, deletes and moves');
+t('[R9] PowerShell mkdir outside', ps('mkdir C:/Users/User/evil'), true);
+t('[R9] PowerShell md outside', ps('md C:/Users/User/evil'), true);
+t('[R9] cmd /c mkdir outside', ps('cmd /c mkdir C:/Users/User/evil'), true);
+t('[R9] PowerShell mkdir in the temp folder by variable', ps('mkdir $env:TEMP\\x'), true);
+t('[R9] PowerShell mkdir inside the project', ps('mkdir .tmp/sub'), false);
+t('[R9] rm of a file outside', bash('rm C:/Users/User/Documents/thesis.docx'), true);
+t('[R9] rm of a file outside, Git Bash spelling', bash('rm -f /c/Users/User/Documents/thesis.docx'), true);
+t('[R9] rmdir outside', bash('rmdir /c/Users/User/old'), true);
+t('[R9] unlink outside', bash('unlink C:/Users/User/x.txt'), true);
+t('[R9] shred outside', bash('shred -u C:/Users/User/x.txt'), true);
+t('[R9] Remove-Item of a file outside', ps('Remove-Item C:\\Users\\User\\Documents\\thesis.docx'), true);
+t('[R9] Remove-Item -LiteralPath outside', ps('Remove-Item -LiteralPath C:\\Users\\User\\Documents\\thesis.docx'), true);
+t('[R9] del outside', ps('del C:\\Users\\User\\x.txt'), true);
+t('[R9] cmd /c del outside', ps('cmd /c del /q C:\\Users\\User\\x.txt'), true);
+t('[R9] rd outside', ps('rd /s /q C:\\Users\\User\\old'), true);
+t('[R9] Clear-Content outside', ps('Clear-Content C:\\Users\\User\\x.txt'), true);
+t('[R9] rm inside the project', bash('rm .tmp/a.txt'), false);
+t('[R9] rm -rf of build folders inside', bash('rm -rf node_modules dist'), false);
+t('[R9] Remove-Item -Recurse -Force dist', ps('Remove-Item -Recurse -Force dist'), false);
+t('[R9] Remove-Item inside with -ErrorAction Ignore', ps('Remove-Item .tmp\\x.txt -ErrorAction Ignore'), false);
+t('[R9] Remove-Item inside with -ea 0', ps('Remove-Item dist -Recurse -Force -ea 0'), false);
+t('[R9] mv INTO the project from outside is refused', bash('mv C:/Users/User/Downloads/a.png public/media/a.png'), true);
+t('[R9] mv INTO the project from outside, Git Bash spelling', bash('mv /c/Users/User/Downloads/a.png public/media/'), true);
+t('[R9] Move-Item INTO the project from outside, positional', ps('Move-Item C:\\Users\\User\\Downloads\\a.png public\\media\\a.png'), true);
+t('[R9] Move-Item INTO the project from outside, -Path glued', ps('Move-Item -Path:C:\\Users\\User\\a.png -Destination .tmp\\a.png'), true);
+t('[R9] the mv alias INTO the project from outside', ps('mv C:\\Users\\User\\a.png .tmp\\'), true);
+t('[R9] cmd /c move INTO the project from outside', ps('cmd /c move C:\\Users\\User\\a.png .tmp\\'), true);
+t('[R9] mv inside the project', bash('mv .tmp/a.png public/media/a.png'), false);
+t('[R9] Move-Item inside the project', ps('Move-Item .tmp\\a.png public\\media\\a.png'), false);
+t('[R9] Copy-Item INTO the project from outside stays allowed', ps('Copy-Item C:\\Users\\User\\Downloads\\a.png public\\media\\a.png'), false);
+
+console.log('path-guard: PowerShell comma lists');
+t('[R9] two build folders in one comma list', ps('Remove-Item -Recurse -Force node_modules, dist'), false);
+t('[R9] two build folders, no space', ps('Remove-Item -Recurse -Force node_modules,dist'), false);
+t('[R9] a list that starts inside and ends outside', ps('Remove-Item -Recurse -Force .tmp/a,C:/Users/User/Documents'), true);
+t('[R9] a named list with an outside item', ps('Set-Content -Path .tmp/a.txt,C:/Users/User/x.txt -Value hi'), true);
+t('[R9] a named list with a space after the comma', ps('Set-Content -Path .tmp/a.txt, C:/Users/User/x.txt -Value hi'), true);
+t('[R9] a named list with a space before the comma', ps('Set-Content -Path .tmp/a.txt ,C:/Users/User/x.txt -Value hi'), true);
+t('[R9] a glued named list with an outside item', ps('Set-Content -Path:.tmp/a.txt,C:/Users/User/x.txt -Value hi'), true);
+t('[R9] a positional list with an outside item', ps('New-Item .tmp/a.txt,C:/Users/User/x.txt -ItemType File'), true);
+t('[R9] a named list whose items are all inside', ps('Set-Content -Path .tmp/a.txt,.tmp/b.txt -Value hi'), false);
+t('[R9] a quoted comma is part of the file name', ps('Set-Content -Path ".tmp/notes, draft.txt" -Value hi'), false);
+t('[R9] a comma list given to -Value is content', ps('Set-Content .tmp/x.txt -Value a, C:/Users/User/y'), false);
+t('[R9] bash: a comma is part of the file name', bash('cp a.txt .tmp/x,C:/y'), false);
+
+console.log('path-guard: archives, content words and common parameters');
+t('[R9] Expand-Archive from Downloads into the project, -Path', ps('Expand-Archive -Path C:\\Users\\User\\Downloads\\figma-export.zip -DestinationPath public\\media\\export'), false);
+t('[R9] Expand-Archive from Downloads into the project, -LiteralPath', ps('Expand-Archive -LiteralPath C:\\Users\\User\\Downloads\\figma-export.zip -DestinationPath public\\media\\export'), false);
+t('[R9] Expand-Archive from Downloads into the project, positional', ps('Expand-Archive C:\\Users\\User\\Downloads\\figma-export.zip public\\media\\export'), false);
+t('[R9] Expand-Archive with a named source and a positional destination', ps('Expand-Archive -Path C:\\Users\\User\\Downloads\\figma-export.zip public\\media\\export'), false);
+t('[R9] Compress-Archive from Downloads into .tmp', ps('Compress-Archive -Path C:\\Users\\User\\Downloads\\shots -DestinationPath .tmp\\shots.zip'), false);
+t('[R9] Compress-Archive to an outside file, level last', ps(`Compress-Archive src ${OUT}\\src.zip -CompressionLevel Fastest`), true);
+t('[R9] Expand-Archive with an outside positional destination', ps(`Expand-Archive -Path .tmp\\x.zip ${OUT}\\x`), true);
+t('[R9] Expand-Archive with an outside named destination', ps(`Expand-Archive .tmp\\x.zip -DestinationPath ${OUT}\\x`), true);
+t('[R9] Expand-Archive with no destination, after a move outside', ps(`Set-Location ${OUT}; Expand-Archive .\\x.zip`), true);
+t('[R9] Expand-Archive with no destination, inside', ps('Expand-Archive .tmp\\x.zip'), false);
+t('[R9] Set-Content with its text in a variable', ps('Set-Content .tmp\\out.txt $text'), false);
+t('[R9] Add-Content of a saved row', ps('Add-Content project-os\\History.md $row'), false);
+t('[R9] Set-Content outside after -ErrorAction Stop', ps(`Set-Content -ErrorAction Stop ${OUT}\\x.txt hi`), true);
+t('[R9] Set-Content to a variable path after -ErrorAction Stop', ps('Set-Content -ErrorAction Stop $p hi'), true);
+t('[R9] Copy-Item outside with -ErrorAction Stop last', ps(`Copy-Item src ${OUT}\\x -ErrorAction Stop`), true);
+t('[R9] a variable path joined into the first list', ps('Set-Content .tmp\\a.txt, $p hi'), true);
+t('[R9] a literal outside path later on the line is still refused', ps(`Set-Content .tmp\\x.txt ${OUT}/note.txt`), true);
+
+console.log('path-guard: flag-valued destinations in every spelling');
+t('[R9] cp -t outside', bash(`cp -t ${OUT} a.png b.png`), true);
+t('[R9] cp -rt outside', bash(`cp -rt ${OUT} src`), true);
+t('[R9] cp --target-directory= outside', bash(`cp --target-directory=${OUT} a.png`), true);
+t('[R9] xargs cp -t outside', bash('ls *.png | xargs cp -t /c/Users/User/Desktop'), true);
+t('[R9] mv --target-directory= outside', bash('mv --target-directory=/c/Users/User/Desktop a.png b.png'), true);
+t('[R9] curl --output= outside', bash(`curl --output=${OUT}/x.zip https://e.com/x.zip`), true);
+t('[R9] curl -sSLo outside', bash(`curl -sSLo ${OUT}/x.zip https://e.com/x.zip`), true);
+t('[R9] curl -fsSLo outside', bash(`curl -fsSLo ${OUT}/x.zip https://e.com/x.zip`), true);
+t('[R9] curl -oPATH outside', bash(`curl -o${OUT}/x.zip https://e.com/x.zip`), true);
+t('[R9] curl -o glued to a quoted path with a space', bash('curl -o"C:/Users/User/My Docs/x.zip" https://e.com/x.zip'), true);
+t('[R9] curl --output= glued to a quoted path with a space', bash('curl --output="C:/Users/User/My Docs/x.zip" https://e.com/x.zip'), true);
+t('[R9] curl --output-dir outside', bash(`curl --output-dir ${OUT} -O https://e.com/x.zip`), true);
+t('[R9] wget -qO outside', bash(`wget -qO ${OUT}/x.zip https://e.com/x.zip`), true);
+t('[R9] wget -P outside', bash(`wget -P ${OUT} https://e.com/x.zip`), true);
+t('[R9] wget --output-document= outside', bash(`wget --output-document=${OUT}/x.zip https://e.com/x.zip`), true);
+t('[R9] tar -CPATH outside', bash(`tar -xf a.tar -C${OUT}`), true);
+t('[R9] tar --directory= outside', bash(`tar -xf a.tar --directory=${OUT}`), true);
+t('[R9] unzip -dPATH outside', bash(`unzip a.zip -d${OUT}`), true);
+t('[R9] PowerShell tar -C outside', ps(`tar -xf a.tar -C ${OUT}`), true);
+t('[R9] PowerShell curl.exe --output= outside', ps(`curl.exe --output=${OUT}/x.zip https://e.com/x.zip`), true);
+t('[R9] PowerShell curl.exe -oPATH outside', ps(`curl.exe -o${OUT}/x.zip https://e.com/x.zip`), true);
+t('[R9] cp -t into the project from outside', bash(`cp -t .tmp ${OUT}/src.txt`), false);
+t('[R9] mv -t inside the project', bash('mv -t .tmp a.png b.png'), false);
+t('[R9] curl -sSLo inside', bash('curl -sSLo .tmp/x https://e.com/x'), false);
+t('[R9] curl -so /dev/null', bash('curl -so /dev/null https://e.com/x'), false);
+t('[R9] wget -qO- to the screen', bash('wget -qO- https://e.com/x'), false);
+t('[R9] rsync -t is --times, not a folder', bash('rsync -t a.txt .tmp/'), false);
+t('[R9] tar -C inside', bash('tar -xf a.tar -C .tmp'), false);
+t('[R9] PowerShell tar -C inside', ps('tar -xf a.tar -C .tmp'), false);
+t('[R9] a glued header is not an output file', bash('curl -HAuthorization:Bearer_x -o .tmp/x https://e.com/x'), false);
+t('[R9] a glued quoted header is not an output file', bash('curl -H"Authorization: Bearer tok" https://e.com/x -o .tmp/x'), false);
+t('[R9] install -o takes an owner, so the last word is still the destination', bash(`install -oroot a.txt ${OUT}/a.txt`), true);
+
 console.log('path-guard: the Monitor tool runs shell commands too');
 t('[R] Monitor writing outside', mon(`echo hi > ${OUT}/x.txt`), true);
 t('Monitor writing inside', mon('echo hi > .tmp/x.txt'), false);
@@ -556,6 +708,35 @@ hook('[R8] 2>/dev/null inside $( ) exits 0', payload(bash('x=$(git rev-parse HEA
 hook('[R8] a brace list with an outside word exits 2', payload(bash('touch {a,/c/Users/User/Desktop/b}.txt')), 2, 'outside the project folder');
 hook('POSIX: a write to a sibling folder exits 2', JSON.stringify({ ...write('/home/u/other/x.md'), cwd: PROOT }), 2, 'outside the project folder');
 hook('POSIX: a write inside the project exits 0', JSON.stringify({ ...write('/home/u/app/x'), cwd: PROOT }), 0);
+hook('[R9] the refusal names its rule by title, not by number', payload(write(`${OUT}/x.md`)), 2, 'Every file you write stays inside the project root');
+
+// [R9] With CLAUDE_PROJECT_DIR set, as Claude Code always sets it, the payload's
+// cwd is only where a relative path starts. The project stays the one place a
+// write may land.
+/** @param {string} name @param {string} project @param {object} body @param {number} expected */
+function hookIn(name, project, body, expected) {
+  checks += 1;
+  const r = spawnSync(process.execPath, [GUARD], {
+    input: JSON.stringify(body),
+    encoding: 'utf8',
+    env: { ...process.env, CLAUDE_PROJECT_DIR: project },
+  });
+  if (r.status !== expected) {
+    failures += 1;
+    console.error(`  FAIL ${name}: expected exit ${expected}, got ${r.status}. stderr: ${r.stderr}`);
+  }
+}
+hookIn('[R9] from a subfolder, a shell write to ../ lands in the project', ROOT, { ...bash('echo x > ../y.txt'), cwd: `${ROOT}/src` }, 0);
+hookIn('[R9] from a subfolder, a Write of ../notes.md lands in the project', ROOT, { ...write('../notes.md'), cwd: `${ROOT}/src` }, 0);
+hookIn('[R9] from a subfolder, a PowerShell write to ..\\notes.md', ROOT, { ...ps('Set-Content ..\\notes.md -Value x'), cwd: 'J:\\Projects\\Rotem E\\src\\' }, 0);
+hookIn('[R9] from a subfolder in the Git Bash spelling, mkdir ../.tmp', ROOT, { ...bash('mkdir ../.tmp'), cwd: '/j/Projects/Rotem E/host' }, 0);
+hookIn('[R9] from a subfolder, ../../ still leaves the project', ROOT, { ...bash('echo x > ../../escaped.txt'), cwd: `${ROOT}/src` }, 2);
+hookIn('[R9] from a subfolder, a Write of ../../x.md still leaves the project', ROOT, { ...write('../../x.md'), cwd: `${ROOT}/src` }, 2);
+hookIn('[R9] from an outside folder, a relative PowerShell write is refused', ROOT, { ...ps('Set-Content -Path report.txt -Value ok'), cwd: 'C:/review/outside' }, 2);
+hookIn('[R9] from an outside folder, a relative Write is refused', ROOT, { ...write('report.txt'), cwd: 'C:/review/outside' }, 2);
+hookIn('[R9] from an outside folder, an absolute write inside is allowed', ROOT, { ...write(`${ROOT}/.tmp/x.md`), cwd: 'C:/review/outside' }, 0);
+hookIn('[R9] POSIX: from a subfolder, ../x lands in the project', PROOT, { ...bash('touch ../x'), cwd: `${PROOT}/src` }, 0);
+hookIn('[R9] POSIX: from a subfolder, ../../x leaves the project', PROOT, { ...bash('touch ../../x'), cwd: `${PROOT}/src` }, 2);
 
 // The root really does come from the session, not from where this file happens
 // to live: the property that lets one copy of the guard serve every project.

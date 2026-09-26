@@ -20,10 +20,14 @@ A one-off typo earns nothing. The atlas is for classes, not incidents.
 ## How to use it
 
 1. Name the symptom you see.
-2. Search this table for a matching row.
-3. If a row matches, follow its fix and checklist before debugging anew.
-4. If nothing matches, debug normally.
-5. If the issue turns out to be a pattern, add the row in the same task.
+2. Search this table, then `BugAtlas-archive.md` if it exists; a bug class does
+   not expire.
+3. If a row matches, follow its fix and checklist before debugging anew. A match
+   in the archive: copy its row to the bottom of this table with the count
+   raised, and leave the archived copy as it is.
+4. If neither matches, debug normally.
+5. If the issue turns out to be a pattern, add the row at the bottom of the
+   table in the same task.
 
 ## Rotation
 
@@ -33,6 +37,9 @@ relocated, never edited, renumbered or deleted, so an archived row still
 answers a search.
 
 ## Atlas
+
+Newest at the bottom: add a row under the table's last row.
+`project-os/Archive-old-rows.ps1` moves rows from the top.
 
 | # | Symptom | Root cause | The fix that holds | Times bitten | Where recorded |
 |---|---|---|---|---|---|

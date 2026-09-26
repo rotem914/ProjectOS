@@ -39,7 +39,7 @@ A file is the only part of your working relationship that survives a new session
 
 Each one ships with its structure already in place and a worked example at the end, in a block marked for deletion. That is all a kit can give you here. They are worth nothing on day one and a great deal on day sixty, and no starter kit can fake that difference.
 
-**Two tool files.** `project-os/mcp/Figma/Figma_MCP_Rules.md` holds working rules for the Figma MCP server: the call budget discipline, the hard caps, and the traps that fail silently. `project-os/mcp/Google_analytics/Google_Analytics_MCP_Rules.md` holds the wiring and reading rules for the official GA4 MCP server: key-outside-the-repo authorization, and never quoting a number that did not come from a tool call. Every rule in them was paid for in real use. Delete the folder of any server your project never touches; a different server earns its own folder there the first time it bites.
+**Two tool files.** `project-os/mcp/Figma/Figma_MCP_Rules.md` holds working rules for the Figma MCP server: the call budget discipline, the hard caps, and the traps that fail silently. `project-os/mcp/Google_analytics/Google_Analytics_MCP_Rules.md` holds the wiring and reading rules for the official GA4 MCP server: key-outside-the-repo authorization, and never quoting a number that did not come from a tool call. Every rule in them was paid for in real use. The install asks whether your project uses each one, and removes a folder only when you say it is not used; a different server earns its own folder there the first time it bites.
 
 **One enforcement file.** `project-os/Hooks.md` is the part that makes the rest hold. Rule files are followed while they are remembered; hooks fire on every message and every tool call whether anything remembers them or not. It ships a ready setup that needs no path editing and works on any machine: your core rules re-stated on every single message, plus two guards that do not ask: one refuses the file writes outside the project it recognises, and one refuses the destructive commands it recognises before they run. They are a safety net, not a wall. The install switches it on for you, as a step and not as a suggestion; your only part is starting a new session afterwards, since the setting is read when a session opens. A project running this kit without it is running on good intentions.
 
@@ -53,16 +53,14 @@ personal Claude folder, where Claude Code reads it as a plugin; the hooks stay
 silent in any project without `project-os/` and stand down where a project
 already wired its own. Needs `git` and `node` on the path.
 
-Windows, in PowerShell:
+The same command on every system. It runs in Windows PowerShell, in a macOS or
+Linux terminal, and in Claude Code's chat box with an exclamation mark in
+front. It does not run in the old Windows Command Prompt.
+
+<!-- Keep this command identical to the copy in project-os/Hooks.md, "Two ways the hooks get wired". -->
 
 ```
-git clone https://github.com/rotem914/ProjectOS "$env:USERPROFILE\.claude\skills\projectos"
-```
-
-macOS or Linux, in a terminal:
-
-```
-git clone https://github.com/rotem914/ProjectOS ~/.claude/skills/projectos
+git clone https://github.com/rotem914/ProjectOS "$HOME/.claude/skills/projectos"
 ```
 
 Then start a new session anywhere. To pick up a newer kit later, run
@@ -85,9 +83,13 @@ install must end with, problems and clashes included.
    root of your project.
    Already have a `CLAUDE.md`? Keep yours: bring the kit's in as `CLAUDE-kit.md`
    beside it, and the install has your assistant merge the two.
-2. Paste the install prompt below into your assistant. Or just tell it to
-   install ProjectOS and give it this link: it reads `Installation.md` either
-   way.
+   Already have a `project-os/` folder from an earlier install? Never copy over
+   it: that replaces your History and Decisions with empty templates. Updating
+   an installed project to a newer kit is not a written step yet.
+2. Paste the install prompt below into your assistant. Or skip step 1, and
+   just tell it to install ProjectOS and give it this link: it reads
+   `Installation.md` either way, and brings the files in itself when they are
+   not there yet (its step 0).
 3. Answer its questions. It asks once, in one batch.
 4. Read its closing report: what was set, what broke, and where your existing
    rules clash with the kit's process.

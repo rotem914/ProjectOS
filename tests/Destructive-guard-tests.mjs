@@ -19,7 +19,10 @@
 // synonyms), rm, /bin/rm and PowerShell aliases, quoted-data false positives,
 // fail-open behavior, wrappers, shell keywords and blocks, find, inline
 // scripts, function bodies, compact PowerShell blocks, bash brace lists, a
-// `)` glued to a delete target, and a stale Path-guard.mjs beside the guard. That last group is the
+// `)` glued to a delete target, PowerShell backslashes, continued lines,
+// PowerShell common parameters and comma lists, Monitor read as bash, git rm
+// and worktree remove, wrapped shells and git options with a value, and a
+// stale Path-guard.mjs beside the guard. That last group is the
 // one part that writes: a scratch folder inside tests/, removed at the end.
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
@@ -205,7 +208,7 @@ const cases = [
   ['Bash', 'git -C "J:/Projects/Rotem E" reset --hard', 2, 'reset'],
 
   // --- 7. disposable dirs cover the common stacks ---
-  // One guard script serves every project, so a Next.js build dir has to be as
+  // The same list ships to every project, so a Next.js build dir has to be as
   // deletable as an Astro one. `build`/`out` stay non-disposable on purpose.
   ['Bash', 'rm -rf .next', 0],
   ['Bash', 'rm -rf .turbo .vite coverage', 0],
@@ -243,6 +246,11 @@ const cases = [
   ['Bash', "bash -c 'if [ -d src ]; then rm -rf src; fi'", 2, 'non-disposable'],
   ['Monitor', 'while true; do rm -rf src; sleep 5; done', 2, 'non-disposable'],
   ['PowerShell', 'if (Test-Path src) { Remove-Item src -Recurse -Force }', 2, 'non-disposable'],
+  ['PowerShell', '# clean up`\nRemove-Item src -Recurse -Force', 2, 'non-disposable'],
+  ['Bash', "echo hi # don't worry\nrm -rf src", 2, 'non-disposable'],
+  ['PowerShell', "Write-Host hi # it's fine\nRemove-Item src -Recurse -Force", 2, 'non-disposable'],
+  ['Bash', 'echo "a # b" && ls', 0],
+  ['Bash', 'echo ${#arr[@]}', 0],
   ['PowerShell', 'Get-ChildItem . | %{git reset --hard}', 2, 'reset'],
   ['PowerShell', 'Get-ChildItem . | ?{Remove-Item src -Recurse -Force}', 2, 'non-disposable'],
   ['PowerShell', 'Get-ChildItem . | ForEach-Object{Remove-Item src -Recurse -Force}', 2, 'non-disposable'],
@@ -385,7 +393,9 @@ const cases = [
   ['Bash', 'rm -rf dist/{1..3}', 0],
   ['Bash', "rm -rf 'dist/{x,../src}'", 0], // quoted, so not a list: one folder inside dist
   ['Bash', "find {node_modules,dist} -name '*.map' -delete", 0],
-  ['PowerShell', 'Remove-Item -Recurse -Force dist/{x,y}', 0], // PowerShell has no brace lists
+  ['PowerShell', "Remove-Item -Recurse -Force 'dist/{x,y}'", 0], // PowerShell has no brace lists: one folder inside dist
+  // Unquoted, PowerShell cannot even parse it; its bare comma now splits it, and `y}` is no disposable path.
+  ['PowerShell', 'Remove-Item -Recurse -Force dist/{x,y}', 2, 'non-disposable'],
 
   // --- 13. compact PowerShell blocks (review 2026-09-25) ---
   // A `}` closed a block only after a space or `;`, and a `{` glued to try, else
@@ -426,6 +436,106 @@ const cases = [
   ['Bash', 'rm -rf "dist)"', 2, 'non-disposable'], // a quoted `)` is part of the name
   ['Bash', 'rm -rf dist\\)', 2, 'non-disposable'], // so is an escaped one
   ['Bash', "rm -rf 'dist/a(b)'", 0], // as many `(` as `)`: nothing is taken off
+
+  // --- 15. a PowerShell backslash is not an escape (kit review 2026-09-25, T1) ---
+  // "C:\x\" is a closed string in PowerShell. Read as an escaped quote, it hid
+  // everything after it on the line.
+  ['PowerShell', 'Set-Location "J:\\Projects\\Rotem E\\"; git reset --hard', 2, 'reset'],
+  ['PowerShell', 'Get-ChildItem "C:\\Users\\User\\"; Remove-Item src -Recurse -Force', 2, 'non-disposable'],
+  ['PowerShell', '$root = "J:\\x\\"\nRemove-Item "$root\\src" -Recurse -Force', 2, 'non-disposable'],
+  ['PowerShell', 'Get-ChildItem C:\\Users\\User\\;git reset --hard', 2, 'reset'],
+  ['PowerShell', 'Write-Output "a`"; git reset --hard"', 0], // the backtick escapes the quote: all one string
+  ['PowerShell', 'Get-ChildItem "C:\\Users\\User\\"; Remove-Item node_modules -Recurse -Force', 0],
+  ['Bash', 'echo "a\\"; git reset --hard"', 0], // in bash the backslash still escapes the quote
+
+  // --- 16. a command continued on the next line (kit review 2026-09-25, T2) ---
+  ['PowerShell', 'Remove-Item -Path src `\n  -Recurse -Force', 2, 'non-disposable'],
+  ['PowerShell', 'Remove-Item `\n  -Recurse -Force src', 2, 'non-disposable'],
+  ['PowerShell', 'Remove-Item -Path src `\r\n  -Recurse -Force', 2, 'non-disposable'],
+  ['PowerShell', 'git push origin main `\n  --force', 2, 'force push'],
+  ['PowerShell', 'Remove-Item node_modules `\n  -Recurse -Force', 0],
+  ['Bash', 'rm -rf node_modules \\\n  dist', 0], // the escaped newline is not a target
+  ['Bash', 'rm -rf \\\n  src', 2, 'non-disposable'],
+  ['Bash', 'git reset --ha\\\nrd', 2, 'reset'], // bash drops the pair, so this is --hard
+  ['Bash', 'git push origin main \\\n  --force', 2, 'force push'],
+  ['Monitor', 'rm -rf \\\n  src', 2, 'non-disposable'],
+
+  // --- 17. PowerShell common parameters (kit review 2026-09-25, T4) ---
+  // -ErrorAction is not a cluster of short flags: its `r` made the delete
+  // recursive and its value a target.
+  ['PowerShell', 'Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue', 0],
+  ['PowerShell', 'Remove-Item dist -Recurse -Force -ea 0', 0],
+  ['PowerShell', 'Remove-Item .tmp\\x.txt -ErrorAction Ignore', 0],
+  ['PowerShell', 'Remove-Item src\\old.ts -ErrorAction SilentlyContinue', 0],
+  ['PowerShell', 'try { Remove-Item .tmp\\x -Recurse -Force -ErrorAction Stop } catch {}', 0],
+  ['PowerShell', 'Remove-Item -Recurse -Force -ErrorAction:Stop node_modules', 0],
+  ['PowerShell', 'Remove-Item notes.txt -Verbose', 0],
+  ['PowerShell', 'Remove-Item src -Recurse -Force -ErrorAction SilentlyContinue', 2, 'non-disposable'],
+  ['PowerShell', 'Remove-Item -ErrorAction SilentlyContinue -Recurse -Force src', 2, 'non-disposable'],
+  ['PowerShell', 'Remove-Item -Recurse -Force -ErrorAction:Stop src', 2, 'non-disposable'],
+  ['PowerShell', 'Remove-Item src -Recurse -Verbose', 2, 'non-disposable'],
+  ['Monitor', 'rm -rf src', 2, 'non-disposable'],
+
+  // --- 18. PowerShell comma lists (kit review 2026-09-25, T5) ---
+  // `a,b` is two paths in PowerShell, each judged on its own; in bash it is one name.
+  ['PowerShell', 'Remove-Item -Recurse -Force node_modules, dist', 0],
+  ['PowerShell', 'Remove-Item -Recurse -Force node_modules,dist', 0],
+  ['PowerShell', 'Remove-Item -Recurse -Force .tmp/a,src', 2, 'non-disposable'],
+  ['PowerShell', 'Remove-Item -Recurse -Force src,x.tmp', 2, 'non-disposable'],
+  ['PowerShell', 'Remove-Item -Recurse -Force node_modules\\x,C:\\Users\\User\\Documents', 2, 'non-disposable'],
+  ['PowerShell', 'Remove-Item -Recurse -Force "node_modules","src"', 2, 'non-disposable'],
+  ['PowerShell', "Remove-Item -Recurse -Force 'node_modules/a,b'", 0], // a quoted comma is part of the name
+  ['Bash', 'rm -rf .tmp/a,src', 0], // one folder named `a,src` inside .tmp
+
+  // --- 19. Monitor reads commands as bash (kit review 2026-09-25, T32) ---
+  ['Monitor', 'rm -rf dist/{x,../src}', 2, 'non-disposable'],
+  ['Monitor', 'rm -rf node_modules/.\\./src', 2, 'non-disposable'],
+  ['Monitor', 'rm -rf dist/{client,server}', 0],
+
+  // --- 20. forced deletes through git (kit review 2026-09-25, T36) ---
+  ['Bash', 'git rm -rf src', 2, 'git rm -f'],
+  ['Bash', 'git rm -r --force src', 2, 'git rm -f'],
+  ['Bash', 'git worktree remove --force .claude/worktrees/x', 2, 'worktree remove'],
+  ['Bash', 'git worktree remove -f wt', 2, 'worktree remove'],
+  ['Bash', 'git rm -r src', 0], // without -f git refuses to drop uncommitted changes
+  ['Bash', 'git rm --cached .mcp.json', 0],
+  ['Bash', 'git rm -r -f --cached src', 0], // the index only
+  ['Bash', 'git rm -rfn src', 0], // dry run
+  ['Bash', 'git worktree remove wt', 0],
+  ['Bash', 'git worktree prune', 0],
+
+  // --- 21. wrapped shells and git options with a value (review 2026-09-25, ASTRA T09) ---
+  // Only an exact `-c` opened the script, and only -C/-c took a value, so each
+  // of these wiped uncommitted work with no refusal.
+  ['Bash', 'bash -lc "git reset --hard"', 2, 'reset'],
+  ['Bash', 'bash -lc "rm -rf src"', 2, 'non-disposable'],
+  ['PowerShell', 'bash -lc "rm -rf src"', 2, 'non-disposable'],
+  ['Bash', 'sh -ec "rm -rf src"', 2, 'non-disposable'],
+  ['Bash', 'bash -xc "git clean -fdx"', 2, 'clean'],
+  ['Bash', 'bash -lic "git reset --hard"', 2, 'reset'],
+  ['Bash', 'zsh -lc "git reset --hard"', 2, 'reset'],
+  ['Bash', 'env bash -lc "git reset --hard"', 2, 'reset'],
+  ['Bash', '/usr/bin/bash -lc "git reset --hard"', 2, 'reset'],
+  ['PowerShell', '& "C:\\Program Files\\Git\\bin\\bash.exe" -lc "git reset --hard"', 2, 'reset'],
+  ['Bash', 'bash -cl "rm -rf src"', 2, 'non-disposable'],
+  ['Bash', 'bash -ce "rm -rf src"', 2, 'non-disposable'],
+  ['Bash', 'bash -c -e "rm -rf src"', 2, 'non-disposable'],
+  ['Bash', 'bash -c -- "rm -rf src"', 2, 'non-disposable'],
+  ['Bash', 'bash -c -o pipefail "rm -rf src"', 2, 'non-disposable'],
+  ['Bash', 'git --work-tree . reset --hard', 2, 'reset'],
+  ['Bash', 'git --git-dir .git reset --hard', 2, 'reset'],
+  ['Bash', 'git --namespace x reset --hard', 2, 'reset'],
+  ['Bash', 'git --config-env k=V reset --hard', 2, 'reset'],
+  ['Bash', 'git --attr-source HEAD reset --hard', 2, 'reset'],
+  ['Bash', 'git --work-tree . clean -fdx', 2, 'clean'],
+  ['Bash', 'git --git-dir .git push --force', 2, 'force push'],
+  ['Bash', 'git --git-dir .git checkout -- .', 2, 'checkout'],
+  ['Bash', 'git -C . --work-tree . reset --hard', 2, 'reset'],
+  ['Bash', 'bash -lc "npm test"', 0],
+  ['Bash', 'bash -lc "rm -rf node_modules"', 0],
+  ['Bash', 'git --work-tree . status', 0],
+  ['Bash', 'git --git-dir .git log', 0],
+  ['Bash', 'git --exec-path', 0],
 ];
 
 let failures = 0;

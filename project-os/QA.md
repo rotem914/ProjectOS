@@ -3,6 +3,10 @@
 This file is the standing checklist: what must be true before any change is called
 done, and how to report what you checked.
 
+It holds only checks that future tasks will reuse. A check that only one task needs
+goes in that task's History row, never here, so this file stays worth reading at
+every pickup.
+
 It exists so "done" means the same thing on every task, instead of whatever felt like
 enough that day.
 
@@ -27,7 +31,7 @@ that errors, and a working route says nothing about a layout that clips.
 |---|---|
 | Docs only | Read the file back. Confirm every cross-link resolves. |
 | App code | Run `{{CHECK_COMMAND}}`. It must pass, not "mostly pass". |
-| Server route / API | Start it, call the route, call its error path. |
+| Server route / API | Call the route on the running app, then call its error path. If the app is down, `CLAUDE.md` rule 16 says who starts it. |
 | Data / storage | Write, read back, reload, confirm it still validates. |
 | UI / layout | Browser QA (§2) plus the narrow-width check (§9). |
 | Client state / cache | Reload. Mutate, then confirm fresh data arrives. |
@@ -167,8 +171,9 @@ What to check:
 - **Wide layouts are untouched.** Re-measure anything the narrow rule could have moved — a
   shared token, a base rule you overrode. A narrow fix that shifts the wide layout is a
   regression.
-- **Specificity, not source order.** A media query adds no specificity of its own. A
-  narrow-width rule must out-rank the rule it overrides, and still come after it.
+- **Specificity first, then source order.** A media query adds no specificity of its
+  own. A narrow-width rule must out-rank the rule it overrides, or repeat the same
+  selector after it in the same stylesheet.
 - **Tap targets** stay large enough to hit after any shrink.
 
 Measure, do not eyeball. Read the numbers out of the page; a screenshot at the wrong scale
@@ -185,7 +190,7 @@ exactly like a check that was skipped.
 | `Looks good` | `Changed list-row padding, opened the screen, checked alignment, hover, and that nothing clipped at the narrow width.` |
 | `Tested` | `Ran {{CHECK_COMMAND}}; passed. Loaded the page; no console errors.` |
 
-Two lines, always: what you ran, and what it returned.
+Two lines, always, in the History row: what you ran, and what it returned.
 
 ```md
 **Verification run**
@@ -214,7 +219,8 @@ Before you ever write that no browser tool exists:
    where even that cannot happen.
 
 A tool that loaded but was **refused** is a different case. Name the tool, say it was
-refused, use another route, and never report it as "no tools available".
+refused, use another route, and never report it as "no tools available". When every
+route fails, that is Path C in `project-os/Workflow.md` step 9.
 
 The failure mode this blocks: declaring early in a task that you have no browser, then
 repeating it for the rest of the task to stay consistent with yourself.
@@ -231,9 +237,13 @@ repeating it for the rest of the task to stay consistent with yourself.
       breakpoint, wide layout re-measured (§9).
 - [ ] Entrance animation touched → cold-asset check run (§8).
 - [ ] Storage touched → persistence and reload check run (§4).
-- [ ] Medium or high risk → code review run (`project-os/Code_review.md`), result named.
+- [ ] Medium or high risk → code review run (`project-os/Code_review.md`), result named
+      in the History row.
+- [ ] Something shared touched, at any risk → blast-radius trace run
+      (`project-os/Code_review.md`), impact class named in the History row.
 - [ ] QA wording is concrete, not vague (§10).
 - [ ] `project-os/History.md` row added.
 - [ ] `project-os/Decisions.md` updated if a non-obvious choice was made.
-- [ ] Reply names the checks that failed or surprised you — not the ones that passed as
-      expected.
+- [ ] Reply names only a check that failed or could not run, the Path B or Path C
+      outcome, and review findings waiting for a verdict. Passed checks and a clean
+      review stay in the History row.

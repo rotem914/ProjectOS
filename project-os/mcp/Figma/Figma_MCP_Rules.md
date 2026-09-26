@@ -9,14 +9,16 @@ than they look.
 
 ## 0. Setup facts
 
-> **Setup step — fill this table, then delete this block.** Ask the owner for
-> the file link and the plan; everything else follows from it.
+> **Setup step: fill this table once the server is connected, then delete this
+> block.** Until then, leave the honest state ("not wired yet"). The file link,
+> the target page and the plan are asked at the first Figma request (section
+> 0b), not at install; everything else follows from them.
 
 | Fact | Value |
 |---|---|
 | Figma file | `{{FIGMA_FILE_KEY}}` ({{FIGMA_FILE_NAME}}) |
 | Target page for generated work | {{FIGMA_TARGET_PAGE}} |
-| Plan and daily MCP call budget | e.g. Pro: 200 calls/day, 10/min |
+| Plan and MCP call budget | e.g. Pro, Full seat: 200 calls/day, 10/min |
 
 Push generated pages onto the one target page; never scatter them across the
 file.
@@ -61,6 +63,8 @@ Ask the owner instead (CLAUDE.md rule 21).
    That address is Figma's as of this writing; if it fails, take the current
    one from Figma's own documentation, never from another repo. The desktop
    app's local server is the alternative, for the file open in the app.
+   If the project keeps a `.mcp.json.example`, add the same entry there too,
+   so a fresh copy of the project keeps it.
    If writing that file is refused, hand the owner this block and carry on.
 3. **Ask the owner for their part, in one message:** the link to the Figma
    file, which page generated work should land on, the plan (it sets the call
@@ -71,18 +75,27 @@ Ask the owner instead (CLAUDE.md rule 21).
    session starts, so the tools appear in the NEXT session, not this one.
 5. **Verify with ONE free call.** After the restart, make one identity call
    (`whoami` where the server exposes it). It answers connected or not without
-   spending the metered budget below. Fill the setup table in section 0.
+   spending the metered budget below. `whoami` also returns every plan the
+   user is on and the seat type in each. The seat changes the budget (a View
+   or Collab seat gets a few calls a month, not 200 a day), so fill the budget
+   row from that answer and Figma's rate-limits page, not from the plan alone.
+   Fill the setup table in section 0.
 6. **Then do the original request.** The frame the owner asked for is still
    the task; the setup was the detour, not the destination.
 
-Nothing in this section belongs in the repo except `.mcp.json`: no key, no
-token, no local path to a credential.
+Nothing in this section belongs in the repo except the figma entry in
+`.mcp.json.example`, with no key, no token and no local path to a credential.
+`.mcp.json` itself stays on this machine, because the install gitignores it
+(Installation.md 6d step 3). A project that already tracked `.mcp.json` before
+the install keeps it in git.
 
 ## 1. The call budget is rule #1
 
-- Writes count against the budget, and so do reads (`get_metadata`,
-  `get_screenshot`, `get_design_context`, `get_variable_defs`).
-  Know the plan's number before the first call.
+- Figma meters the read tools (`get_metadata`, `get_screenshot`,
+  `get_design_context`, `get_variable_defs`). Write tools and `whoami` are
+  exempt today, and `use_figma` is free during its beta, but Figma says
+  writing will become paid by usage, so the one-call build below stays the
+  rule. Know the budget before the first read.
 - The working shape: capture with FREE tools (browser, file reads, grep),
   build in ONE `use_figma` call, verify by the owner's eye in Figma.
   Do not spend a metered screenshot on verification unless the owner OKs it.
@@ -129,9 +142,9 @@ token, no local path to a credential.
   and count brace balance. A dropped brace is caught free.
 - Sanitize captured text: encoding mojibake (an em dash arriving as `â€”`)
   renders verbatim in Figma.
-- `use_figma` returns no value. To read data back,
-  `throw new Error(JSON.stringify(...))`, but ONLY from a call that made no
-  mutations; otherwise split into a check call and an act call.
+- `use_figma` hands back whatever the code `return`s, from a build call too
+  (section 6 relies on it). Read data back that way. Never `throw` to carry
+  data out of a call that changed the file.
 
 ## 4. Fonts
 

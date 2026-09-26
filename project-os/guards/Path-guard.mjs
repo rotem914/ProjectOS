@@ -6,7 +6,7 @@
 // file tools make and every Bash / PowerShell command (redirections, writing
 // programs, cmdlets, wrappers, inline shells, inline scripts, `cd` moves) and
 // exits 2 on any write it recognises whose target it cannot prove is inside
-// the project.
+// the project. A delete, and a move's source, count as writes.
 //
 // Installed by `node project-os/Install-project-hooks.mjs`, which wires it as:
 //   PreToolUse, matcher "Write|Edit|NotebookEdit|Bash|PowerShell|Monitor",
@@ -45,8 +45,8 @@ const MAX_DEPTH = 5;
 
 // Claude's memory folder is required by its own system prompt, so blocking it
 // would simply stop memory working. Allowed by exception, narrowly: only
-// markdown, only under a `.claude/**/memory/` path in the user's home. Set this
-// to false and memory stops — the owner's call, one edit.
+// markdown, only under ~/.claude/projects/<project>/memory/ in the user's home.
+// Set this to false and memory stops, the owner's call, one edit.
 const ALLOW_CLAUDE_MEMORY = true;
 
 const norm = (p) => String(p).replace(/\\/g, '/').replace(/\/+$/, '');
@@ -96,10 +96,28 @@ const EXTRA_ROOTS = [
  * `bash -ce`, `iex`, heredocs, comments, here-strings), because the old reading
  * caught them only by cutting at newlines. Anything that is not a multi-line
  * interpreter script is read exactly as before.
+ *
+ * Two more rules, read per shell (review 2026-09-25):
+ *  - The escape character is the shell's own: a backslash in bash, a backtick
+ *    in PowerShell. PowerShell does not treat a backslash as special, so
+ *    "C:\Users\" is a closed string there. Read as an escape, its closing quote
+ *    swallowed the `;` after it and hid the next command from the guard.
+ *  - A line that ends in that escape character, outside quotes and outside a
+ *    comment, continues on the next line. Both shells run the two lines as one
+ *    command, so they are read as one: bash drops the backslash and the line
+ *    break, PowerShell reads them as a space. Cut at the line break, a long
+ *    download or copy split over two lines had its destination read as a
+ *    command of its own, and the destination went unchecked.
  */
 function splitSegments(command, shell = 'bash') {
-  return splitJoiningInlineScripts(command, shell) ?? splitSegmentsByLine(command);
+  return splitJoiningInlineScripts(command, shell) ?? splitSegmentsByLine(command, shell);
 }
+
+/** Does an unquoted `#` at `i` start a comment? Only at the start of a word, in both shells. */
+const opensComment = (line, i) => line[i] === '#' && (i === 0 || /[\s;&|(]/.test(line[i - 1]));
+
+/** What a line continuation leaves in its place: nothing in bash, a space in PowerShell. */
+const continuationGap = (shell) => (shell === 'powershell' ? ' ' : '');
 
 /** Does the quote about to open here start an inline interpreter's script? */
 function opensInlineScript(before, shell) {
@@ -138,6 +156,8 @@ function splitJoiningInlineScripts(command, shell) {
       if (probe.trim() === heredoc.delim) heredoc = null;
       continue;
     }
+    let comment = false;
+    let continues = false;
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
       if (q) {
@@ -147,7 +167,13 @@ function splitJoiningInlineScripts(command, shell) {
         continue;
       }
       if (ch === "'" || ch === '"') { qInline = opensInlineScript(cur, shell); q = ch; cur += ch; continue; }
-      if (esc && ch === esc) { cur += ch + (line[i + 1] ?? ''); i++; continue; }
+      if (esc && ch === esc) {
+        if (i === line.length - 1 && !comment) { continues = true; break; }
+        cur += ch + (line[i + 1] ?? '');
+        i++;
+        continue;
+      }
+      if (opensComment(line, i)) comment = true;
       if (ch === '<' && line[i + 1] === '<') {
         const m = line.slice(i).match(/^<<(-?)\s*(?:"([^"]+)"|'([^']+)'|([A-Za-z_][\w-]*))/);
         if (m) {
@@ -181,6 +207,7 @@ function splitJoiningInlineScripts(command, shell) {
       joined = true;
       continue;
     }
+    if (continues) { cur += continuationGap(shell); continue; }
     if (cur.trim()) segs.push(cur);
     cur = '';
   }
@@ -189,8 +216,13 @@ function splitJoiningInlineScripts(command, shell) {
   return segs;
 }
 
-/** The original reading: every line is a fresh command. */
-function splitSegmentsByLine(command) {
+/**
+ * The original reading: every line is a fresh command, unless it ends in a
+ * line continuation (see splitSegments). The escape character is the shell's
+ * own; 'other' (cmd) keeps the backslash it always had.
+ */
+function splitSegmentsByLine(command, shell = 'bash') {
+  const esc = shell === 'powershell' ? '`' : '\\';
   const segs = [];
   let cur = '';
   let q = null;
@@ -204,16 +236,24 @@ function splitSegmentsByLine(command) {
       if (probe.trim() === heredoc.delim) heredoc = null;
       continue; // body is data, never a command
     }
+    let comment = false;
+    let continues = false;
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
       if (q) {
-        if (q === '"' && ch === '\\') { cur += ch + (line[i + 1] ?? ''); i++; continue; }
+        if (q === '"' && ch === esc) { cur += ch + (line[i + 1] ?? ''); i++; continue; }
         if (ch === q) q = null;
         cur += ch;
         continue;
       }
       if (ch === "'" || ch === '"') { q = ch; cur += ch; continue; }
-      if (ch === '\\') { cur += ch + (line[i + 1] ?? ''); i++; continue; }
+      if (ch === esc) {
+        if (i === line.length - 1 && !comment && shell !== 'other') { continues = true; break; }
+        cur += ch + (line[i + 1] ?? '');
+        i++;
+        continue;
+      }
+      if (opensComment(line, i)) comment = true;
       // Here-doc opener: << or <<- then a (possibly quoted) delimiter word.
       if (ch === '<' && line[i + 1] === '<') {
         const m = line.slice(i).match(/^<<(-?)\s*(?:"([^"]+)"|'([^']+)'|([A-Za-z_][\w-]*))/);
@@ -243,6 +283,7 @@ function splitSegmentsByLine(command) {
       }
       cur += ch;
     }
+    if (continues) { cur += continuationGap(shell); continue; }
     if (cur.trim()) segs.push(cur);
     cur = '';
   }
@@ -294,7 +335,9 @@ function tokenize(segment, shell) {
         tokens.push({ text: cur, legacy, alts: bashEscapes ? braceWords(text, lit.slice(0, end)) : [text] });
       } else {
         const words = bashEscapes && cur.includes('{') ? braceWords(cur, lit) : [cur];
-        if (words.length === 1 && words[0] === cur) tokens.push({ text: cur, legacy });
+        // `lit` rides along so a PowerShell comma list is split only at its
+        // unquoted commas (psList).
+        if (words.length === 1 && words[0] === cur) tokens.push({ text: cur, legacy, lit });
         else for (const w of words) tokens.push({ text: w, legacy: w });
       }
     }
@@ -576,10 +619,16 @@ function resolveStatic(target, root) {
   return { full: (drive + '/' + out.join('/')).toLowerCase() };
 }
 
-/** Claude's own memory folder, the one allowed exception. */
+/**
+ * Claude's own memory folder, the one allowed exception: a markdown file
+ * directly in ~/.claude/projects/<project>/memory/. Any folder called "memory"
+ * elsewhere under ~/.claude (skills, rules, commands, agents) used to match,
+ * and those load into every session on the machine (review 2026-09-25).
+ */
 function isMemoryFile(full) {
   if (!ALLOW_CLAUDE_MEMORY || !HOME) return false;
-  return full.startsWith(HOME + '/.claude/') && /\/memory\/[^/]+\.md$/.test(full);
+  const base = HOME + '/.claude/projects/';
+  return full.startsWith(base) && /^[^/]+\/memory\/[^/]+\.md$/.test(full.slice(base.length));
 }
 
 /** Is `full` inside `root` (or root itself)? Both must already be lowercased. */
@@ -626,33 +675,56 @@ function checkTarget(target, root, what, base = root) {
 // Which commands write, and where their targets are
 // ---------------------------------------------------------------------------
 
-// Every trailing positional is a destination.
-const BASH_WRITE_ALL = new Set(['tee', 'touch', 'mkdir', 'truncate', 'split']);
-// The LAST positional is the destination; earlier ones are sources (reads).
+// Every trailing positional is a destination. A delete counts as a write
+// (review 2026-09-25): `rm` of a file outside the folder was allowed while the
+// same delete written as an inline script was refused.
+const BASH_WRITE_ALL = new Set(['tee', 'touch', 'mkdir', 'truncate', 'split', 'rm', 'rmdir', 'unlink', 'shred']);
+// The LAST positional is the destination; earlier ones are sources, which cp,
+// install and rsync only read. A move takes its sources away from where they
+// were, so for mv every source is checked as well: moving a file INTO the
+// project from outside deletes it outside, and is refused. Copy it instead.
 const BASH_WRITE_LAST = new Set(['cp', 'mv', 'install', 'rsync']);
-// Flag-valued destinations: flag -> how to read the value.
+// Flag-valued destinations, read in every spelling the tools accept (review
+// 2026-09-25): `--name=V`, `--name V`, and a single-dash cluster holding one of
+// the `letters`, whose value is the rest of the word or, when the letter comes
+// last, the next word (`-oPATH`, `-sSLo PATH`, `-qO PATH`, `-CPATH`). A letter
+// in `stops` takes a value of its own, so the rest of the word is that value
+// and the cluster ends there: `-HAuthorization:x` is a header, not a file.
 const BASH_FLAG_TARGETS = {
-  curl: /^(-o|--output)$/,
-  wget: /^(-O|--output-document)$/,
-  tar: /^(-C|--directory)$/,
-  unzip: /^-d$/,
+  curl: { letters: 'o', stops: 'AbcCdDeEFHKmPQrtTuUwxXyYz', long: ['output', 'output-dir'] },
+  wget: { letters: 'OP', stops: 'aoiBetTwQlARDXIU', long: ['output-document', 'directory-prefix'] },
+  tar: { letters: 'C', stops: 'fTXbHVgILKNF', long: ['directory'] },
+  unzip: { letters: 'd', stops: 'xP', long: [] },
 };
+// cp, mv and install name their destination folder first with -t.
+const TARGET_DIR_FLAG = { letters: 't', stops: 'Smog', long: ['target-directory'] };
 // Programs that carry a whole script in an argument — scanned as text, since a
 // real parse is out of reach.
 const INLINE_SCRIPT = { node: /^(-e|--eval|-p|--print)$/, python: /^-c$/, python3: /^-c$/, py: /^-c$/, perl: /^-e$/, ruby: /^-e$/, deno: /^eval$/ };
 
 // PowerShell. Aliases included: `cp`/`mv`/`rni` really are Copy/Move/Rename-Item.
+// `mkdir` and `md` make folders, from PowerShell and from `cmd /c` alike, and
+// the delete cmdlets and their aliases count as writes (review 2026-09-25).
 const PS_WRITE_FIRST = new Set([
   'out-file', 'set-content', 'add-content', 'new-item', 'export-csv', 'export-clixml',
   'start-transcript', 'tee-object', 'sc', 'ac', 'ni', 'epcsv', 'tee',
   'compress-archive', 'expand-archive', 'invoke-webrequest', 'iwr', 'curl', 'wget',
+  'mkdir', 'md',
+  'remove-item', 'ri', 'rm', 'del', 'erase', 'rd', 'rmdir', 'clear-content', 'clc',
 ]);
 const PS_WRITE_LAST = new Set(['copy-item', 'move-item', 'rename-item', 'cpi', 'copy', 'cp', 'mi', 'move', 'mv', 'rni', 'ren']);
+// A move takes the file away from where it was, so its source is checked too.
+const PS_MOVES = new Set(['move-item', 'mi', 'move', 'mv']);
 // Parameters whose VALUE is a write destination.
 const PS_DEST_PARAMS = /^-(destination|newname|destinationpath|outfile|literalpath|path|filepath|outputfile|target)(:|=|$)/i;
-// For copy/move/rename, only these are destinations — `-Path` is the SOURCE, and
-// checking it refused copying a file INTO the project from outside.
+// For copy, rename and the two archive cmdlets, only these are destinations:
+// `-Path` is the SOURCE, a read, and checking it refused copying a file, or
+// unzipping an export, INTO the project from outside. A move's source is
+// checked on its own (PS_MOVES), because moving it away deletes it there.
 const PS_DEST_ONLY = /^-(destination|newname|destinationpath)(:|=|$)/i;
+// The source parameter of a copy, a move or an archive, with its aliases.
+const PS_SOURCE_PARAM = /^-(path|literalpath|pspath|lp)$/i;
+const PS_SOURCE_GLUED = /^-(?:path|literalpath|pspath|lp)[:=](.+)$/i;
 // Parameters whose value is content, not a path.
 const PS_VALUE_PARAMS = /^-(value|body|encoding|name|itemtype|filter|include|exclude|delimiter|separator)(:|=|$)/i;
 
@@ -1087,6 +1159,71 @@ function inlineScriptRisk(body, prog, root, base) {
   return null;
 }
 
+/**
+ * Every value a flag from `spec` is given (see BASH_FLAG_TARGETS): `--name=V`,
+ * `--name V`, and a single-dash cluster holding one of the letters before any
+ * letter that takes a value of its own; its value is the rest of the word, or
+ * the next word when the letter comes last.
+ */
+function flagValues(words, spec) {
+  const out = [];
+  for (let k = 0; k < words.length; k++) {
+    const t = words[k];
+    // Not isWord: a glued value may hold a space (`-o"C:/My Docs/x.zip"`).
+    if (t.redirect || (k > 0 && words[k - 1].redirect) || t.text === '') continue;
+    const next = words[k + 1] && !words[k + 1].redirect ? words[k + 1] : null;
+    const long = /^--([^=]+)(?:=(.*))?$/.exec(t.text);
+    if (long) {
+      if (!spec.long.includes(long[1])) continue;
+      if (long[2] !== undefined) out.push(long[2]);
+      else if (next) { out.push(next.text); k++; }
+      continue;
+    }
+    if (!/^-[^-]/.test(t.text)) continue;
+    let at = -1;
+    for (let i = 1; i < t.text.length && at < 0; i++) {
+      const c = t.text[i];
+      if (spec.letters.includes(c)) at = i;
+      else if (spec.stops.includes(c) || !/[A-Za-z0-9]/.test(c)) break;
+    }
+    if (at < 0) continue;
+    const glued = t.text.slice(at + 1);
+    if (glued) out.push(glued);
+    else if (next) { out.push(next.text); k++; }
+  }
+  return out;
+}
+
+/** Is the character at `i` of this token a plain, unquoted `c`? */
+const unquotedAt = (t, i, c) => i >= 0 && t.text[i] === c && !(t.lit && t.lit[i]);
+
+/**
+ * One PowerShell argument that is a comma list (review 2026-09-25): `a,b`,
+ * `a, b` and `a ,b` are one array of two paths, and each is judged on its own.
+ * Read whole, a list that began inside the project hid the paths after it.
+ * Starts at `first`, the word at index `k` of `words` (or a stand-in for a
+ * glued `-Param:value`), and returns every item, split at unquoted commas,
+ * plus the index of the last word the list used.
+ */
+function psList(first, words, k) {
+  const values = [];
+  let t = first;
+  for (;;) {
+    let cur = '';
+    for (let i = 0; i < t.text.length; i++) {
+      if (unquotedAt(t, i, ',')) { if (cur) values.push(cur); cur = ''; continue; }
+      cur += t.text[i];
+    }
+    if (cur) values.push(cur);
+    const next = words[k + 1];
+    if (!next || next.redirect || next.text === '') break;
+    if (!unquotedAt(t, t.text.length - 1, ',') && !unquotedAt(next, 0, ',')) break;
+    t = next;
+    k++;
+  }
+  return { values, end: k };
+}
+
 function checkSegment(tokens, root, shell, base) {
   // 1. Redirections, in either shell. `>&` / `&>` followed by a digit or `-` is
   //    a descriptor dup, not a file. Every word the target can be is checked
@@ -1191,6 +1328,16 @@ function checkSegment(tokens, root, shell, base) {
     }
   }
 
+  //    Flag-valued destinations, in either shell: Windows ships curl.exe and
+  //    tar.exe, so `tar -xf a.tar -C <folder>` runs from PowerShell too.
+  const flagSpec = BASH_FLAG_TARGETS[prog];
+  if (flagSpec) {
+    for (const v of flagValues(rest, flagSpec)) {
+      const reason = checkTarget(v, root, `\`${prog}\``, base);
+      if (reason) return reason;
+    }
+  }
+
   if (shell !== 'powershell') {
     // 3a. bash writers.
     if (BASH_WRITE_ALL.has(prog)) {
@@ -1202,6 +1349,24 @@ function checkSegment(tokens, root, shell, base) {
     }
     if (BASH_WRITE_LAST.has(prog)) {
       const ps = positionals(rest, shell);
+      if (prog === 'mv') {
+        for (const t of ps) {
+          const reason = checkTarget(t.text, root, '`mv`', base);
+          if (reason) return reason;
+        }
+      }
+      // `-t <folder>` names the destination first, and every word after the
+      // options is a source. Read as the last word, `cp -t <outside> a b`
+      // checked a source and `cp -t .tmp <outside file>` refused a copy INTO
+      // the project (review 2026-09-25). rsync's -t is --times, not a folder.
+      const dirs = prog === 'rsync' ? [] : flagValues(rest, TARGET_DIR_FLAG);
+      if (dirs.length > 0) {
+        for (const d of dirs) {
+          const reason = checkTarget(d, root, `\`${prog}\``, base);
+          if (reason) return reason;
+        }
+        return null;
+      }
       return ps.length >= 2 ? checkTarget(ps[ps.length - 1].text, root, `\`${prog}\``, base) : null;
     }
     // A link is a door out of the folder: check where it POINTS as well.
@@ -1230,16 +1395,7 @@ function checkSegment(tokens, root, shell, base) {
       }
       return null;
     }
-    const flagRe = BASH_FLAG_TARGETS[prog];
-    if (flagRe) {
-      for (let k = 0; k < rest.length; k++) {
-        if (isWord(rest[k]) && flagRe.test(rest[k].text) && rest[k + 1]) {
-          const reason = checkTarget(rest[k + 1].text, root, `\`${prog}\``, base);
-          if (reason) return reason;
-        }
-      }
-      return null;
-    }
+    if (flagSpec) return null; // read above, in either shell
     if (prog === 'npm' || prog === 'pnpm' || prog === 'yarn') {
       for (let k = 0; k < rest.length; k++) {
         if (isWord(rest[k]) && rest[k].text === '--prefix' && rest[k + 1]) {
@@ -1256,7 +1412,64 @@ function checkSegment(tokens, root, shell, base) {
   const isWriter = PS_WRITE_FIRST.has(prog) || PS_WRITE_LAST.has(prog);
   const linkish = prog === 'new-item' && rest.some((t) => /^(junction|symboliclink|hardlink)$/i.test(t.text));
   if (!isWriter && !linkish) return null;
-  const destOnly = PS_WRITE_LAST.has(prog);
+  // Compress-Archive and Expand-Archive read their -Path and write only to
+  // -DestinationPath, so they are read like a copy (review 2026-09-25):
+  // unzipping an export from Downloads into the project is a read plus an
+  // inside write, and was refused on Windows only.
+  const archive = prog === 'compress-archive' || prog === 'expand-archive';
+  const destOnly = PS_WRITE_LAST.has(prog) || archive;
+  const what = `\`${prog}\``;
+  const firstReason = (values) => {
+    for (const v of values) {
+      const reason = checkTarget(v, root, what, base);
+      if (reason) return reason;
+    }
+    return null;
+  };
+  // A glued `-Param:value`, as a word of its own, keeping its quote marks.
+  const gluedWord = (t, value) => ({ text: value, lit: t.lit && t.lit.slice(t.text.length - value.length) });
+
+  // Words that are not paths: the value of a content parameter (`-Value
+  // "C:\note.txt"`), of a common parameter (`-ErrorAction Stop`), and an
+  // archive's named source. Read as positionals, a trailing `-ErrorAction
+  // Stop` became a copy's destination and the real one went unchecked.
+  const skip = new Set();
+  let namedSource = false;
+  for (let k = 0; k < rest.length; k++) {
+    const t = rest[k];
+    if (!isWord(t) || !/^-/.test(t.text)) continue;
+    if (PS_SOURCE_GLUED.test(t.text)) namedSource = true;
+    const next = rest[k + 1];
+    if (!next || next.redirect || /[:=]/.test(t.text)) continue;
+    const source = archive && PS_SOURCE_PARAM.test(t.text);
+    if (source) namedSource = true;
+    if (source || PS_VALUE_PARAMS.test(t.text) || PS_COMMON_VALUE.test(t.text.slice(1).toLowerCase())) {
+      const list = psList(next, rest, k + 1);
+      for (let j = k + 1; j <= list.end; j++) skip.add(rest[j]);
+      k = list.end;
+    }
+  }
+  // The path words left, each comma list as one group of paths.
+  const isPath = new Set(positionals(rest, shell).filter((t) => !skip.has(t)));
+  const groups = [];
+  for (let k = 0; k < rest.length; k++) {
+    if (!isPath.has(rest[k])) continue;
+    const list = psList(rest[k], rest, k);
+    groups.push(list.values);
+    k = list.end;
+  }
+
+  // A move writes where it takes the file FROM, too: moving a file into the
+  // project from outside deletes it outside, and is refused. Copy it instead.
+  if (PS_MOVES.has(prog)) {
+    const sources = [];
+    for (let k = 0; k < rest.length; k++) {
+      const g = isWord(rest[k]) ? PS_SOURCE_GLUED.exec(rest[k].text) : null;
+      if (g) sources.push(...psList(gluedWord(rest[k], g[1]), rest, k).values);
+    }
+    const reason = firstReason([...sources, ...groups.flat()]);
+    if (reason) return reason;
+  }
 
   // Named parameters, including PowerShell's `-Param:Value` and `-Param=Value`.
   let sawNamedDest = false;
@@ -1267,33 +1480,36 @@ function checkSegment(tokens, root, shell, base) {
     const which = destOnly && !/^-target(:|=|$)/i.test(t.text) ? PS_DEST_ONLY : PS_DEST_PARAMS;
     if (!which.test(t.text)) continue;
     const glued = t.text.match(/^-[A-Za-z]+[:=](.+)$/);
-    if (glued) { named.push(glued[1]); sawNamedDest = true; continue; }
-    if (rest[k + 1] && !rest[k + 1].redirect) { named.push(rest[k + 1].text); sawNamedDest = true; }
-  }
-  if (sawNamedDest) {
-    for (const value of named) {
-      const reason = checkTarget(value, root, `\`${prog}\``, base);
-      if (reason) return reason;
+    if (glued) {
+      named.push(...psList(gluedWord(t, glued[1]), rest, k).values);
+      sawNamedDest = true;
+      continue;
     }
-    return null;
+    if (rest[k + 1] && !rest[k + 1].redirect) {
+      const list = psList(rest[k + 1], rest, k + 1);
+      named.push(...list.values);
+      k = list.end;
+      sawNamedDest = true;
+    }
   }
+  if (sawNamedDest) return firstReason(named);
 
-  // Positional fallback. Drop the value of any parameter that is content rather
-  // than a path, so `-Value "C:\note.txt"` is not read as a destination.
-  const skip = new Set();
-  for (let k = 0; k < rest.length; k++) {
-    if (isWord(rest[k]) && PS_VALUE_PARAMS.test(rest[k].text) && !/[:=]/.test(rest[k].text) && rest[k + 1]) {
-      skip.add(rest[k + 1]);
-    }
+  // Positional fallback.
+  if (archive) {
+    // The first word is the source, unless -Path or -LiteralPath named it, and
+    // every other word is a destination; with none, it lands in the current
+    // folder. Never only the LAST word: `-CompressionLevel Fastest` can end it.
+    const dests = namedSource ? groups : groups.slice(1);
+    return firstReason(dests.length > 0 ? dests.flat() : ['.']);
   }
-  const ps = positionals(rest, shell).filter((t) => !skip.has(t));
-  if (ps.length === 0) return null;
-  if (destOnly) return checkTarget(ps[ps.length - 1].text, root, `\`${prog}\``, base);
-  for (const t of ps) {
-    const reason = checkTarget(t.text, root, `\`${prog}\``, base);
-    if (reason) return reason;
-  }
-  return null;
+  if (groups.length === 0) return null;
+  if (destOnly) return firstReason(groups[groups.length - 1]);
+  // The first word is the path, checked in full. A later word is usually the
+  // content (`Set-Content x.txt $text`), so one built at run time is passed
+  // over there; a literal path that points outside is still refused.
+  const reason = firstReason(groups[0]);
+  if (reason) return reason;
+  return firstReason(groups.slice(1).flat().filter((v) => !resolveStatic(v, base.toLowerCase()).dynamic));
 }
 
 const BASH_SHELLS = new Set(['bash', 'sh', 'zsh', 'dash']);
@@ -1519,6 +1735,22 @@ function analyze(command, shell, root, depth = 0, cwd = root) {
 const SHELL_BY_TOOL = { Bash: 'bash', PowerShell: 'powershell', Monitor: 'bash' };
 const FILE_TOOLS = new Set(['Write', 'Edit', 'NotebookEdit']);
 
+/**
+ * Where a RELATIVE path starts: the session's current folder (the payload's
+ * cwd), which Claude Code keeps between calls and also resolves a relative
+ * Write path from. The root does not move and stays the only place a write
+ * may land. Starting at the root instead refused `../plans/x.md` from a
+ * subfolder, and allowed a relative write after the shell had moved into an
+ * added working folder (review 2026-09-25). No cwd, or one that cannot be
+ * proven, starts at the root, as before.
+ */
+function startDir(payload, root) {
+  const c = payload && payload.cwd;
+  if (typeof c !== 'string' || !c.trim()) return root;
+  const r = resolveStatic(c, root.toLowerCase());
+  return r.dynamic || !r.full ? root : r.full;
+}
+
 export function verdict(payload) {
   if (!payload || typeof payload !== 'object') return null;
   const root = projectRoot(payload);
@@ -1526,14 +1758,14 @@ export function verdict(payload) {
   if (FILE_TOOLS.has(payload.tool_name)) {
     const file = payload.tool_input && (payload.tool_input.file_path ?? payload.tool_input.notebook_path);
     if (typeof file !== 'string' || file.length === 0) return null;
-    return checkTarget(file, root, `the ${payload.tool_name} tool`);
+    return checkTarget(file, root, `the ${payload.tool_name} tool`, startDir(payload, root));
   }
 
   const shell = SHELL_BY_TOOL[payload.tool_name];
   if (!shell) return null;
   const command = payload.tool_input && payload.tool_input.command;
   if (typeof command !== 'string' || command.length === 0) return null;
-  return analyze(command, shell, root);
+  return analyze(command, shell, root, 0, startDir(payload, root));
 }
 
 function main() {
@@ -1547,7 +1779,8 @@ function main() {
   if (reason) {
     process.stderr.write(
       `path-guard: blocked - ${reason}. Every file this project writes stays inside the project folder ` +
-        "(CLAUDE.md rule 12). Scratch files go in the project's own .tmp/ folder. " +
+        '(CLAUDE.md, the rule "Every file you write stays inside the project root"). ' +
+        "Scratch files go in the project's own .tmp/ folder. " +
         'If the owner explicitly asked for a write outside it, ask them to do it themselves.\n'
     );
     return BLOCK;

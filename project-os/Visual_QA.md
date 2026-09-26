@@ -12,8 +12,14 @@ behavior still be wrong. `project-os/Code_review.md` is the other half.
 
 ## When a pass runs
 
-Whenever a change alters something a person can see or do, and any time
-{{OWNER_NAME}} asks for a sweep.
+Two different checks load this file. Say which one you are running.
+
+The check after a task that changed something visible is `project-os/Workflow.md`
+step 9. It borrows this file's method and severity bar, scaled to the change. It
+fixes its own findings in the fix loop and writes no task document.
+
+The full pass runs when {{OWNER_NAME}} types `GO visual qa` or asks for a sweep.
+Only that pass delivers the task document below.
 
 **Drive the screens the change actually reaches**, plus their neighbors for
 regression. Map the changed code to the screens it renders and start there. Do not
@@ -167,9 +173,10 @@ action to perform:
 
 1. **Past QA passes and bug reports** — the interaction defects that keep coming
    back.
-2. **`project-os/History.md`** — bugs that recurred or took several attempts: lost
-   focus, hijacked undo, deletions that came back, a save that bricked. Highest
-   value; these are almost always blocking.
+2. **`project-os/BugAtlas.md`, then `project-os/History.md`**: the atlas rows
+   first, then bugs that recurred or took several attempts: lost focus, hijacked
+   undo, deletions that came back, a save that bricked. Highest value; these are
+   almost always blocking.
 3. **`project-os/Decisions.md`** — the visual and behavioral invariants past
    choices implied. The theme model, the text direction, the autosave contract, the
    empty-state rule.
@@ -180,7 +187,7 @@ action to perform:
 
 ## Output — findings as small, executable tasks
 
-Two layers, same as a code review:
+Two layers, for the full pass, same as a code review:
 
 1. **The reply** — terse: counts by severity, screens driven, headline findings,
    and whether the pass ran fully or fell back to a manual check.
@@ -203,26 +210,32 @@ When one root cause produces findings on five screens, write the root cause once
 and point the five at it — fixing the root closes them all. Keep each task small
 enough to run on its own, and write it for someone with no context.
 
-## Exceptions — settled, never raise again
+## Exceptions: settled until their raise-again condition is met
 
 **Empty on purpose.** When {{OWNER_NAME}} rejects a finding — it was intentional,
 or it was a transition artifact, or that screen is not designed yet — one line
-lands here and no later pass raises it again. Without this section every sweep
-re-reports the same non-bug, and the owner pays for it every time.
+lands here and no later pass raises it again unless its raise-again condition
+comes true. Without this section every sweep re-reports the same non-bug, and the
+owner pays for it every time. Without the condition, a defect stays silenced
+forever, even after the screen changes enough to make it a real one.
 
 One row each: what not to report · the reason in the owner's own words · where it
-was raised.
+was raised · raise again if: the change that would make it a real defect again
+(for example, the screen gets its final design, or the control starts saving
+data).
 
 ## Calibration loop
 
 After every pass, fold the verdict back into this file. The verdict vocabulary is
 **fix / drop / backlog**.
 
-- A **rejected** finding becomes an exception row above, or the check gets dropped.
+- A **rejected** finding becomes an exception row above, with its raise-again
+  condition, or the check gets dropped.
 - A **new rule** ("always exercise X") becomes a row under the right dimension.
 - A **severity change** is edited into the row inline.
-- A **recurring interaction bug** gets its full record in `project-os/History.md`;
-  this file keeps a one-line pointer.
+- A **recurring interaction bug** gets its row in `project-os/BugAtlas.md`
+  (`CLAUDE.md` rule 19; History keeps the fix row); this file keeps a one-line
+  pointer to that atlas row.
 - A **pre-existing** defect the change only sits next to gets flagged and marked
   pre-existing, never fixed silently and never blocking. A `backlog` verdict sends
   it to `project-os/Backlog.md`.

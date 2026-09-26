@@ -11,15 +11,22 @@ did that change do, and how do I undo it".
 - **After every completed change**, add one scan row AND one appendix row. Both,
   in the same change that did the work.
 - **One change = one row.** Not one row per file, not one row per session. A log
-  that has to be reassembled from fragments is a log nobody reads.
+  that has to be reassembled from fragments is a log nobody reads. A FAST MODE
+  burst counts as one change: one scan row and one appendix row for the whole
+  burst, written when the mode ends (`CLAUDE.md`, FAST MODE).
 - Write the scan row for a reader who was not there. Name the behavior that
   changed, not the files.
-- Keep appendix rows short — a few lines, not an essay. The full story is in the
+- Keep appendix rows short: about 900 characters at most, since
+  `project-os/Archive-old-rows.ps1` warns above that. The checks cell still lists
+  every check (CLAUDE.md rule 7); it is the story that stays out. The full story is in the
   commit diff; a real decision belongs in `project-os/Decisions.md`.
-- Record the commit SHA from **before** the change. That is the rollback target.
-  Before the project's first commit there is no SHA yet. Write `none yet`
-  there instead, and make Rollback say how to undo the change by hand: what to
-  delete, or what to put back and from which backup.
+- **Commit before** names the last commit when the task started, followed by
+  `(uncommitted)`: the work waits for the next `Go commit`, which bundles it
+  with every other task since the last one. Before the project's first commit,
+  write `none yet`.
+- **Rollback** says how to undo THIS task by hand: which files, and what to
+  take out or put back. Never a whole-file checkout, a reset or a `git revert`
+  while later rows touch the same files, since that undoes their work too.
 - Never rewrite or delete a past row. Correct a wrong one by adding a new row —
   an edited log cannot be trusted about anything.
 - A `medium` or `high` risk row names its review result under **What was
@@ -46,7 +53,6 @@ Newest at the bottom.
 
 | Date | Area | What changed |
 |---|---|---|
-| | | |
 
 ## Appendix — deep rows
 
@@ -54,7 +60,6 @@ Newest at the bottom, same as the scan log.
 
 | Date | Task | What changed | What was checked | Result | Risk | Commit before | Rollback |
 |---|---|---|---|---|---|---|---|
-| | | | | | | | |
 
 ---
 
@@ -70,4 +75,4 @@ Appendix:
 
 | Date | Task | What changed | What was checked | Result | Risk | Commit before | Rollback |
 |---|---|---|---|---|---|---|---|
-| YYYY-MM-DD | Show a failed-login error | `login.ts` returns the failure reason; the form renders it under the password field and clears it on input. No change to what the server logs. | Wrong password → message shown, no console error. Right password → still signs in. Empty password → field-required message, request not sent. Reloaded, retried: no stale message. Review: 2 findings, both fixed (the message survived a route change; the error was announced twice to screen readers). 1 pre-existing flagged: rate limiting is still per-process. | Pass | medium | `a1b2c3d` | `git revert` the commit; nothing persisted, no migration to undo. |
+| YYYY-MM-DD | Show a failed-login error | `login.ts` returns the failure reason; the form shows it under the password field. | Wrong password: message shown. Right password: signs in. Review: 2 found, 2 fixed, 1 pre-existing flagged. | Pass | medium | `a1b2c3d` (uncommitted) | Remove the failure-reason return in `login.ts` and the error line in the form; nothing persisted. |

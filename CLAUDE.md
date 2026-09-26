@@ -40,14 +40,20 @@ Read this file first. Then the docs in `project-os/`, in this order:
 3. `project-os/QA.md` — what must be checked before anything is called done.
 4. `project-os/Conversations.md` — how you write replies. Every reply, not just
    report-backs.
-5. `project-os/History.md` — what changed recently. Read the newest rows at task
-   pickup so you do not undo yesterday's fix.
-6. `project-os/Decisions.md` — why non-obvious choices were made. Read the index,
-   then open only the entries your task touches.
+5. `project-os/History.md`: what changed recently, so you do not undo
+   yesterday's fix. Read the Scan log only: find the `## Appendix` heading and
+   read everything above it; the newest rows sit just above that heading. Open
+   an Appendix row only when you need its detail or its rollback.
+6. `project-os/Decisions.md`: why non-obvious choices were made. Read from the
+   top down to the end of the `## Index` list, and stop at the first entry
+   heading below it (`## ` and a date). Open a full entry, or its copy in
+   `Decisions-archive.md`, by searching for its heading, and only the entries
+   your task touches.
 7. `project-os/Backlog.md` — the owner's open-items list. Scan it at pickup and
    flag any open item your task touches.
 8. `project-os/Code_review.md` — the calibration for reviewing risky changes.
-   Load it when a review is due (rule 17).
+   Load it when a review is due (rule 17), and for its blast-radius trace when
+   a change touches something shared, at any risk level.
 9. `project-os/Visual_QA.md` — how the running app gets tested by using it. Load
    it when the task changes something a person can see.
 10. `project-os/BugAtlas.md` — the project's recurring bug classes. Load it
@@ -81,6 +87,17 @@ restart is needed, and then do what was asked. "There is no Figma here" is not
 an answer, it is the moment the setup begins.
 
 ## Working rules
+
+**When two rules pull different ways.** The owner's words in this chat win, for
+the task at hand. A named shortcut below (`FAST MODE`, `Go commit` and the
+rest) wins over the general workflow where the two differ. Rules 4, 12, 21 and
+22 and the two guards give way to neither: they bend only where their own text
+says so. A new standing ask from the owner is written into the rule that owns
+it, the way rule 20 does it, never left in chat.
+
+**The numbers are fixed.** Files in `project-os/` point to rules 1 to 22 by
+number, so never renumber, drop or interleave them. A rule this project adds
+later goes after rule 22.
 
 ### 1. Understand before changing
 
@@ -129,7 +146,7 @@ destructive command unless the owner asked for it and the way back is clear. The
 cost of asking is one message; the cost of being wrong is unbounded.
 
 **Archiving is not rewriting.** Every file in `project-os/` that accumulates
-forever has a ceiling, and two scripts enforce it by MOVING old material into a
+forever has a ceiling, and one script enforces it by MOVING old material into a
 sibling `*-archive.md` that is not read by default:
 
 - `project-os/Archive-old-rows.ps1` — one script, three engines: History deep rows and
@@ -139,10 +156,10 @@ sibling `*-archive.md` that is not read by default:
   feature's.
 
 It is move-only, idempotent and dedup-safe: an entry is relocated byte for
-byte, never edited, summarized, renumbered or deleted, so running them twice
+byte, never edited, summarized, renumbered or deleted, so running it twice
 changes nothing. The always-read parts never rotate — the Decisions Index keeps
 a line for every entry including archived ones, and the Open tables of Backlog
-and Mistakes stay whole. They run at `Go commit`. What still needs the owner's
+and Mistakes stay whole. It runs at `Go commit`. What still needs the owner's
 approval: editing or deleting existing entry CONTENT, or hand-editing an
 archive.
 
@@ -160,6 +177,11 @@ delete on your own, whatever the kind says.
 Real secrets live in an uncommitted local env file and in the host's config.
 Commit only an example file with the key names and no values. A secret in git
 history is a secret you cannot take back.
+
+**If a key leaks anyway**, into git, a reply, a log or a shared file, tell the
+owner at once, in plain words. The key is rotated at its provider, since
+removing it from the files does not switch it off. Rewriting git history to
+remove it is the owner's call (rule 4).
 
 ### 6. Verify in a real browser
 
@@ -188,9 +210,9 @@ one and finish the pass in the same task. Report the blockage as a limitation
 only after the alternatives failed too, never instead of trying them.
 
 **A dead app is the same case.** If the address will not load, the check is not
-impossible, it is waiting on one command from the owner. Ask them to start the
-server and say so in the reply (rule 16); never treat a down server as the end
-of the browser pass.
+impossible, it is waiting on the server. Rule 16 says who starts the server;
+follow it and say so in the reply. Never treat a down server as the end of the
+browser pass.
 
 **Every project has a browser tool, by install.** The install (Installation.md
 6d) notes what the session already has, the desktop app's built-in pane or the
@@ -210,7 +232,7 @@ too old (20.19 or newer, 22.12 or newer on the 22 line).
 
 **Close every tab you opened, in the same task.** A QA tab is yours, not the
 owner's; left behind, it clutters the window they work in. Never close a tab
-you did not open, and never stop the owner's dev server (rule 16).
+you did not open, and never stop a dev server you did not start (rule 16).
 
 ### 7. QA is not optional
 
@@ -219,16 +241,20 @@ Name the screen, the input, the expected result. "Tested", "verified", and "look
 good" record nothing and are not accepted.
 
 `project-os/QA.md` holds the standing checklist. The written record goes in
-History; the chat reply is different — a passing check the owner already expects
-is not news, so mention a check in the reply only when it failed or surprised
-you.
+History: every check and its result. The chat reply is different. A passed
+check or a clean review is not news, so the reply names only a check that
+failed or could not run, the Path B or Path C outcome of the browser check
+(`project-os/Workflow.md` step 9), and review findings waiting for the
+owner's verdict.
 
 ### 8. Every completed change adds a History row
 
 The two rows `project-os/History.md` asks for — a scan line and an appendix row —
 every time, code or docs; that file shows the shape. Say what changed, what was
-checked, which files, and how to undo it. Keep it short — a row is an index
-entry, not an essay. The full story is in the commit diff.
+checked, which files, and how to undo this one task by hand: which files, and
+what to put back. One `Go commit` can carry several tasks, so reverting the
+commit would undo them all. Keep it short: a row is an index entry, not an
+essay. The full story is in the commit diff.
 
 Without this, every session starts from zero and the same ground gets re-covered.
 
@@ -289,6 +315,9 @@ lives outside the project root, so a rule parked there is invisible to the
 owner, absent from git, and lost to every other session. A lesson or work rule
 the owner gives goes into `CLAUDE.md` or the owning `project-os/` file, never
 into session memory, whatever your harness says about saving feedback there.
+The folder guard lets markdown into that one folder because the harness writes
+there; that is not permission, and it cannot tell a note from a rule, so
+keeping rules out is on you.
 
 ### 13. Ad-hoc markdown gets a home folder
 
@@ -388,7 +417,8 @@ unverified.
 
 State the risk level at pickup — low, medium, or high. The scale itself lives in
 one place, `project-os/Workflow.md` step 2, so it cannot drift; the short of it
-is that behavior is medium, and data or a rule-11 invariant is high.
+is that behavior is medium, and data, or anything that touches a rule-11
+invariant, is high.
 
 The owner can override your call; their rating wins.
 
@@ -396,10 +426,15 @@ Saying the level out loud sets what scrutiny the change earns before the work
 starts, instead of arguing about it afterwards.
 
 Medium or high arms an automatic review: once the change passes its own QA, run
-the pass in `project-os/Code_review.md` against your own diff. Fix every finding
+the pass in `project-os/Code_review.md` against this task's own edits, the ones
+its History row lists. One `Go commit` can carry several tasks, so other
+uncommitted or unpushed work belongs to earlier tasks and counts as
+pre-existing. Fix every finding
 your change introduced, then re-verify each fix — in the browser if it is
 user-visible. Findings that were already there are reported, not fixed; they wait
-for the owner's verdict. The task is not done until the review has run.
+for the owner's verdict. The task is not done until the review has run. Its
+result goes in the History row; the reply names only the findings that wait for
+the owner's verdict.
 
 That review covers two questions, not one: whether the changed code is correct,
 and **where else the change can reach**. The diff shows what you edited, never who
@@ -453,8 +488,9 @@ When the owner corrects HOW you worked, a broken rule, a decision that was
 theirs, a skipped step, an assumption, add one row to
 `project-os/Mistakes.md` in the same reply, before the work continues.
 When the same slip happens a second time, it stops being a row: write the
-rule into the file that owns that behavior and retire the row. That file
-carries the map of which file owns what.
+rule into the file that owns that behavior and move the row to Promoted,
+naming that file. `project-os/Mistakes.md` carries the map of which file owns
+what.
 
 Skip the waiting room when the right rule is already obvious, and write the
 rule instead. Skip it entirely for a product opinion the owner simply
@@ -533,7 +569,8 @@ Deliver findings as a terse chat summary in the reply format
 document under the project's notes folder. Per finding the owner's verdict
 vocabulary is **fix / drop / backlog**; a `backlog` verdict adds the item to
 `project-os/Backlog.md`, and a `drop` is recorded in the calibration doc's
-exceptions so a later pass never raises it again.
+exceptions, with the condition that would make it worth raising again, so a
+later pass skips it until that condition is met.
 
 ### `Go code review`
 
@@ -563,9 +600,8 @@ Run the pass in `project-os/Visual_QA.md`.
 
 1. **Read that file first** and load its calibration: what counts as a defect
    here, the always-look-for list, the method.
-2. **Drive the running app**, one browser tab, on the app the owner already has
-   running (rule 16). Never start a second server, and never run several
-   browser-driving agents at once.
+2. **Drive the running app** in one browser tab (who starts it: rule 16).
+   Never run several browser-driving agents at once.
 3. **Pin scope** to the screens the recent work renders, plus their neighbours.
    A full sweep of every screen only when the owner asks for one.
 4. **Per screen: every state and every way out.** Empty, loading, error, full.
@@ -613,7 +649,7 @@ While it is on:
   the History rows (rule 8), and the rule-17 auto review.
   The owner's own check replaces them.
 - Everything else still holds: smallest safe change (rule 2), no destructive
-  actions (rule 4), invariants (rule 11), never start the dev server (rule 16).
+  actions (rule 4), invariants (rule 11), the dev server rule (rule 16).
 - End every reply with a divider and then the line `Fast mode on`, alone.
 
 How it ends: `FAST OFF`, plain words ("exit fast mode"), the `Go commit`
@@ -621,10 +657,11 @@ shortcut (which ends it by itself, first thing, without asking), or the
 conversation simply ending, since the mode never carries into a new chat.
 
 The skipped paperwork is deferred, not erased. The moment the mode ends, run
-the catch-up before anything else: ONE History row covering the whole burst,
-any Decisions entry the burst produced, any Backlog row an owner verdict
-earned. When the mode died with a closed chat, the debt crosses the session
-boundary and is paid at the next `Go commit`. The trigger is the DEBT, never
+the catch-up before anything else: one scan row and one appendix row covering
+the whole burst (rule 8), not one per round, any Decisions entry the burst
+produced, any Backlog row an owner verdict earned. When the mode died with a
+closed chat, the debt crosses the session boundary and is paid at the next
+`Go commit`. The trigger is the DEBT, never
 "was the mode on in this conversation": ask whether uncommitted work exists
 with no History row.
 
@@ -636,21 +673,9 @@ If a round left something genuinely unverified, say so in one line.
 
 Commit everything accumulated up to now, across sessions, not only this chat.
 
-> **Setup step — calibrate this flow at install, then delete this block.**
-> Ask the owner: which checks must pass before a commit, and whether
-> committing straight to the current branch is allowed or each task gets its
-> own branch. What is never staged is NOT a question: step 5 carries the list,
-> and an owner who is not a developer cannot answer it. Who pushes is
-> not a question: the owner does, always (rule 22). Who COMMITS and WHEN are
-> not questions either: you do, on the owner's `Go commit` and never before
-> it, and no answer in this batch changes that. If the owner says they prefer
-> to commit themselves, that is a clash for the report, not a line you write
-> into this flow.
-> Write the answers into the steps, replacing the bracketed parts.
-> Until they answer, this block STAYS and the bracketed parts stay bracketed.
-> A commit policy copied from another project is a decision nobody made.
-
-1. If FAST MODE is on, end it and pay its catch-up in full, first.
+1. If FAST MODE is on, end it. Then, whether or not it was on in this chat,
+   look for uncommitted work that has no History row (a fast burst whose chat
+   closed) and pay the fast-mode catch-up for it in full, first.
 2. **Rotate the growing docs**, so the live files stay cheap to read. One
    script does every file (add `-DryRun` for a preview that writes nothing):
 
@@ -671,13 +696,18 @@ Commit everything accumulated up to now, across sessions, not only this chat.
    this step silently, and never report it as done when it did not run.
 
    Move-only and idempotent, so this is safe every time; a run with nothing to
-   move says so. It comes after step 1 on purpose, so the fast-mode catch-up row
-   is already in the file before rotation decides what is old. Stage whatever
-   they changed with the rest.
+   move says so. It comes after step 1 on purpose, so the fast-mode catch-up rows
+   are already in the file before rotation decides what is old. Stage whatever
+   it changed with the rest.
 3. If the folder is not a git repository yet
    (`git rev-parse --is-inside-work-tree` fails), run `git init -b main` first
    and say so in one line of the report; it is local, and deleting `.git`
-   undoes it. Never create a GitHub repository and never add a remote. If the
+   undoes it. Before the first stage, make sure `.gitignore` names the env
+   files (`.env*` plus `!.env.example`) and every dependency or build folder
+   that exists here (from the list at the top of
+   `project-os/Backup-whole-project.ps1`). Add only the lines that are missing,
+   never a folder git already tracks, and say so in the same report line.
+   Never create a GitHub repository and never add a remote. If the
    commit stops because git has no name or email on this computer, ask the
    owner for their name and email, then set them for this repository only
    (`git config user.name` and `git config user.email`, never `--global`), and
@@ -686,16 +716,19 @@ Commit everything accumulated up to now, across sessions, not only this chat.
 3b. **List the heavy things** (rule 4): `node project-os/Find-heavy-files.mjs`. Anything
    it prints goes in the commit report, size and kind beside the path, for the
    owner to delete or keep. It deletes nothing and never blocks the commit.
-4. Run the project checks [`{{CHECK_COMMAND}}`] and continue only if they
-   pass. A red check stops the commit; report it instead.
+4. Run the project checks `{{CHECK_COMMAND}}` and continue only if they
+   pass. A red check stops the commit; report it instead. When "Where things
+   are" marks the check "nothing to run before step N" or "none yet", run
+   nothing, say so in one line of the report, and commit without it; the step
+   that creates the check removes that mark.
 5. Stage the intended files only. Never a blind add-everything, and never any
    of these, in any project: env files and anything holding a secret or a key,
    the `backups/` folder, the `.tmp/` scratch folder and `*.tmp` leftovers,
    dependencies and build output, and the assistant's personal settings
-   (`.claude/settings.local.json`). If the project needs one more kept out,
-   the owner says so once and it joins this list.
-6. Commit with a clear message covering the full scope, [on the current
-   branch / on a task branch, per the owner's answer].
+   (`.claude/settings.local.json` and its `.backup` copy). If the project
+   needs one more kept out, the owner says so once and it joins this list.
+6. Commit with a clear message covering the full scope, on the current
+   branch.
 7. STOP after the commit. The owner pushes, every time (rule 22). Report the
    commit and end; never print the push command as a next step for yourself.
 
@@ -709,9 +742,10 @@ disaster recovery that depends on no git host and no sync folder. Flow:
    folders named in its setup block, the assistant's machine-local folders, the
    `.tmp/` scratch folder and the env files (`.env*`, `.dev.vars*`; the
    `.env.example` and `.dev.vars.example` templates travel). Any other key file
-   inside the project travels in the ZIP, so keep keys outside the project. It
-   either verifies every file back out of the finished archive or fails and
-   leaves no ZIP at all; there is no "mostly worked".
+   inside the project travels in the ZIP, so keep keys outside the project.
+   Every file name is checked in the finished archive (names, not content).
+   The run either passes that check or fails and leaves no ZIP at all; there
+   is no "mostly worked".
 2. The ZIP lands in `backups/` at the project root, which is gitignored.
 3. Never commit or push a ZIP.
 4. Tell the owner to move the ZIP to external storage; a backup on the same

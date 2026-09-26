@@ -12,23 +12,20 @@ and this file is the only place that remembers them.
 ## When a review runs
 
 Every medium- or high-risk change gets one; `project-os/Workflow.md` carries the
-risk scale and the trigger. {{OWNER_NAME}} can also ask for a wider pass at any
-time.
+risk scale and the trigger. A change to something shared gets the blast-radius
+trace below at any risk level, even when the rest of the review does not run.
+{{OWNER_NAME}} can also ask for a wider pass at any time.
 
 ## Scope — pin it, never guess
 
 **Two different passes load this file, and their scopes are opposites.** Say
 which one you are running, before you run it.
 
-**The automatic pass after a task: that task's own change.** Two parts, and each
-one is easy to lose:
-
-- work that is already committed but not yet shipped;
-- work still sitting uncommitted in the project folder.
-
-Anything that defaults to "uncommitted changes only" will report a clean tree when
-the real change was committed an hour ago. That is a silent empty review. Name the
-range in the report so an empty result can be trusted.
+**The automatic pass after a task: the edits this task made**, the files its
+History row will list. Other unpushed or uncommitted work in the folder belongs to
+earlier tasks, since one `Go commit` bundles several: a problem found there counts
+as pre-existing, reported and never fixed. Name the files reviewed, so an empty
+result can be trusted.
 
 **The `Go code review` trigger: the WHOLE REPOSITORY, every time.** The entire
 codebase as it stands, including code that shipped long ago and code nobody has
@@ -57,7 +54,9 @@ whole product reads: a component, a token, a spacing or type value, a schema, a
 helper. Touching one arms this trace even when the edit is one line and the risk
 was called low. The rating measures the size of the edit; this section measures
 its reach, and those are not the same question. When it fires, open the other
-places the thing appears, and report what moved there.
+places the thing appears, and report what moved there. On a low-risk task this
+trace runs alone, without the rest of the review, and its impact class goes in
+the History row.
 
 Trace the consumers of everything the change touched:
 
@@ -139,7 +138,8 @@ The spine of the always-check list. Add or drop dimensions to fit what this
 project actually is. For each one, the question to ask:
 
 - **Change impact / blast radius**: who else consumes what this change touched,
-  and does it still hold there? (The section above; run it on medium+ risk.)
+  and does it still hold there? (The section above; run it on medium+ risk, and
+  on any change to something shared.)
 - **Data & persistence integrity** — can this change silently lose, corrupt, or
   half-write stored data? Are writes atomic, and are reads validated and loud on
   failure?
@@ -189,8 +189,9 @@ that the rows feel stale. Sweep these five sources and dedupe what they give you
 into rows:
 
 1. **Past review documents** — the finding-classes that keep coming back.
-2. **`project-os/History.md`** — bugs that recurred, or took several attempts to
-   fix. The highest-value source by far; these are almost always blocking.
+2. **`project-os/BugAtlas.md`, then `project-os/History.md`**: the atlas rows
+   first, then bugs that recurred or took several attempts to fix. The
+   highest-value source by far; these are almost always blocking.
 3. **`project-os/Decisions.md`** — choices that imply a review rule. "All writes
    are atomic", "schema changes are additive only", "one module owns this map".
 4. **The code** — the real save path, the validation boundary, the single-source-of-
@@ -204,7 +205,10 @@ A review's deliverable is a list someone can run top to bottom, not a wall of pr
 Two layers:
 
 1. **The reply** — terse: counts by severity, the range reviewed, the headline
-   findings. `project-os/Conversations.md` has the reply rules.
+   findings. `project-os/Conversations.md` has the reply rules. The automatic
+   pass after a task is the exception: its result goes in the History row, and
+   the reply names only the findings that wait for the owner's verdict
+   (`project-os/Workflow.md` step 12).
 2. **The task document** — one file per review, one section per severity (🔴
    first), one block per finding:
 
@@ -221,25 +225,31 @@ Keep each task small enough to execute on its own; split anything bigger into
 numbered sub-tasks. Write it for a reader with no context — {{OWNER_NAME}}, or a
 fresh assistant tomorrow — who should not have to re-read the change to act on it.
 
-## Exceptions — settled, never raise again
+## Exceptions: settled until their raise-again condition is met
 
 **Empty on purpose.** When {{OWNER_NAME}} rejects a finding, one line lands here,
-and no later review raises it again. Without this section every pass re-litigates
-the same argument, and the owner pays for it every time.
+and no later review raises it again unless its raise-again condition comes true.
+Without this section every pass re-litigates the same argument, and the owner pays
+for it every time. Without the condition, a finding stays silenced forever, even
+after the code under it changes enough to make it a real bug.
 
 One row each: what not to flag · the reason in the owner's own words · where it
-was raised.
+was raised · raise again if: the change that would make it a real finding again
+(for example, the code it rests on is rewritten, or a second screen starts
+using it).
 
 ## Calibration loop
 
 After every review, take the verdict and fold it back into this file. The verdict
 vocabulary is **fix / drop / backlog**.
 
-- A **rejected** finding becomes an exception row above, or the check gets dropped.
+- A **rejected** finding becomes an exception row above, with its raise-again
+  condition, or the check gets dropped.
 - A **new rule** ("always check X") becomes a row under the right dimension.
 - A **severity change** is edited into the row inline.
-- A **recurring bug** gets its full record in `project-os/History.md`; this file
-  keeps a one-line pointer.
+- A **recurring bug** gets its row in `project-os/BugAtlas.md` (`CLAUDE.md` rule
+  19; History keeps the fix row); this file keeps a one-line pointer to that atlas
+  row.
 - A **pre-existing** problem the change only sits next to gets flagged and marked
   pre-existing — never fixed silently, never blocking the change. A `backlog`
   verdict sends it to `project-os/Backlog.md`.

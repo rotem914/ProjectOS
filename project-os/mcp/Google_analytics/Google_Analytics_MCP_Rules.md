@@ -10,8 +10,10 @@ directly instead of the owner exporting screenshots by hand.
 
 ## 0. Setup facts
 
-> **Setup step — fill this table during install, then delete this block.**
-> Until the wiring exists, leave the honest state ("not wired yet") and flag it.
+> **Setup step: fill this table once the server is connected, then delete this block.**
+> Until then, leave the honest state ("not wired yet"). The Cloud project, the
+> service account and the GA4 property are asked at the first analytics
+> request, not at install.
 
 | Fact | Value |
 |---|---|
@@ -33,22 +35,26 @@ read, and then answer the question that was asked.
   environment at `project-os/mcp/Google_analytics/.venv/`. Self-contained: nothing
   system-wide, no `pipx` or `uv` needed.
 - **Registration**: `.mcp.json` at the repo root, server name
-  `google-analytics`, pointing at the absolute path of the venv launcher, so
-  the server starts with the assistant in this project only.
+  `google-analytics`, pointing at the absolute path of the venv launcher
+  (`.venv/Scripts/analytics-mcp.exe` on Windows, `.venv/bin/analytics-mcp` on
+  macOS or Linux; a clone on the other system changes that part of the path
+  too), so the server starts with the assistant in this project only.
 - **Not in git, for two different reasons.** `.venv/` is gitignored because it
   is ~100 MB of regenerable dependencies (rebuild recipe in §4). `.mcp.json` is
   gitignored because it names the key file's location on disk; commit
   `.mcp.json.example` with placeholders instead, and a fresh clone copies it,
   fills its two paths, and sets the browser entry to its own system's form
-  (Installation.md 6d step 3). After a ProjectOS install `.mcp.json` is usually
-  already in git, since the install writes a browser entry into it, and
-  gitignoring a file git already tracks does not keep it out. So before the
-  key path goes in, copy its other entries into `.mcp.json.example`, then
-  untrack it with `git rm --cached .mcp.json`. That keeps the file on this
-  machine only: once the commit is pushed, every other copy of the project
-  loses its `.mcp.json` at its next pull, browser and Figma entries included.
-  Say so in the reply: another computer copies `.mcp.json.example` to
-  `.mcp.json` again after pulling.
+  (Installation.md 6d step 3). When the ProjectOS install created `.mcp.json`,
+  it also gitignored it and wrote `.mcp.json.example` beside it, so the key
+  path can go straight in. Only a project that already tracked `.mcp.json`
+  before the install still has it in git, and gitignoring a file git already
+  tracks does not keep it out. There, before the key path goes in, copy its
+  other entries into `.mcp.json.example`, then untrack it with
+  `git rm --cached .mcp.json`. That keeps the file on this machine only: once
+  the commit is pushed, every other copy of the project loses its `.mcp.json`
+  at its next pull, browser and Figma entries included. Say so in the reply:
+  another computer copies `.mcp.json.example` to `.mcp.json` again after
+  pulling.
 
 ## 2. Authorization
 
@@ -72,10 +78,15 @@ system-wide, and no login that expires.
 - The server itself reads no environment variables; it calls
   `google.auth.default()`, and Google's auth library is what reads
   `GOOGLE_APPLICATION_CREDENTIALS`.
-- **Rotation is cheap.** If the key leaks or ages out: new JSON key on the same
-  service account, drop it at the outside-the-repo path, update the one line,
-  restart the assistant. The GA-side grant is on the account, not the key, so
-  it survives untouched.
+- **Replacing the key.** A new key does not switch the old one off; the old one
+  keeps working until it is deleted. If the key leaks: in the Cloud Console
+  (IAM and Admin, Service Accounts, the account, Keys tab), disable the leaked
+  key first (its ID is the `private_key_id` inside the old file), then add a new
+  JSON key, drop it at the outside-the-repo path, update the one line, restart
+  the assistant, confirm one small read works, and delete the disabled key. If
+  it only aged out, the same steps, with the old key disabled and deleted last.
+  The GA-side grant is on the account, not the key, so it survives untouched.
+  The owner does the Console steps; the assistant names them.
 - A synced folder (Dropbox and the like) is acceptable for a READ-ONLY viewer
   key; it would not be for a write-capable one.
 - Never commit the key file. The rule is: keys live outside the project root.
@@ -106,10 +117,25 @@ The trade-off is a system-wide CLI install plus a login that can expire.
 
 ## 4. Rebuilding the venv (after a restore, or if it breaks)
 
+Windows:
+
 ```shell
 python -m venv "<project root>/project-os/mcp/Google_analytics/.venv"
 "<project root>/project-os/mcp/Google_analytics/.venv/Scripts/python" -m pip install analytics-mcp
 ```
+
+macOS or Linux:
+
+```shell
+python3 -m venv "<project root>/project-os/mcp/Google_analytics/.venv"
+"<project root>/project-os/mcp/Google_analytics/.venv/bin/python" -m pip install analytics-mcp
+```
+
+In PowerShell, put `& ` before the quoted path on the second line; Git Bash and
+the old Command Prompt take the Windows block as it is. `analytics-mcp` needs
+Python 3.10 or newer, and a stock Mac `python3` is 3.9, so if pip finds no
+matching version, ask the owner to install a current Python (python.org or
+Homebrew).
 
 Credentials are never restored from here: the key file lives outside the repo
 by design. `.mcp.json` is gitignored, so a fresh clone copies

@@ -37,19 +37,22 @@
 //    missing, older or broken, only this one check is skipped.
 //  - Disposable-delete containment: a recursive/forced delete is allowed ONLY
 //    when every target is a STATIC path (no variables, substitution, `~`, or
-//    unresolved traversal) that normalizes to inside node_modules / dist /
-//    .astro, inside the OS temp dir (os.tmpdir() or /tmp), or a `*.tmp`
-//    atomic-write leftover. `backups/` is NOT disposable — it holds the
+//    unresolved traversal) that normalizes to inside one of the
+//    DISPOSABLE_DIRS below (build output, dependencies, caches, the project's
+//    .tmp/ scratch folder), inside the OS temp dir (os.tmpdir() or /tmp), or a
+//    `*.tmp` atomic-write leftover. `backups/` is NOT disposable: it holds the
 //    disaster-recovery ZIPs. Ambiguous targets block. In bash a brace list in a
 //    target (`dist/{a,b}`) is expanded first, and every word it becomes is
-//    judged. A `)` that closes a subshell is not part of the path before it.
+//    judged; in PowerShell every item of a comma list (`a,b`) is. A `)` that
+//    closes a subshell is not part of the path before it.
 //
 // What it blocks:
 //  - git: reset --hard/--merge; clean -f/-x (without -n); checkout -f / `--` /
 //    `.`; non-staged or worktree restore; switch -f/--discard-changes; push
 //    --force/--force-with-lease/--mirror/--prune/-d/--delete/+refspec/:refspec;
 //    branch -D / -d+-f; stash drop|clear; filter-branch/filter-repo; reflog
-//    expire|delete; gc --prune=now; prune (without -n)
+//    expire|delete; gc --prune=now; prune (without -n); rm -f/--force
+//    (without --cached or -n); worktree remove --force
 //  - deletes (bash rm incl. /bin/rm; PowerShell Remove-Item + aliases ri/rm/
 //    del/erase/rd; cmd rd/rmdir/del/erase): any recursive or forced delete
 //    whose targets are not all provably disposable. -WhatIf / dry-run passes.
@@ -108,21 +111,47 @@ const BASH_GROUP_AFTER = /^(then|do|else|elif|if|while|until|time|coproc|!|\(|[^
 // matches, so ${x}, @{...} and HEAD@{1} stay whole.
 const PS_GLUED_BLOCK = /^([%?.]|[A-Za-z][\w-]*|-[A-Za-z][\w-]*)$/i;
 
+// The escape character is the backtick in PowerShell and the backslash
+// elsewhere. PowerShell reads a backslash as a plain path character, so
+// "C:\x\" is a closed string there: reading its `\"` as an escaped quote
+// swallowed the `;` after it, and everything behind it went unread (review
+// 2026-09-25).
+//
+// A line that ends in the escape character goes on in the next line: bash drops
+// the pair (also inside double quotes), PowerShell reads it as a space. Read as
+// two commands, `Remove-Item -Path src` and `-Recurse -Force` each passed.
+// Bash joins only a bare `\n`: before `\r\n` the backslash escapes the `\r`,
+// and the newline still ends the command.
 function splitSegments(command, shell = 'bash') {
   const segs = [];
   let cur = '';
   let q = null;
   const braces = []; // PowerShell: one entry per open `{`, true when it opened a block
+  const esc = shell === 'powershell' ? '`' : '\\';
+  let comment = false; // inside a # comment, which runs to the end of its line
   for (let i = 0; i < command.length; i++) {
     const ch = command[i];
+    if (comment) {
+      if (ch !== '\n' && ch !== '\r') { cur += ch; continue; }
+      comment = false;
+    }
+    if (ch === esc && shell === 'bash' && q !== "'" && command[i + 1] === '\n') { i++; continue; }
+    if (ch === esc && shell === 'powershell' && !q) {
+      const n = command[i + 1] === '\n' ? 1 : command[i + 1] === '\r' && command[i + 2] === '\n' ? 2 : 0;
+      if (n) { cur += ' '; i += n; continue; }
+    }
     if (q) {
-      if (q === '"' && ch === '\\') { cur += ch + (command[i + 1] ?? ''); i++; continue; }
+      if (q === '"' && ch === esc) { cur += ch + (command[i + 1] ?? ''); i++; continue; }
       if (ch === q) q = null;
       cur += ch;
       continue;
     }
+    // A # that starts a word opens a comment: a quote or an escape inside it is
+    // plain text, so an apostrophe in "# don't" or a trailing backtick cannot
+    // swallow the next line (review 2026-09-26).
+    if (ch === '#' && (i === 0 || /[\s;&|(]/.test(command[i - 1]))) { comment = true; cur += ch; continue; }
     if (ch === "'" || ch === '"') { q = ch; cur += ch; continue; }
-    if (ch === '\\') { cur += ch + (command[i + 1] ?? ''); i++; continue; }
+    if (ch === esc) { cur += ch + (command[i + 1] ?? ''); i++; continue; }
     const prev = i > 0 ? command[i - 1] : ' ';
     let block = false;
     if (shell === 'bash') {
@@ -245,11 +274,11 @@ function staticNormalize(p) {
   return { abs: abs || !!drive, drive, segs: out };
 }
 
-// Regenerable build/dependency dirs. This one script is wired as the PreToolUse
-// guard for every project that installs it (each project's settings point at
-// this absolute path — owner 2026-07-26), so the set has to cover their stacks,
-// not just this Astro repo: `.astro` here, `.next` for the Next.js project, and
-// the framework-agnostic rest. Only unambiguously GENERATED names belong here —
+// Regenerable build/dependency dirs. The same list ships to every project that
+// installs the kit (each runs its own copy under project-os/guards/, or the
+// plugin's), so it has to cover the common stacks, not one project's: `.astro`
+// for Astro, `.next` for Next.js, and the framework-agnostic rest. Only
+// unambiguously GENERATED names belong here:
 // `build` and `out` are deliberately absent, since either can be a real source
 // directory, and a false "disposable" verdict is the one mistake this list must
 // never make. A missing name only costs a needless block, which is the safe way
@@ -419,12 +448,29 @@ function dropClosingParen(t) {
   return { ...t, text, lit };
 }
 
-// The paths that target tokens name: in bash each word as it expands, in the
-// other shells as written. Null when a word expands to too many to judge.
+// PowerShell reads `a,b` as a list of two paths, so each item is judged on its
+// own: `node_modules,dist` is two disposable folders, and `.tmp/a,src` deletes
+// src (review 2026-09-25). A comma inside quotes is part of the name, and an
+// empty item (`node_modules, dist` leaves one) is dropped. In bash `a,b` is one
+// name, so bash words are never split here.
+function commaItems(t) {
+  const out = [];
+  let from = 0;
+  for (let i = 0; i <= t.text.length; i++) {
+    if (i < t.text.length && !(t.text[i] === ',' && t.lit[i] === '0')) continue;
+    if (i > from) out.push(t.text.slice(from, i));
+    from = i + 1;
+  }
+  return out;
+}
+
+// The paths that target tokens name: in bash each word as it expands, in
+// PowerShell each item of a comma list, in the other shells as written. Null
+// when a word expands to too many to judge.
 function targetPaths(tokens, shell) {
   const paths = [];
   for (const t of tokens) {
-    const words = shell === 'bash' ? braceExpand(t.text, t.lit) : [t.text];
+    const words = shell === 'bash' ? braceExpand(t.text, t.lit) : shell === 'powershell' ? commaItems(t) : [t.text];
     if (!words) return null;
     paths.push(...words);
   }
@@ -438,11 +484,14 @@ function targetPaths(tokens, shell) {
 // Parse the tokens after `git` into { sub, flagsLong, flagsShort, raw, pos }.
 function parseGit(tokens) {
   let i = 0;
-  // skip global options (git -C <path> -c <k=v> --paginate ... <subcommand>)
+  // skip global options (git -C <path> -c <k=v> --paginate ... <subcommand>).
+  // The long ones that take a separate value skip it too: read alone, the `.`
+  // of `git --work-tree . reset --hard` was taken for the subcommand and the
+  // reset passed (review 2026-09-25).
   while (i < tokens.length) {
     const t = tokens[i];
     if (!isWord(t)) break;
-    if (t.text === '-C' || t.text === '-c') { i += 2; continue; }
+    if (/^(-[Cc]|--(git-dir|work-tree|namespace|config-env|attr-source))$/.test(t.text)) { i += 2; continue; }
     if (/^-/.test(t.text)) { i++; continue; }
     break;
   }
@@ -517,6 +566,17 @@ function checkGit(tokens) {
       if (pos[0] === 'drop' || pos[0] === 'clear')
         return 'git stash drop/clear destroys stashed work';
       return null;
+    // Without -f git refuses to remove a file whose changes are not committed;
+    // with it they are gone. --cached leaves the working tree alone, and -n
+    // only lists (review 2026-09-25).
+    case 'rm':
+      if (has('force', 'f') && !flagsLong.has('cached') && !has('dry-run', 'n'))
+        return 'git rm -f removes files with uncommitted changes (without -f git refuses)';
+      return null;
+    case 'worktree':
+      if (pos[0] === 'remove' && has('force', 'f'))
+        return "git worktree remove --force deletes that worktree's uncommitted and untracked files";
+      return null;
     case 'filter-branch':
     case 'filter-repo':
       return 'git history rewrite';
@@ -552,17 +612,32 @@ function psParam(word) {
   return hits.length === 1 ? hits[0] : null;
 }
 
+// PowerShell's common parameters, which every cmdlet takes: the same two lists
+// as in Path-guard.mjs, copied because that file is optional here. Read as a
+// cluster of short flags, the `r` of -ErrorAction made any delete recursive and
+// its value (`SilentlyContinue`, `0`) became a target, so the usual quiet
+// cleanup of a build folder was refused (review 2026-09-25). A value name skips
+// the next word too, unless the value is glued on with `:`.
+const PS_COMMON_VALUE = /^(erroraction|ea|warningaction|wa|informationaction|infa|progressaction|proga|errorvariable|ev|warningvariable|wv|informationvariable|iv|outvariable|ov|outbuffer|ob|pipelinevariable|pv)$/i;
+const PS_COMMON_SWITCH = /^(verbose|vb|debug|db)$/i;
+
 function checkDelete(program, tokens, shell) {
   let recursive = false;
   let force = false;
   let dryRun = false;
   const targets = [];
   let afterDashDash = false;
-  for (const token of tokens) {
-    const t = dropClosingParen(token);
+  for (let k = 0; k < tokens.length; k++) {
+    const t = dropClosingParen(tokens[k]);
     const x = t.text;
     if (isWord(t) && !afterDashDash) {
       if (x === '--') { afterDashDash = true; continue; }
+      const common = shell === 'powershell' ? x.match(/^-([A-Za-z]+)(:.*)?$/) : null;
+      if (common && PS_COMMON_SWITCH.test(common[1])) continue;
+      if (common && PS_COMMON_VALUE.test(common[1])) {
+        if (common[2] === undefined) k++;
+        continue;
+      }
       if (/^--./.test(x)) {
         const name = x.slice(2).toLowerCase();
         if (name === 'recursive') recursive = true;
@@ -771,10 +846,15 @@ function analyze(command, shell, depth = 0) {
       if (reason) return reason;
       continue;
     }
+    // The script is the first word after the flag cluster that holds `c`
+    // (`-c`, `-lc`, `-ec`, `-cl`) that is not an option itself (`-c -e`,
+    // `-c --`, `-c -o pipefail`). Only an exact `-c` used to count, so
+    // `bash -lc "git reset --hard"` ran unread (review 2026-09-25).
     if (BASH_SHELLS.has(prog)) {
-      const ci = rest.findIndex((t) => isWord(t) && t.text === '-c');
-      if (ci >= 0 && rest[ci + 1]) {
-        const reason = analyze(rest[ci + 1].text, 'bash', depth + 1);
+      let ci = rest.findIndex((t) => isWord(t) && /^-[A-Za-z]*c[A-Za-z]*$/.test(t.text));
+      if (ci >= 0) for (ci++; rest[ci] && isWord(rest[ci]) && /^[-+]/.test(rest[ci].text); ci++) if (/^[-+][oO]$/.test(rest[ci].text)) ci++;
+      if (ci >= 0 && rest[ci]) {
+        const reason = analyze(rest[ci].text, 'bash', depth + 1);
         if (reason) return reason;
       }
       continue;
@@ -805,7 +885,10 @@ function analyze(command, shell, depth = 0) {
 // Hook entry point
 // ---------------------------------------------------------------------------
 
-const SHELL_BY_TOOL = { Bash: 'bash', PowerShell: 'powershell', Monitor: 'other' };
+// Monitor runs its command in the Bash tool's shell, as Path-guard.mjs already
+// reads it. As 'other' its brace lists were never expanded, so
+// `rm -rf dist/{x,../src}` passed there while Bash refused it (review 2026-09-25).
+const SHELL_BY_TOOL = { Bash: 'bash', PowerShell: 'powershell', Monitor: 'bash' };
 
 function main() {
   let payload;

@@ -12,6 +12,9 @@
 //               instead of .claude/settings.local.json (personal, usually
 //               gitignored, so it reaches only this machine)
 //   --replace   replace an event's existing hooks instead of running beside them
+//               (--force is an older name for it)
+// Any other option is refused before anything is read or written, so a
+// mistyped --dry never turns into a real write.
 //
 // The guards under project-os/guards/ ride in the same file, named through
 // "${CLAUDE_PROJECT_DIR}", the folder Claude Code fills in before the hook
@@ -54,8 +57,16 @@
 // PROVING IT IS WIRED. Running the hook scripts by hand proves they work, not
 // that they are installed. `--dry` answers that: every event listed under
 // "present:" is wired, and any event under "will add:" is NOT. A plain `--dry`
-// also counts what the committed settings.json carries, so it proves a
-// --shared install as well.
+// also counts what the committed settings.json carries. On Windows that proves
+// a --shared install as well. On macOS and Linux it still wants the guards in
+// the personal file (see coveredByOther below), so there a --shared install is
+// proven only by `--dry --shared`.
+//
+// A WARNING, NEVER A REFUSAL. A reminder's text sits inside '...' inside "..."
+// in a shell command, so an apostrophe, a double quote, a backtick, a $ or a
+// backslash in it is read by the shell: the reminder then arrives cut short
+// or not at all. The run names the event and carries on; the guards in the
+// same file are not affected.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -82,6 +93,12 @@ const otherPath = SHARED ? null : path.join(targetDir, 'settings.json');
 function die(message) {
   console.error(`Install-project-hooks: ${message}`);
   process.exit(1);
+}
+
+const KNOWN = new Set(['--dry', '--shared', '--replace', '--force']);
+const unknown = [...args].filter((a) => !KNOWN.has(a));
+if (unknown.length) {
+  die(`unknown option ${unknown.join(' ')}. Valid: --dry (preview, writes nothing), --shared, --replace. Nothing was changed.`);
 }
 
 // One sentence per filesystem failure, with the remedy, instead of the raw
@@ -212,6 +229,15 @@ try {
 if (!incoming || typeof incoming.hooks !== 'object' || incoming.hooks === null) {
   die('Hooks-settings.json has no "hooks" object.');
 }
+// The events whose reminder text holds a character the shell reads as code
+// (see A WARNING, NEVER A REFUSAL above).
+const unsafeReminders = Object.entries(incoming.hooks)
+  .filter(([, entries]) => (Array.isArray(entries) ? entries : []).some((group) =>
+    ((group && Array.isArray(group.hooks)) ? group.hooks : []).some((h) => {
+      const m = isCommandHook(h) && /console\.log\('([\s\S]*?)'\)/.exec(h.command);
+      return !!m && /['"`$\\]/.test(m[1]);
+    })))
+  .map(([event]) => event);
 if (!SHARED) {
   // Forward slashes, which every shell on every platform accepts.
   const rootForward = root.split('\\').join('/');
@@ -275,6 +301,11 @@ for (const [event, entries] of Object.entries(incoming.hooks)) {
 // written. "added:" appears only after the file is in place.
 console.log(`Install-project-hooks: target ${path.relative(root, targetPath)}${SHARED ? ' (shared, committed)' : ' (personal to this machine)'}`);
 console.log(`  node:     ${process.version} (the hooks run through it, so this is the proof it is available)`);
+if (unsafeReminders.length) {
+  console.log(`  warning:  the ${unsafeReminders.join(' and ')} reminder text holds an apostrophe, a double quote, a backtick, a $ or a backslash.`);
+  console.log('            The shell reads those as code, so that reminder may arrive cut short or not at all.');
+  console.log('            Reword it in project-os/Hooks-settings.json without them.');
+}
 if (alreadyThere.length) console.log(`  present:  ${alreadyThere.join(', ')} (already wired, nothing to do)`);
 if (added.length) console.log(`  will add: ${added.join(', ')} (NOT wired yet)`);
 if (combined.length) console.log(`  will combine: ${combined.join(', ')} (yours kept, ours runs beside it)`);

@@ -13,8 +13,8 @@
 //
 // Output, one line each, largest first:
 //   <size>  <kind>  <path>
-// kinds: regenerable (dependencies, build output, caches; safe to delete and
-// rebuilt by a command), backups (the kit's own snapshots; delete the old
+// kinds: regenerable (dependencies, build output, caches; usually rebuilt by a
+// command), backups (the kit's own snapshots; delete the old
 // ones by hand), git (the repository's history; never delete), leftover
 // (anything else this big; the owner decides). Exit code is always 0; a
 // folder it cannot read is reported, not skipped silently.
@@ -36,8 +36,13 @@ function parseSize(s) {
 const ROOT = path.resolve(flag('--root', process.cwd()));
 const MIN = parseSize(flag('--min', '1gb'));
 
-const REGENERABLE = new Set(['node_modules', 'dist', 'build', 'out', '.next', '.nuxt', '.astro', '.svelte-kit',
-  '.cache', '.parcel-cache', '.turbo', 'coverage', '.venv', 'venv', '__pycache__', 'target', '.tmp', 'tmp']);
+// Only names that are always generated. build, out, target and tmp are left off
+// on purpose: each can be a real source folder or hold a render that was never
+// in git, and "regenerable" must never be said of something that is not. They
+// fall to "leftover", the owner's call. Same reasoning as the DISPOSABLE_DIRS
+// list in project-os/guards/Destructive-guard.mjs.
+const REGENERABLE = new Set(['node_modules', 'dist', '.next', '.nuxt', '.astro', '.svelte-kit',
+  '.cache', '.parcel-cache', '.turbo', '.vite', 'coverage', '.venv', 'venv', '__pycache__', '.tmp']);
 
 function kindOf(rel) {
   const top = rel.split('/')[0];
