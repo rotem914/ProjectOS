@@ -56,11 +56,11 @@ Mistakes in HOW you worked:
 | Using an outside tool | that server's file under `project-os/mcp/` |
 
 - **Never let it grow into a diary.** It has exactly two ways out: promoted to
-  a rule, or retired unrepeated. Nothing accumulates.
-- **An Open row that goes 60 days without a repeat retires.** Check the dates
-  at task pickup: a row dated more than 60 days ago moves to Retired, with "not
-  repeated within 60 days" in Why it left. A repeat before then promotes it
-  instead, naming the file that now holds the rule.
+  a rule, or retired on the owner's word.
+- **An Open row stays until the owner removes it.** Nothing retires on a
+  timer: a row leaves the Open table only when the owner says so (it moves to
+  Retired, with his reason in Why it left), or when it repeats and is promoted,
+  naming the file that now holds the rule.
 - **It is not a confession log and carries no apology.** One line of fact,
   because the next session needs the fact and not the feeling.
 

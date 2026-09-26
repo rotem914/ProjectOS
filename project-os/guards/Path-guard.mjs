@@ -713,14 +713,13 @@ const PS_WRITE_FIRST = new Set([
   'remove-item', 'ri', 'rm', 'del', 'erase', 'rd', 'rmdir', 'clear-content', 'clc',
 ]);
 const PS_WRITE_LAST = new Set(['copy-item', 'move-item', 'rename-item', 'cpi', 'copy', 'cp', 'mi', 'move', 'mv', 'rni', 'ren']);
-// A move takes the file away from where it was, so its source is checked too.
-const PS_MOVES = new Set(['move-item', 'mi', 'move', 'mv']);
 // Parameters whose VALUE is a write destination.
 const PS_DEST_PARAMS = /^-(destination|newname|destinationpath|outfile|literalpath|path|filepath|outputfile|target)(:|=|$)/i;
 // For copy, rename and the two archive cmdlets, only these are destinations:
 // `-Path` is the SOURCE, a read, and checking it refused copying a file, or
-// unzipping an export, INTO the project from outside. A move's source is
-// checked on its own (PS_MOVES), because moving it away deletes it there.
+// unzipping an export, INTO the project from outside. A move's source is not
+// checked either: moving a file into the project from another folder is
+// allowed, the owner's choice (2026-09-26).
 const PS_DEST_ONLY = /^-(destination|newname|destinationpath)(:|=|$)/i;
 // The source parameter of a copy, a move or an archive, with its aliases.
 const PS_SOURCE_PARAM = /^-(path|literalpath|pspath|lp)$/i;
@@ -1349,12 +1348,6 @@ function checkSegment(tokens, root, shell, base) {
     }
     if (BASH_WRITE_LAST.has(prog)) {
       const ps = positionals(rest, shell);
-      if (prog === 'mv') {
-        for (const t of ps) {
-          const reason = checkTarget(t.text, root, '`mv`', base);
-          if (reason) return reason;
-        }
-      }
       // `-t <folder>` names the destination first, and every word after the
       // options is a source. Read as the last word, `cp -t <outside> a b`
       // checked a source and `cp -t .tmp <outside file>` refused a copy INTO
@@ -1457,18 +1450,6 @@ function checkSegment(tokens, root, shell, base) {
     const list = psList(rest[k], rest, k);
     groups.push(list.values);
     k = list.end;
-  }
-
-  // A move writes where it takes the file FROM, too: moving a file into the
-  // project from outside deletes it outside, and is refused. Copy it instead.
-  if (PS_MOVES.has(prog)) {
-    const sources = [];
-    for (let k = 0; k < rest.length; k++) {
-      const g = isWord(rest[k]) ? PS_SOURCE_GLUED.exec(rest[k].text) : null;
-      if (g) sources.push(...psList(gluedWord(rest[k], g[1]), rest, k).values);
-    }
-    const reason = firstReason([...sources, ...groups.flat()]);
-    if (reason) return reason;
   }
 
   // Named parameters, including PowerShell's `-Param:Value` and `-Param=Value`.

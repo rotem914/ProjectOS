@@ -382,11 +382,13 @@ setup block reached in step 6 with no answer means step 4 was written short.
 their default, and the report says so in one line. Never ask the owner to
 choose where they go.
 
-**Committing is not a question either.** `Go commit` runs the project's check
-command from pile one (every one of them, in a workspace) and commits to the
-current branch. Rule 22 settles the rest: the assistant commits, only on the
-owner's `Go commit`, and the owner pushes. Never ask which checks gate a
-commit, whether tasks get their own branch, or what is never staged. If the
+**Committing asks one thing: the branch.** `Go commit` runs the project's
+check command from pile one (every one of them, in a workspace). Pile two asks
+one question about it: commit straight to the current branch, or give each task
+its own branch. The answer fills the bracket in CLAUDE.md's Go commit step 6.
+Rule 22 settles the rest: the assistant commits, only on the owner's
+`Go commit`, and the owner pushes. Never ask which checks gate a commit, or
+what is never staged. If the
 owner says they prefer to commit themselves, that is a clash for the report,
 not a line written into the flow.
 
@@ -455,8 +457,8 @@ Do the setup steps the files carry, then clear the scaffolding:
   rewrites that rule, the invariants the owner said yes to in CLAUDE.md
   rule 11, and the worst-class lines the owner said yes to in
   project-os/Code_review.md and project-os/Visual_QA.md. `Go commit` has
-  nothing to calibrate (step 4): it runs the check command step 5 wrote in,
-  on the current branch, and who commits and who pushes are never rewritten
+  one thing to fill (step 4): the branch the owner chose. It runs the check
+  command step 5 wrote in, and who commits and who pushes are never rewritten
   (rule 22);
 - check the exclusion list at the top of project-os/Backup-whole-project.ps1 against this
   stack: every regenerable folder (dependencies, build output, caches) is

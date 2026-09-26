@@ -727,8 +727,8 @@ Commit everything accumulated up to now, across sessions, not only this chat.
    dependencies and build output, and the assistant's personal settings
    (`.claude/settings.local.json` and its `.backup` copy). If the project
    needs one more kept out, the owner says so once and it joins this list.
-6. Commit with a clear message covering the full scope, on the current
-   branch.
+6. Commit with a clear message covering the full scope, [on the current
+   branch / on a task branch, per the owner's answer at install].
 7. STOP after the commit. The owner pushes, every time (rule 22). Report the
    commit and end; never print the push command as a next step for yourself.
 
