@@ -163,6 +163,12 @@ The hooks in `project-os/Hooks.md` are the exception: they are Claude Code's own
 
 Write it as law, not as advice. An assistant follows a stated invariant exactly. It cannot infer one from the code, and it will cheerfully refactor a constraint nobody told it about.
 
+## Who made it
+
+Rotem Elimelech (Rotem E) is a product designer in Tel Aviv, shipping products since 2009 and now building his own with AI coding assistants. ProjectOS came out of his daily work on vibe coding projects for clients and internal projects.
+
+[rotem-e.com](https://rotem-e.com)
+
 ## Use at your own risk
 
 ProjectOS is provided as is, without any warranty. Using it is entirely your own responsibility: how you use it, and everything that happens in your projects while you do, including anything an AI assistant does while following these rules. The creator of the kit is not responsible for anything.
