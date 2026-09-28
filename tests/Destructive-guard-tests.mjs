@@ -536,6 +536,36 @@ const cases = [
   ['Bash', 'git --work-tree . status', 0],
   ['Bash', 'git --git-dir .git log', 0],
   ['Bash', 'git --exec-path', 0],
+
+  // --- 22. redirections, dot-sourcing and here-document scripts (kit review 2026-09-28) ---
+  // A redirection is not a target, so the usual quiet cleanup passes and the
+  // real targets around it are still judged; a lone `.` runs the command after
+  // it; a here-document fed to an interpreter is its script.
+  ['Bash', 'rm -rf node_modules 2>/dev/null', 0],
+  ['Bash', 'rm -rf node_modules 2> /dev/null', 0],
+  ['Bash', 'rm -rf node_modules 2>&1', 0],
+  ['Bash', 'rm -rf dist >/dev/null 2>&1', 0],
+  ['Bash', 'rm -rf .tmp/x > .tmp/log.txt', 0],
+  ['PowerShell', 'Remove-Item -Recurse -Force node_modules 2>$null', 0],
+  ['PowerShell', 'Remove-Item -Recurse -Force dist 2> $null', 0],
+  ['Bash', 'rm -rf src 2>/dev/null', 2, 'non-disposable'],
+  ['Bash', 'rm -rf dist 2>&1 src', 2, 'non-disposable'],
+  ['Bash', 'rm -rf node_modules 2>/dev/null src', 2, 'non-disposable'],
+  ['PowerShell', 'Remove-Item -Recurse -Force src 2>$null', 2, 'non-disposable'],
+  ['PowerShell', '. Remove-Item -Recurse -Force src', 2, 'non-disposable'],
+  ['PowerShell', '. git reset --hard', 2, 'reset'],
+  ['Bash', '. ./setup.sh; rm -rf src', 2, 'non-disposable'],
+  ['PowerShell', '. Remove-Item -Recurse -Force node_modules', 0],
+  ['Bash', '. ./setup.sh', 0],
+  ['Bash', "python3 - <<'EOF'\nimport shutil\nshutil.rmtree('src')\nEOF", 2, 'rmtree'],
+  ['Bash', "python3 <<'EOF'\nimport shutil; shutil.rmtree('src')\nEOF", 2, 'rmtree'],
+  ['Bash', "node - <<'EOF'\nrequire('fs').rmSync('src', { recursive: true, force: true })\nEOF", 2, 'rmSync'],
+  ['Bash', "node - <<'EOF'\nrequire('child_process').execSync('git reset --hard')\nEOF", 2, 'reset'],
+  ['Bash', "bash <<'EOF'\nrm -rf src\nEOF", 2, 'non-disposable'],
+  ['Bash', "python3 - <<'EOF'\nimport shutil\nshutil.rmtree('dist')\nEOF", 0],
+  ['Bash', "python3 - <<'EOF'\nprint('rm -rf src')\nEOF", 0],
+  ['Bash', "python3 tool.py <<'EOF'\nshutil.rmtree('src')\nEOF", 0],
+  ['Bash', "cat <<'EOF'\nshutil.rmtree('src')\nEOF", 0],
 ];
 
 let failures = 0;

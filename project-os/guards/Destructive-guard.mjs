@@ -153,6 +153,9 @@ function splitSegments(command, shell = 'bash') {
     if (ch === "'" || ch === '"') { q = ch; cur += ch; continue; }
     if (ch === esc) { cur += ch + (command[i + 1] ?? ''); i++; continue; }
     const prev = i > 0 ? command[i - 1] : ' ';
+    // `2>&1` is one redirection, not a command boundary: split at its `&`, the
+    // targets after it were never judged (review 2026-09-28).
+    if (ch === '&' && (prev === '>' || command[i + 1] === '>')) { cur += ch; continue; }
     let block = false;
     if (shell === 'bash') {
       const words = cur.trim().split(/\s+/);
@@ -621,6 +624,12 @@ function psParam(word) {
 const PS_COMMON_VALUE = /^(erroraction|ea|warningaction|wa|informationaction|infa|progressaction|proga|errorvariable|ev|warningvariable|wv|informationvariable|iv|outvariable|ov|outbuffer|ob|pipelinevariable|pv)$/i;
 const PS_COMMON_SWITCH = /^(verbose|vb|debug|db)$/i;
 
+// A redirection among a delete's arguments: `2>/dev/null`, `>log.txt`,
+// `2>&1`, or the operator alone with its file in the next word. Read as a
+// target it refused the usual quiet cleanup of a build folder, `rm -rf
+// node_modules 2>/dev/null` (review 2026-09-28).
+const REDIRECT = /^(\d*>>?|&>>?|>\||<)(.*)$/;
+
 function checkDelete(program, tokens, shell) {
   let recursive = false;
   let force = false;
@@ -630,6 +639,11 @@ function checkDelete(program, tokens, shell) {
   for (let k = 0; k < tokens.length; k++) {
     const t = dropClosingParen(tokens[k]);
     const x = t.text;
+    const redirect = isWord(t) && t.lit[0] === '0' ? REDIRECT.exec(x) : null;
+    if (redirect) {
+      if (redirect[2] === '') k++; // the file is the next word
+      continue;
+    }
     if (isWord(t) && !afterDashDash) {
       if (x === '--') { afterDashDash = true; continue; }
       const common = shell === 'powershell' ? x.match(/^-([A-Za-z]+)(:.*)?$/) : null;
@@ -701,8 +715,10 @@ const WRAPPER_VALUE_FLAGS = {
   ionice: /^-[cnp]$/, stdbuf: /^-[ioe]$/, sudo: /^-[ugCDpRrtTU]$/, doas: /^-[uC]$/,
 };
 // Words that open a block or a condition; the command comes after them. A lone
-// `{` is a group the splitter could not see, as in `time -p { rm -rf src; }`.
-const SHELL_KEYWORDS = /^(then|do|else|elif|if|while|until|!|\{|\(+)$/;
+// `{` is a group the splitter could not see, as in `time -p { rm -rf src; }`,
+// and a lone `.` is PowerShell's dot-source operator (or the bash `source`
+// dot), which runs the command after it (review 2026-09-28).
+const SHELL_KEYWORDS = /^(then|do|else|elif|if|while|until|!|\{|\(+|\.)$/;
 
 // Index of the real program in a segment: past `VAR=x`, shell keywords and
 // wrappers with their flags (and `timeout 5` / `nice 10`). -1 when none.
@@ -806,12 +822,49 @@ function checkScript(body, prog, depth) {
   return null;
 }
 
+// A here-document read by an interpreter is a script (`python3 - <<'EOF'`),
+// and its body is read like an inline script. The body lines are also split
+// into segments below, where a Python statement is never a delete command, so
+// this is the one place they are judged (review 2026-09-28). A reader given a
+// script file or a -c script takes the body as that script's input.
+function heredocScripts(command, shell, depth) {
+  if (shell !== 'bash' || !PG || depth >= MAX_DEPTH) return null;
+  const lines = command.split(/\r?\n/);
+  for (let li = 0; li < lines.length; li++) {
+    const m = /^(.*?)<<-?\s*(?:"([^"]+)"|'([^']+)'|\\?([^\s;&|<>()"'`$]+))/.exec(lines[li]);
+    if (!m) continue;
+    const head = tokenize(m[1], 'bash');
+    const pi = programIndex(head);
+    if (pi < 0) continue;
+    const prog = programName(head[pi]);
+    const flag = inlineFlag(prog);
+    if (!flag) continue;
+    const rest = head.slice(pi + 1);
+    if (rest.some((t) => isWord(t) && (flag.test(t.text) || !/^-/.test(t.text)))) continue;
+    const delim = m[2] || m[3] || m[4];
+    const body = [];
+    let k = li + 1;
+    for (; k < lines.length && lines[k].trim() !== delim; k++) body.push(lines[k]);
+    let reason = null;
+    try {
+      reason = checkScript(body.join('\n'), prog, depth + 1);
+    } catch {
+      reason = null; // a Path-guard that cannot read this script skips only this check
+    }
+    if (reason) return reason;
+    li = k;
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Segment analysis + inline-shell recursion
 // ---------------------------------------------------------------------------
 
 function analyze(command, shell, depth = 0) {
   if (depth > MAX_DEPTH) return null;
+  const scripted = heredocScripts(command, shell, depth);
+  if (scripted) return scripted;
   for (const segment of splitSegments(command, shell)) {
     const tokens = tokenize(segment, shell);
     const i = programIndex(tokens);

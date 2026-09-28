@@ -29,6 +29,13 @@
 //                        into, named literally; agent config and env files stay
 //                        refused even there. Empty by default.
 //
+// Read as well (review 2026-09-28): the body of a here-document that feeds an
+// interpreter or a shell (`python3 - <<'EOF'`, `bash <<'EOF'`); the commands
+// inside `$( )`, backticks and `<( )`; a bash `{ }` group and a PowerShell
+// script block; `find -exec`; `eval` and `Invoke-Expression`; .NET calls such
+// as `[IO.File]::WriteAllText`; a cmdlet after `$null =` or `[void](`; and a
+// `#` comment, which ends the words of a command.
+//
 // What it does NOT cover, stated plainly: it recognises the common ways a
 // command writes a file, and a command it does not recognise runs unchecked, so
 // it is a safety net, not a wall. The assistant's own storage (session
@@ -119,6 +126,88 @@ const opensComment = (line, i) => line[i] === '#' && (i === 0 || /[\s;&|(]/.test
 /** What a line continuation leaves in its place: nothing in bash, a space in PowerShell. */
 const continuationGap = (shell) => (shell === 'powershell' ? ' ' : '');
 
+/**
+ * A here-document opener at `i` of `line`: `<<` or `<<-`, then a delimiter,
+ * quoted or bare. Null for a `<<<` here-string, for a `<<` inside a comment,
+ * and where no delimiter follows. A bare delimiter runs to the next space or
+ * shell metacharacter, and a leading backslash quotes it, as in bash: `<<END.`
+ * ends at a line reading END., and `<<\EOF` at EOF. Read as `<< "abc"`, a
+ * here-string used to open a here-document nobody closes, so every line after
+ * it went unread (review 2026-09-28).
+ */
+function heredocOpener(line, i, comment) {
+  if (comment || line[i] !== '<' || line[i + 1] !== '<' || line[i + 2] === '<') return null;
+  const m = /^<<(-?)\s*(?:"([^"]+)"|'([^']+)'|\\?([^\s;&|<>()"'`$]+))/.exec(line.slice(i));
+  if (!m) return null;
+  return { delim: m[2] || m[3] || m[4], stripTabs: m[1] === '-', len: m[0].length, lines: [], seg: null };
+}
+
+/**
+ * The segments of a command, each with the here-document bodies its command
+ * reads: `{ text, docs }`. A body is data to most programs, so it is never read
+ * as commands here; analyze() reads it as a script when the program is an
+ * interpreter or a shell (review 2026-09-28: `python3 - <<'EOF'` used to run
+ * unread). A body opened on a line that pushed no segment belongs to nobody.
+ */
+function segmentList() {
+  const segs = [];
+  let unowned = [];
+  return {
+    segs,
+    push(text) {
+      if (!text.trim()) return;
+      const seg = { text, docs: [] };
+      segs.push(seg);
+      for (const d of unowned) d.seg = seg;
+      unowned = [];
+    },
+    open(doc) { unowned.push(doc); },
+    close(doc) { if (doc.seg) doc.seg.docs.push(doc.lines.join('\n')); },
+  };
+}
+
+// A `{ }` block holds commands of its own, so its braces end the segment
+// before them, the same way the delete guard beside this file reads them
+// (review 2026-09-28: `ForEach-Object { Copy-Item $_ C:\... }` and
+// `{ cp a /c/x; }` were read as one command named ForEach-Object or `{`, and
+// the write inside was never checked).
+//
+// In PowerShell a `{` opens a block after a space, `(`, `)`, `;`, `|` or `&`,
+// or glued to a bare word, `%`, `?`, `.` or a -Parameter (`try{`, `%{`,
+// `-ScriptBlock{`). After `$` or `@`, or as `{}`, it is text: `${x}`, `@{...}`
+// and `HEAD@{1}` stay whole. Every `{` is remembered, so a `}` ends the block
+// its own `{` opened.
+//
+// In bash a `{` followed by a space opens a group only where a command can
+// start: the start of a segment, after then, do, else, elif, if, while, until,
+// time, coproc, `!` or `(`, after a word ending in `)` (a function header like
+// `f()`, a case pattern like `dist)`), and after `function NAME` or
+// `coproc NAME`. A `}` closes one only as the first word of a segment.
+// Anywhere else a brace is part of the arguments: a literal word, or a brace
+// list like `{src,lib}`, which tokenize expands.
+const BASH_GROUP_AFTER = /^(then|do|else|elif|if|while|until|time|coproc|!|\(|[^\\()]*\)|[^\\?*+@!()$<>]*\(\))$/;
+const PS_GLUED_BLOCK = /^([%?.]|[A-Za-z][\w-]*|-[A-Za-z][\w-]*)$/i;
+
+/** Does the brace at `i` of `line` open or close a block? `braces` remembers PowerShell's open ones. */
+function braceEndsSegment(line, i, cur, shell, braces) {
+  const ch = line[i];
+  const prev = i > 0 ? line[i - 1] : ' ';
+  if (shell === 'bash') {
+    const words = cur.trim().split(/\s+/);
+    const atCommand = cur.trim() === '' || BASH_GROUP_AFTER.test(words[words.length - 1])
+      || /^(function|coproc)$/.test(words[words.length - 2] ?? '');
+    return (ch === '{' && atCommand && /\s/.test(line[i + 1] ?? '')) || (ch === '}' && cur.trim() === '');
+  }
+  if (shell !== 'powershell') return false;
+  if (ch === '{') {
+    const word = cur.match(/[^\s();|&]*$/)[0];
+    const block = line[i + 1] !== '}' && (/[\s();|&]/.test(prev) || PS_GLUED_BLOCK.test(word));
+    braces.push(block);
+    return block;
+  }
+  return braces.length > 0 ? braces.pop() : /[\s;]/.test(prev);
+}
+
 /** Does the quote about to open here start an inline interpreter's script? */
 function opensInlineScript(before, shell) {
   if (!/\s$/.test(before)) return false; // the quote must start its own word
@@ -141,7 +230,9 @@ function splitJoiningInlineScripts(command, shell) {
     ? String(command).replace(/[‘’‚‛]/g, "'").replace(/[“”„]/g, '"')
     : String(command);
   const esc = shell === 'bash' ? '\\' : shell === 'powershell' ? '`' : null;
-  const segs = [];
+  const list = segmentList();
+  const braces = [];
+  const queue = [];
   let cur = '';
   let q = null;
   let qInline = false;
@@ -153,7 +244,8 @@ function splitJoiningInlineScripts(command, shell) {
     const line = lines[li];
     if (heredoc) {
       const probe = heredoc.stripTabs ? line.replace(/^\t+/, '') : line;
-      if (probe.trim() === heredoc.delim) heredoc = null;
+      if (probe.trim() === heredoc.delim) { list.close(heredoc); heredoc = queue.shift() ?? null; }
+      else heredoc.lines.push(probe);
       continue;
     }
     let comment = false;
@@ -174,13 +266,13 @@ function splitJoiningInlineScripts(command, shell) {
         continue;
       }
       if (opensComment(line, i)) comment = true;
-      if (ch === '<' && line[i + 1] === '<') {
-        const m = line.slice(i).match(/^<<(-?)\s*(?:"([^"]+)"|'([^']+)'|([A-Za-z_][\w-]*))/);
-        if (m) {
-          heredoc = { delim: m[2] || m[3] || m[4], stripTabs: m[1] === '-' };
-          i += m[0].length - 1;
-          continue;
-        }
+      if (ch === '<' && line[i + 1] === '<' && line[i + 2] === '<') { cur += '<<<'; i += 2; continue; }
+      const doc = heredocOpener(line, i, comment);
+      if (doc) {
+        list.open(doc);
+        if (heredoc) queue.push(doc); else heredoc = doc;
+        i += doc.len - 1;
+        continue;
       }
       if (ch === '>' || (ch === '&' && line[i + 1] === '>')) {
         let op = '';
@@ -194,8 +286,13 @@ function splitJoiningInlineScripts(command, shell) {
         cur += op;
         continue;
       }
+      if (!comment && (ch === '{' || ch === '}') && braceEndsSegment(line, i, cur, shell, braces)) {
+        list.push(cur);
+        cur = '';
+        continue;
+      }
       if (ch === ';' || ch === '|' || ch === '&') {
-        if (cur.trim()) segs.push(cur);
+        list.push(cur);
         cur = '';
         continue;
       }
@@ -208,12 +305,12 @@ function splitJoiningInlineScripts(command, shell) {
       continue;
     }
     if (continues) { cur += continuationGap(shell); continue; }
-    if (cur.trim()) segs.push(cur);
+    list.push(cur);
     cur = '';
   }
   if (q || !joined || heredoc) return null;
-  if (cur.trim()) segs.push(cur);
-  return segs;
+  list.push(cur);
+  return list.segs;
 }
 
 /**
@@ -223,18 +320,21 @@ function splitJoiningInlineScripts(command, shell) {
  */
 function splitSegmentsByLine(command, shell = 'bash') {
   const esc = shell === 'powershell' ? '`' : '\\';
-  const segs = [];
+  const list = segmentList();
+  const braces = [];
+  const queue = [];
   let cur = '';
   let q = null;
-  let heredoc = null; // { delim, stripTabs }
+  let heredoc = null;
   const lines = String(command).split(/\r?\n/);
 
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li];
     if (heredoc) {
       const probe = heredoc.stripTabs ? line.replace(/^\t+/, '') : line;
-      if (probe.trim() === heredoc.delim) heredoc = null;
-      continue; // body is data, never a command
+      if (probe.trim() === heredoc.delim) { list.close(heredoc); heredoc = queue.shift() ?? null; }
+      else heredoc.lines.push(probe);
+      continue; // body is data, never a command; analyze() reads it as a script where it is one
     }
     let comment = false;
     let continues = false;
@@ -254,14 +354,13 @@ function splitSegmentsByLine(command, shell = 'bash') {
         continue;
       }
       if (opensComment(line, i)) comment = true;
-      // Here-doc opener: << or <<- then a (possibly quoted) delimiter word.
-      if (ch === '<' && line[i + 1] === '<') {
-        const m = line.slice(i).match(/^<<(-?)\s*(?:"([^"]+)"|'([^']+)'|([A-Za-z_][\w-]*))/);
-        if (m) {
-          heredoc = { delim: m[2] || m[3] || m[4], stripTabs: m[1] === '-' };
-          i += m[0].length - 1;
-          continue;
-        }
+      if (ch === '<' && line[i + 1] === '<' && line[i + 2] === '<') { cur += '<<<'; i += 2; continue; }
+      const doc = heredocOpener(line, i, comment);
+      if (doc) {
+        list.open(doc);
+        if (heredoc) queue.push(doc); else heredoc = doc;
+        i += doc.len - 1;
+        continue;
       }
       // Keep multi-character redirection operators intact.
       if (ch === '>' || (ch === '&' && line[i + 1] === '>')) {
@@ -276,21 +375,25 @@ function splitSegmentsByLine(command, shell = 'bash') {
         cur += op;
         continue;
       }
+      if (!comment && (ch === '{' || ch === '}') && braceEndsSegment(line, i, cur, shell, braces)) {
+        list.push(cur);
+        cur = '';
+        continue;
+      }
       if (ch === ';' || ch === '|' || ch === '&') {
-        if (cur.trim()) segs.push(cur);
+        list.push(cur);
         cur = '';
         continue;
       }
       cur += ch;
     }
     if (continues) { cur += continuationGap(shell); continue; }
-    if (cur.trim()) segs.push(cur);
+    list.push(cur);
     cur = '';
   }
-  if (cur.trim()) segs.push(cur);
-  return segs;
+  list.push(cur);
+  return list.segs;
 }
-
 /**
  * Tokenize one segment; a redirection operator becomes its own marked token.
  *
@@ -397,6 +500,10 @@ function tokenize(segment, shell) {
       continue;
     }
     if (/\s/.test(ch)) { push(); continue; }
+    // An unquoted `#` that starts a word opens a comment, and the rest of the
+    // segment is text. Read as words, `cp a.txt /c/x # note` took `note` for
+    // the copy's destination (review 2026-09-28). cmd has no comments.
+    if (ch === '#' && !has && shell !== 'other' && (i === 0 || /\s/.test(segment[i - 1]))) break;
     // A leading file-descriptor digit belongs to the operator, not to a word.
     if (/\d/.test(ch) && cur === '' && segment[i + 1] === '>') continue;
     add(ch);
@@ -566,9 +673,36 @@ const positionals = (tokens, shell) =>
  */
 function projectRoot(payload) {
   for (const c of [process.env.CLAUDE_PROJECT_DIR, payload && payload.cwd, SCRIPT_ROOT]) {
-    if (typeof c === 'string' && c.trim()) return norm(c);
+    if (typeof c === 'string' && c.trim()) return norm(kitRootAbove(c) ?? c);
   }
   return norm(SCRIPT_ROOT);
+}
+
+// The kit's marker, in both spellings: a project installed before the kit's
+// files were renamed carries the lowercase one.
+const MARKERS = ['Hooks-settings.json', 'hooks-settings.json'];
+
+/**
+ * The nearest folder at or above `start` that carries the kit's marker, or
+ * null. On macOS and Linux a session opened in a subfolder names that
+ * subfolder as CLAUDE_PROJECT_DIR while loading the project's own settings,
+ * so the guard ran there with the subfolder as the whole project and refused
+ * the project's own files (review 2026-09-28). The plugin finds the root the
+ * same way. Never throws: a folder that is not on disk finds nothing.
+ */
+function kitRootAbove(start) {
+  try {
+    let dir = path.resolve(String(start));
+    for (let i = 0; i < 64; i++) {
+      if (MARKERS.some((m) => fs.existsSync(path.join(dir, 'project-os', m)))) return dir;
+      const parent = path.dirname(dir);
+      if (parent === dir) return null;
+      dir = parent;
+    }
+  } catch {
+    // fall through: the raw value stands
+  }
+  return null;
 }
 
 /** Discard sinks — not files, in any of the three shells. */
@@ -583,7 +717,10 @@ const SINKS = new Set(['-', '/dev/null', '/dev/stdout', '/dev/stderr', '$null', 
  * both missed real escapes and refused the project's own path.
  */
 function resolveStatic(target, root) {
-  if (/[$`\u0000]|%[^%\s]*%|^~|\$\(|\{\{/.test(target)) return { dynamic: true };
+  // A word that starts with `(`, `$(` or `@(` is an expression, never a path:
+  // `-Path (Join-Path $env:USERPROFILE x)` used to read as a file called
+  // "(Join-Path" inside the project (review 2026-09-28).
+  if (/[$`\u0000]|%[^%\s]*%|^~|\$\(|\{\{|^@?\(/.test(target)) return { dynamic: true };
   let raw = norm(target);
 
   // `C:file` — relative to that DRIVE's current directory, which is per-process
@@ -680,10 +817,16 @@ function checkTarget(target, root, what, base = root) {
 // same delete written as an inline script was refused.
 const BASH_WRITE_ALL = new Set(['tee', 'touch', 'mkdir', 'truncate', 'split', 'rm', 'rmdir', 'unlink', 'shred']);
 // The LAST positional is the destination; earlier ones are sources, which cp,
-// install and rsync only read. A move takes its sources away from where they
-// were, so for mv every source is checked as well: moving a file INTO the
-// project from outside deletes it outside, and is refused. Copy it instead.
+// install and rsync only read. A move's source is not checked either: moving
+// a file INTO the project from another folder is allowed, the owner's choice
+// (2026-09-26).
 const BASH_WRITE_LAST = new Set(['cp', 'mv', 'install', 'rsync']);
+// tar in create, append or update mode writes the archive named by -f.
+const TAR_FILE_FLAG = { letters: 'f', stops: 'CTXbgILKNF', long: ['file'] };
+// sort -o writes its output file.
+const SORT_OUTPUT_FLAG = { letters: 'o', stops: 'kStT', long: ['output'] };
+// scp's other end: `host:path` or `user@host:path`, never a drive letter.
+const REMOTE_PATH = /^(?:[^@/\\:\s]+@)?[^@/\\:\s]{2,}:/;
 // Flag-valued destinations, read in every spelling the tools accept (review
 // 2026-09-25): `--name=V`, `--name V`, and a single-dash cluster holding one of
 // the `letters`, whose value is the rest of the word or, when the letter comes
@@ -709,10 +852,26 @@ const PS_WRITE_FIRST = new Set([
   'out-file', 'set-content', 'add-content', 'new-item', 'export-csv', 'export-clixml',
   'start-transcript', 'tee-object', 'sc', 'ac', 'ni', 'epcsv', 'tee',
   'compress-archive', 'expand-archive', 'invoke-webrequest', 'iwr', 'curl', 'wget',
-  'mkdir', 'md',
+  'invoke-restmethod', 'irm', 'mkdir', 'md',
   'remove-item', 'ri', 'rm', 'del', 'erase', 'rd', 'rmdir', 'clear-content', 'clc',
 ]);
-const PS_WRITE_LAST = new Set(['copy-item', 'move-item', 'rename-item', 'cpi', 'copy', 'cp', 'mi', 'move', 'mv', 'rni', 'ren']);
+const PS_WRITE_LAST = new Set(['copy-item', 'move-item', 'rename-item', 'cpi', 'copy', 'cp', 'mi', 'move', 'mv', 'rni', 'ren', 'rename']);
+// A rename lands beside the item it renames, so a bare new name is resolved
+// against the item's own folder, not the current one (review 2026-09-28:
+// `Rename-Item C:\Users\x\Downloads\a.png b.png` read b.png as inside).
+const PS_RENAME = new Set(['rename-item', 'rni', 'ren', 'rename']);
+// Start-Process writes only where it is told to send the output.
+const PS_START = new Set(['start-process', 'saps', 'start']);
+const PS_START_DEST = /^-(redirectstandardoutput|redirectstandarderror|rso|rse)(:|=|$)/i;
+// .NET calls that write, and which arguments they write to (review
+// 2026-09-28: `[IO.File]::WriteAllText('C:\Users\x\a.txt', ...)` is the usual
+// way to write UTF-8 without a BOM from Windows PowerShell, and it ran
+// unread). `Open` is left out: its mode decides whether it writes.
+const DOTNET_WRITE = /\[(?:System\.)?IO\.(File|Directory)\]::(\w+)\s*\(/gi;
+const DOTNET_DEST = {
+  file: { writealltext: [0], writealllines: [0], writeallbytes: [0], appendalltext: [0], appendalllines: [0], create: [0], createtext: [0], appendtext: [0], openwrite: [0], copy: [1], move: [1], replace: [1, 2], delete: [0], encrypt: [0], decrypt: [0], setattributes: [0] },
+  directory: { createdirectory: [0], delete: [0], move: [1] },
+};
 // Parameters whose VALUE is a write destination.
 const PS_DEST_PARAMS = /^-(destination|newname|destinationpath|outfile|literalpath|path|filepath|outputfile|target)(:|=|$)/i;
 // For copy, rename and the two archive cmdlets, only these are destinations:
@@ -727,24 +886,48 @@ const PS_SOURCE_GLUED = /^-(?:path|literalpath|pspath|lp)[:=](.+)$/i;
 // Parameters whose value is content, not a path.
 const PS_VALUE_PARAMS = /^-(value|body|encoding|name|itemtype|filter|include|exclude|delimiter|separator)(:|=|$)/i;
 
-// Wrappers that sit in front of the real program.
-const WRAPPERS = new Set(['sudo', 'doas', 'env', 'nohup', 'command', 'time', 'timeout', 'stdbuf', 'nice', 'ionice', 'xargs']);
+// Wrappers that sit in front of the real program: the delete guard's list.
+const WRAPPERS = new Set(['sudo', 'doas', 'env', 'nohup', 'command', 'time', 'timeout', 'stdbuf', 'nice', 'ionice', 'xargs', 'exec', 'builtin']);
+// Wrapper flags whose value is the next word (`xargs -I {}`, `timeout -k 5`,
+// `sudo -u me`): that word is not the program (review 2026-09-28: `sudo -u me
+// cp ...` read `me` as the program and never checked the copy).
+const WRAPPER_VALUE_FLAGS = {
+  xargs: /^-[IndPLEsa]$/, env: /^-[uCS]$/, timeout: /^-[sk]$/, nice: /^-n$/,
+  ionice: /^-[cnp]$/, stdbuf: /^-[ioe]$/, sudo: /^-[ugCDpRrtTU]$/, doas: /^-[uC]$/,
+};
+// A lone `{`, `}`, `!`, `.` or `(` in front of a command: a group brace the
+// splitter left in place, a negation, PowerShell dot-sourcing (or the bash
+// `source` dot), a subshell. The command comes after it.
+const LEADING_WORDS = /^([{}!.]|\(+)$/;
 
-const programName = (t) => t.text.replace(/^[({\s]+/, '').split(/[\\/]/).pop().replace(/\.exe$/i, '').toLowerCase();
+// A PowerShell cast in front of a command (`[void](New-Item ...)`), or an
+// assignment glued to it (`$null=New-Item ...`), is not the command's name
+// (review 2026-09-28).
+const programName = (t) => t.text.replace(/^\$[\w:]+[-+*/]?=/, '').replace(/^(?:\[[\w.]+\])?[({\s]+/, '').split(/[\\/]/).pop().replace(/\.exe$/i, '').toLowerCase();
 
 /** Advance past env assignments, wrappers and their flags to the real program. */
 function programIndex(tokens, shell) {
   let i = 0;
   for (let hops = 0; hops < 8 && i < tokens.length; hops++) {
     while (i < tokens.length && (tokens[i].redirect
-      || (isWord(tokens[i]) && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i].text)))) i++;
+      || (isWord(tokens[i]) && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i].text) || LEADING_WORDS.test(tokens[i].text))))) i++;
+    // PowerShell runs the command after `$null =` or `$x +=` and keeps its
+    // output (review 2026-09-28: `$null = New-Item ...` is the usual way to
+    // make a folder quietly, and `$null` was read as the program).
+    if (shell === 'powershell' && i + 1 < tokens.length && /^\$[\w:]+$/.test(tokens[i].text) && /^[-+*/]?=$/.test(tokens[i + 1].text)) {
+      i += 2;
+      continue;
+    }
     if (i >= tokens.length) return -1;
-    if (!WRAPPERS.has(programName(tokens[i]))) return i;
     const wrapper = programName(tokens[i]);
+    if (!WRAPPERS.has(wrapper)) return i;
     i++;
-    // Skip the wrapper's own flags, and `timeout 5` / `nice 10`.
-    while (i < tokens.length && isFlag(tokens[i], shell)) i++;
-    if ((wrapper === 'timeout' || wrapper === 'nice') && i < tokens.length && /^\d+(\.\d+)?$/.test(tokens[i].text)) i++;
+    // Skip the wrapper's own flags (with the value of one that takes a value),
+    // and a duration or a priority: `timeout 5`, `timeout 10s`, `nice 10`.
+    while (i < tokens.length && isFlag(tokens[i], shell)) {
+      i += WRAPPER_VALUE_FLAGS[wrapper] && WRAPPER_VALUE_FLAGS[wrapper].test(tokens[i].text) ? 2 : 1;
+    }
+    if ((wrapper === 'timeout' || wrapper === 'nice') && i < tokens.length && /^\d+(\.\d+)?[smhd]?$/.test(tokens[i].text)) i++;
   }
   return i < tokens.length ? i : -1;
 }
@@ -793,14 +976,27 @@ const SCRIPT_WRITE_CALLS = [
   { re: /\b(writeFile(?:Sync)?|appendFile(?:Sync)?|createWriteStream|mkdir(?:Sync)?|mkdtemp(?:Sync)?|rm(?:Sync)?|rmdir(?:Sync)?|unlink(?:Sync)?|truncate(?:Sync)?|makedirs|removedirs|os\.remove|shutil\.rmtree|File\.write|IO\.write|FileUtils\.(?:touch|mkdir_p|mkdir|rm_rf|rm_r|rm_f|rm))\s*\(/g, dest: [0] },
   { re: /\b(copyFile(?:Sync)?|cp(?:Sync)?|linkSync|os\.link|symlink(?:Sync)?|shutil\.(?:copy|copy2|copyfile|copytree)|FileUtils\.(?:cp_r|cp|ln_s|ln))\s*\(/g, dest: [1] },
   { re: /\b(rename(?:Sync)?|os\.replace|shutil\.move|FileUtils\.mv)\s*\(/g, dest: [0, 1] },
-  { re: /\b(open|openSync)\s*\(/g, open: true },
+  { re: /\b(open|openSync|ZipFile|h5py\.File)\s*\(/g, open: true },
   { re: /\.(write_text|write_bytes|touch|mkdir|rmdir|unlink|symlink_to|hardlink_to|rename)\s*\(/g, dest: ['receiver'] },
+  // A call that saves a file by a name it is given (a data frame, a figure,
+  // an image, a download, an archive). Read only where that name is a literal
+  // that is absolute or climbs out of the folder, since a data argument is
+  // never one (review 2026-09-28: `df.to_csv('C:/Users/x/r.csv')` over
+  // several lines ran unread, while the one-line form was refused).
+  { re: /\b(to_(?:csv|json|excel|parquet|pickle|html|feather|hdf|xml|markdown|latex|orc|stata)|savefig|save|savetxt|savez|savez_compressed|save_image|imwrite|imsave|urlretrieve|make_archive|write_image|write_html|save_screenshot|screenshot)\s*\(/g, dest: [0, 1], literalOnly: true },
 ];
+// A write function under another name: `const { writeFileSync: w } =
+// require('fs')`, `import { rm as remove }`, `from shutil import rmtree as rt`,
+// `const w = fs.writeFileSync`. Each alias is read like the name it stands
+// for (review 2026-09-28).
+const ALIAS_NAMES = /^(writeFile(?:Sync)?|appendFile(?:Sync)?|createWriteStream|mkdir(?:Sync)?|mkdtemp(?:Sync)?|rm(?:Sync)?|rmdir(?:Sync)?|unlink(?:Sync)?|truncate(?:Sync)?|makedirs|removedirs|copyFile(?:Sync)?|cp(?:Sync)?|rename(?:Sync)?|(?:shutil\.)?(?:rmtree|copytree|copyfile|copy2|copy|move)|os\.remove|os\.replace)$/;
+// The keyword an argument can carry and still name the file written.
+const DEST_KEYWORD = /^(file|path|dst|name|filename|fname|filepath|path_or_buf|target)\s*=(?!=)\s*/;
 const SCRIPT_SPAWN_CALLS = /\b(execSync|exec|execFile(?:Sync)?|spawn(?:Sync)?|os\.system|os\.popen|subprocess\.(?:run|call|check_call|check_output|Popen)|system)\s*\(/g;
 const SCRIPT_HOME = /\b(os\.homedir|homedir\s*\(|os\.tmpdir|tmpdir\s*\(|process\.env\.(HOME|USERPROFILE|APPDATA|LOCALAPPDATA|TEMP|TMP)\b|expanduser|Path\.home|gettempdir|Dir\.home)|os\.environ(\.get)?\s*[[(]\s*['"](HOME|USERPROFILE|APPDATA|LOCALAPPDATA|TEMP|TMP|TMPDIR)['"]|os\.getenv\s*\(\s*['"](HOME|USERPROFILE|APPDATA|LOCALAPPDATA|TEMP|TMP|TMPDIR)['"]|\$ENV\{/;
 const SCRIPT_STRINGS = /(['"`])((?:\\[\s\S]|(?!\1)[^\\])*?)\1/g;
 // A method called on one of these is a module function, not a call on a path.
-const MODULE_RECEIVER = /^(?:fs|fsp|os|io|codecs|shutil|FileUtils|File|IO|Dir|promises|fs\.promises|require\([^()]*\)(?:\.promises)?)$/;
+const MODULE_RECEIVER = /^(?:fs|fsp|os|io|codecs|shutil|FileUtils|File|IO|Dir|promises|fs\.promises|zipfile|tarfile|gzip|bz2|lzma|shelve|dbm|h5py|require\([^()]*\)(?:\.promises)?)$/;
 const POSIX_SHELL = /^(?:.*[\\/])?(?:bash|sh|zsh|dash)(?:\.exe)?$/i;
 const CMD_SHELL = /^(?:.*[\\/])?cmd(?:\.exe)?$/i;
 const PS_SHELL = /^(?:.*[\\/])?(?:powershell|pwsh)(?:\.exe)?$/i;
@@ -925,36 +1121,85 @@ function writeModeIn(args) {
     const v = (kw ? kw[2] : a).trim();
     if (/\bO_(WRONLY|RDWR|CREAT|TRUNC|APPEND)\b/.test(v)) return true;
     const l = stringLiteralAt(v, 0);
-    if (l && l.end === v.length) return /^[rwxabts+U]+$/.test(l.text) && /[wax+]/.test(l.text);
+    // tarfile spells a compressed mode `w:gz` or `r|bz2`: the letters before
+    // the separator are the mode.
+    if (l && l.end === v.length) {
+      const mode = l.text.split(/[:|]/)[0];
+      return /^[rwxabts+U]+$/.test(mode) && /[wax+]/.test(mode);
+    }
   }
   return false;
 }
 
-/** The expressions a script writes to, as written in the script. */
-function writeDestinations(body) {
-  const out = [];
+/** The aliases a script gives its write functions: alias -> the name it stands for. */
+function scriptAliases(body) {
+  const out = new Map();
   const code = maskStrings(body);
-  for (const call of SCRIPT_WRITE_CALLS) {
+  const add = (name, alias) => { if (ALIAS_NAMES.test(name) && alias !== name && !out.has(alias)) out.set(alias, name); };
+  // `{ writeFileSync: w }`, `{ rm as remove }`, `import rmtree as rt`
+  for (const m of code.matchAll(/\b([A-Za-z_$][\w$]*)\s*(?::|\s+as)\s*([A-Za-z_$][\w$]*)/g)) add(m[1], m[2]);
+  // `from shutil import rmtree as rt`: the name lives under its module here.
+  for (const m of code.matchAll(/\bfrom\s+(shutil|os)\s+import\s+([^\n;]+)/g)) {
+    for (const item of m[2].split(',')) {
+      const as = /^\s*(\w+)\s+as\s+(\w+)\s*$/.exec(item);
+      if (as) add(`${m[1]}.${as[1]}`, as[2]);
+    }
+  }
+  // `const w = fs.writeFileSync`, `w = shutil.rmtree`
+  for (const m of code.matchAll(/\b([A-Za-z_$][\w$]*)\s*=\s*((?:fs|fsp|shutil|os|require\([^()]*\))\.[A-Za-z_]\w*)\s*(?=[;\n]|$)/g)) {
+    add(m[2].replace(/^(?:fs|fsp|require\([^()]*\))\./, ''), m[1]);
+  }
+  return out;
+}
+
+/** The write-call rule an alias inherits: the one whose pattern matches its real name. */
+function specFor(name) {
+  return SCRIPT_WRITE_CALLS.find((c) => new RegExp(c.re.source).test(`${name}(`)) || null;
+}
+
+/**
+ * The expressions a script writes to, as written in the script: `dests` for
+ * the calls that always write there, `loose` for the save-style calls whose
+ * argument counts only as a literal path (see SCRIPT_WRITE_CALLS).
+ */
+function writeDestinations(body) {
+  const out = { dests: [], loose: [] };
+  const code = maskStrings(body);
+  const specs = [...SCRIPT_WRITE_CALLS];
+  for (const [alias, name] of scriptAliases(body)) {
+    const spec = specFor(name);
+    if (spec) specs.push({ ...spec, re: new RegExp(`\\b(${alias.replace(/\$/g, '\\$')})\\s*\\(`, 'g') });
+  }
+  for (const call of specs) {
+    const into = call.literalOnly ? out.loose : out.dests;
     for (const m of code.matchAll(call.re)) {
       const open = m.index + m[0].length - 1;
       const dot = code[m.index] === '.' ? m.index : code[m.index - 1] === '.' ? m.index - 1 : -1;
       const receiver = dot >= 0 ? receiverBefore(body, dot) : '';
       const onModule = dot < 0 || MODULE_RECEIVER.test(receiver);
       const args = callArgs(body, open);
-      const argAt = (k) => (args[k] && !/^\w+\s*=(?!=)/.test(args[k]) ? args[k] : null);
+      // A keyword argument names the file too: `open(file='x', mode='w')`,
+      // `shutil.copy(src, dst='x')` (review 2026-09-28).
+      const argAt = (k) => {
+        const a = args[k];
+        if (!a) return null;
+        if (!/^\w+\s*=(?!=)/.test(a)) return a;
+        const kw = DEST_KEYWORD.exec(a);
+        return kw ? a.slice(kw[0].length) : null;
+      };
       if (call.open) {
         if (onModule) {
-          if (argAt(0) && writeModeIn(args.slice(1))) out.push(argAt(0)); // open(path, 'w')
+          if (argAt(0) && writeModeIn(args.slice(1))) into.push(argAt(0)); // open(path, 'w')
         } else if (receiver && writeModeIn(args)) {
-          out.push(receiver); // Path('x').open('w')
+          into.push(receiver); // Path('x').open('w')
         }
         continue;
       }
       for (const d of call.dest) {
         if (d === 'receiver') {
-          if (!onModule && receiver) out.push(receiver);
+          if (!onModule && receiver) into.push(receiver);
         } else if (argAt(d)) {
-          out.push(argAt(d));
+          into.push(argAt(d));
         }
       }
     }
@@ -1107,7 +1352,16 @@ function inlineScriptRisk(body, prog, root, base) {
   const what = `the script passed to \`${prog}\``;
   const baseOutside = Boolean(checkTarget('.', root, what, base));
   const usesHome = SCRIPT_HOME.test(body);
-  for (const dest of writeDestinations(body)) {
+  const written = writeDestinations(body);
+  // A save-style call: only a literal name that is absolute, or climbs out of
+  // the folder, is read. Its other arguments are data.
+  for (const dest of written.loose) {
+    const shape = destShape(dest, body);
+    if (shape.full === undefined || !/^([A-Za-z]:[\\/]|\/|\.\.(?:[\\/]|$))/.test(shape.full)) continue;
+    const reason = checkTarget(shape.full.replace(/\\{2,}/g, '\\'), root, what, base);
+    if (reason) return reason;
+  }
+  for (const dest of written.dests) {
     const shape = destShape(dest, body);
     if (shape.full !== undefined) {
       const reason = checkTarget(shape.full.replace(/\\{2,}/g, '\\'), root, what, base);
@@ -1223,7 +1477,7 @@ function psList(first, words, k) {
   return { values, end: k };
 }
 
-function checkSegment(tokens, root, shell, base) {
+function checkSegment(tokens, root, shell, base, depth = 0) {
   // 1. Redirections, in either shell. `>&` / `&>` followed by a digit or `-` is
   //    a descriptor dup, not a file. Every word the target can be is checked
   //    (a bash brace list, see tokenize), without a `)` that closes a subshell.
@@ -1242,7 +1496,7 @@ function checkSegment(tokens, root, shell, base) {
   const pi = programIndex(tokens, shell);
   if (pi < 0) return null;
   const prog = programName(tokens[pi]);
-  const rest = tokens.slice(pi + 1);
+  let rest = tokens.slice(pi + 1);
 
   // 2. Inline scripts — heuristic, and honest about it.
   const inline = INLINE_SCRIPT[prog];
@@ -1276,11 +1530,14 @@ function checkSegment(tokens, root, shell, base) {
   //    refused and `worktree add -b feat <outside>` was allowed. A `-C <dir>`
   //    before the subcommand moves git into that folder, so the destination is
   //    read from there. `git init` makes a repository too, in the folder it is
-  //    given or in the current one.
+  //    given or in the current one. `git archive -o`, `git format-patch -o`
+  //    and `git bundle create` write a file where they are told to (review
+  //    2026-09-28: "export the repo as a zip to my Desktop" ran unread).
   if (prog === 'git') {
-    const VALUE_OPT = /^(-[bBcCjou]|--(?:branch|revision|origin|config|config-env|depth|reference(?:-if-able)?|upload-pack|template|separate-git-dir|jobs|shallow-since|shallow-exclude|server-option|bundle-uri|initial-branch|object-format|ref-format|reason|git-dir|work-tree|namespace|filter))$/;
+    const VALUE_OPT = /^(-[bBcCjou]|--(?:branch|revision|origin|config|config-env|depth|reference(?:-if-able)?|upload-pack|template|separate-git-dir|jobs|shallow-since|shallow-exclude|server-option|bundle-uri|initial-branch|object-format|ref-format|reason|git-dir|work-tree|namespace|filter|output|output-directory|format|prefix|remote))$/;
     let here = base;
     const ps = [];
+    const outputs = [];
     for (let k = 0; k < rest.length; k++) {
       const t = rest[k];
       if (t.redirect) { k++; continue; }
@@ -1288,6 +1545,8 @@ function checkSegment(tokens, root, shell, base) {
       if (!isFlag(t, shell)) { ps.push(t); continue; }
       const glued = /^--separate-git-dir=(.+)$/.exec(t.text);
       if (glued) { const r = checkTarget(glued[1], root, '`git`', here); if (r) return r; continue; }
+      const out = /^--output(?:-directory)?=(.+)$/.exec(t.text);
+      if (out) { outputs.push(out[1]); continue; }
       if (!VALUE_OPT.test(t.text) || !rest[k + 1]) continue;
       const v = rest[++k].text;
       if (t.text === '-C' && ps.length === 0) {
@@ -1296,6 +1555,8 @@ function checkSegment(tokens, root, shell, base) {
       } else if (t.text === '--separate-git-dir') {
         const r = checkTarget(v, root, '`git`', here);
         if (r) return r;
+      } else if (/^(-o|--output|--output-directory)$/.test(t.text)) {
+        outputs.push(v);
       }
     }
     const sub = ps[0] ? ps[0].text.toLowerCase() : '';
@@ -1304,19 +1565,32 @@ function checkSegment(tokens, root, shell, base) {
     if (sub === 'worktree' && ps.length >= 3 && ps[1].text.toLowerCase() === 'add') {
       return checkTarget(ps[2].text, root, '`git worktree add`', here);
     }
+    if (sub === 'archive' || sub === 'format-patch') {
+      for (const o of outputs) {
+        const r = checkTarget(o, root, `\`git ${sub}\``, here);
+        if (r) return r;
+      }
+    }
+    if (sub === 'bundle' && ps[1] && ps[1].text.toLowerCase() === 'create' && ps[2]) {
+      return checkTarget(ps[2].text, root, '`git bundle create`', here);
+    }
     return null;
   }
 
   //    A project starter writes into the current folder, and into any folder
   //    it is named, in either shell: npm, pnpm, yarn or bun init or create,
-  //    and npx, bunx or pnpm dlx running create-*, degit, giget or tiged.
+  //    and npx, bunx or pnpm dlx running create-*, degit, giget or tiged. So
+  //    does an install of dependencies, and `curl -O`, which saves the remote
+  //    name into the current folder (review 2026-09-28: after a `cd` out, both
+  //    wrote there unread). A global install (`-g`) is the machine's, not a
+  //    folder's.
   {
     const pos = positionals(rest, shell);
     const sub = pos[0] ? pos[0].text.toLowerCase() : '';
+    const global = rest.some((t) => isWord(t) && /^(-g|--global)$/.test(t.text));
     let at = -1;
     let what = '';
-    if (['npm', 'pnpm', 'yarn', 'bun'].includes(prog) && ['init', 'create'].includes(sub)
-      && !rest.some((t) => isWord(t) && /^(-g|--global)$/.test(t.text))) { at = 1; what = `\`${prog} ${sub}\``; }
+    if (['npm', 'pnpm', 'yarn', 'bun'].includes(prog) && ['init', 'create'].includes(sub) && !global) { at = 1; what = `\`${prog} ${sub}\``; }
     const dlx = ['npx', 'bunx'].includes(prog) ? 0 : prog === 'pnpm' && sub === 'dlx' ? 1 : -1;
     if (dlx >= 0 && pos[dlx] && /^(create-|@[^/]+\/create|degit|giget|tiged)/i.test(pos[dlx].text)) { at = dlx + 1; what = `\`${prog} ${pos[dlx].text}\``; }
     if (at >= 0) {
@@ -1324,6 +1598,12 @@ function checkSegment(tokens, root, shell, base) {
         const r = checkTarget(target, root, what, base);
         if (r) return r;
       }
+    }
+    const installs = ['npm', 'pnpm', 'yarn', 'bun'].includes(prog) && /^(install|i|add|ci|update|up)$/.test(sub) && !global;
+    const remoteName = prog === 'curl' && rest.some((t) => isWord(t) && (/^-[a-zA-Z]*O/.test(t.text) || /^--remote-name(-all)?$/.test(t.text)));
+    if (installs || remoteName) {
+      const r = checkTarget('.', root, `\`${prog} ${installs ? sub : '-O'}\``, base);
+      if (r) return r;
     }
   }
 
@@ -1335,6 +1615,102 @@ function checkSegment(tokens, root, shell, base) {
       const reason = checkTarget(v, root, `\`${prog}\``, base);
       if (reason) return reason;
     }
+  }
+
+  //    tar in create, append or update mode writes the archive named by -f,
+  //    in every spelling: `-czf FILE`, `-cf FILE`, `--create --file=FILE`, and
+  //    the old style with no dash (`tar czf FILE src`), where the letters take
+  //    their values from the words after them (review 2026-09-28: a backup
+  //    archive made in another folder ran unread; only -C was read).
+  if (prog === 'tar') {
+    const words = rest.filter((t) => !t.redirect && t.text !== '');
+    const first = words[0] && isWord(words[0]) ? words[0].text : '';
+    const oldStyle = /^[A-Za-z]+$/.test(first) ? first : '';
+    const creating = /[cru]/.test(oldStyle)
+      || rest.some((t) => isWord(t) && (/^-[A-Za-z]*[cru]/.test(t.text) || /^--(create|append|update)$/.test(t.text)));
+    if (creating) {
+      const files = flagValues(rest, TAR_FILE_FLAG);
+      if (oldStyle.includes('f') && words[1]) files.push(words[1].text);
+      for (const f of files) {
+        const reason = checkTarget(f, root, '`tar`', base);
+        if (reason) return reason;
+      }
+    }
+  }
+
+  //    robocopy and xcopy copy INTO their second word, and robocopy also
+  //    writes its /LOG file. From PowerShell and from Git Bash alike.
+  if (prog === 'robocopy' || prog === 'xcopy') {
+    const ps = positionals(rest, shell).filter((t) => !/^\/[A-Za-z+]+(:.*)?$/.test(t.text));
+    if (ps[1]) {
+      const reason = checkTarget(ps[1].text, root, `\`${prog}\``, base);
+      if (reason) return reason;
+    }
+    for (const t of rest) {
+      const m = /^\/(?:UNI)?LOG\+?:(.+)$/i.exec(t.text);
+      const reason = m && checkTarget(m[1], root, '`robocopy /LOG`', base);
+      if (reason) return reason;
+    }
+    return null;
+  }
+
+  //    Writers found missing by the review of 2026-09-28: zip writes its
+  //    first word, sort -o and scp write where they are told to, `install -d`
+  //    makes every folder it is given, and mktemp makes a file or folder in
+  //    the system temp folder unless it is pointed elsewhere.
+  if (prog === 'zip') {
+    const ps = positionals(rest, shell);
+    return ps[0] ? checkTarget(ps[0].text, root, '`zip`', base) : null;
+  }
+  if (prog === 'sort') {
+    for (const v of flagValues(rest, SORT_OUTPUT_FLAG)) {
+      const reason = checkTarget(v, root, '`sort -o`', base);
+      if (reason) return reason;
+    }
+    return null;
+  }
+  if (prog === 'scp') {
+    const ps = positionals(rest, shell);
+    const dest = ps.length >= 2 ? ps[ps.length - 1].text : null;
+    if (!dest) return null;
+    if (REMOTE_PATH.test(dest) && !/^[A-Za-z]:/.test(dest)) {
+      return `\`scp\` copies to "${dest}", another computer, which is outside the project folder`;
+    }
+    return checkTarget(dest, root, '`scp`', base);
+  }
+  if (prog === 'mktemp') {
+    const dirs = flagValues(rest, { letters: 'p', stops: '', long: ['tmpdir'] });
+    const template = positionals(rest, shell)[0];
+    if (dirs.length === 0 && (!template || !/[\\/]/.test(template.text))) {
+      return '`mktemp` writes into the system temp folder, which is outside the project folder. Make the file under the project\'s own .tmp/ folder instead';
+    }
+    for (const target of [...dirs, ...(template ? [template.text] : [])]) {
+      const reason = checkTarget(target, root, '`mktemp`', base);
+      if (reason) return reason;
+    }
+    return null;
+  }
+
+  //    `find` runs a command on what it finds (`-exec cp {} <folder> \;`), and
+  //    writes its own output files with -fprint, -fprintf and -fls. In
+  //    PowerShell `find` is find.exe, which only searches text.
+  if (prog === 'find' && shell !== 'powershell') {
+    for (let k = 0; k < rest.length; k++) {
+      const x = rest[k].text;
+      if (/^-(fprint0?|fprintf|fls)$/.test(x) && rest[k + 1]) {
+        const reason = checkTarget(rest[k + 1].text, root, `\`find ${x}\``, base);
+        if (reason) return reason;
+      }
+      if (/^-(exec|execdir|ok|okdir)$/.test(x)) {
+        let end = k + 1;
+        while (end < rest.length && !/^[;+]$/.test(rest[end].text)) end++;
+        const inner = rest.slice(k + 1, end);
+        const reason = checkSegment(inner, root, shell, base, depth) || innerShells(inner, root, shell, depth, base);
+        if (reason) return reason;
+        k = end;
+      }
+    }
+    return null;
   }
 
   if (shell !== 'powershell') {
@@ -1360,6 +1736,14 @@ function checkSegment(tokens, root, shell, base) {
         }
         return null;
       }
+      // `install -d` makes every folder it names.
+      if (prog === 'install' && rest.some((t) => isWord(t) && /^(-d|--directory)$/.test(t.text))) {
+        for (const t of ps) {
+          const reason = checkTarget(t.text, root, '`install -d`', base);
+          if (reason) return reason;
+        }
+        return null;
+      }
       return ps.length >= 2 ? checkTarget(ps[ps.length - 1].text, root, `\`${prog}\``, base) : null;
     }
     // A link is a door out of the folder: check where it POINTS as well.
@@ -1370,11 +1754,17 @@ function checkSegment(tokens, root, shell, base) {
       }
       return null;
     }
-    if (prog === 'sed') {
-      const inPlace = rest.some((t) => isWord(t) && /^(-i|--in-place)/.test(t.text));
+    // sed and perl edit a file in place with -i, in any cluster: `-Ei`, `-ni`,
+    // `-i.bak`, perl's `-pi -e`. Only a word starting `-i` used to count
+    // (review 2026-09-28).
+    if (prog === 'sed' || prog === 'perl') {
+      const inPlace = rest.some((t) => isWord(t) && (/^-[a-zA-Z]*i/.test(t.text) || /^--in-place/.test(t.text)));
       if (!inPlace) return null;
-      for (const t of positionals(rest, shell).slice(1)) {
-        const reason = checkTarget(t.text, root, '`sed -i`', base);
+      const ps = positionals(rest, shell);
+      // The first word is the script unless -e, -f or a script file gave it.
+      const scripted = rest.some((t) => isWord(t) && /^-[a-zA-Z]*[ef]/.test(t.text) && !/^-[a-zA-Z]*i/.test(t.text));
+      for (const t of scripted ? ps : ps.slice(1)) {
+        const reason = checkTarget(t.text, root, `\`${prog} -i\``, base);
         if (reason) return reason;
       }
       return null;
@@ -1402,8 +1792,36 @@ function checkSegment(tokens, root, shell, base) {
   }
 
   // 3b. PowerShell.
+  // An expression in parentheses is one word to PowerShell, whatever spaces it
+  // holds: `-Path (Join-Path $env:USERPROFILE 'x')` is one value, built at
+  // run time (review 2026-09-28: read word by word, `(Join-Path` was a file
+  // inside the project and the rest fell off the end).
+  rest = psGroupParens(rest);
+  // Start-Process writes only where -RedirectStandardOutput/Error point.
+  if (PS_START.has(prog)) {
+    for (let k = 0; k < rest.length; k++) {
+      const t = rest[k];
+      if (!isWord(t) || !PS_START_DEST.test(t.text)) continue;
+      const glued = /^-[A-Za-z]+[:=](.+)$/.exec(t.text);
+      const v = glued ? glued[1] : rest[k + 1] && !rest[k + 1].redirect ? rest[++k].text : null;
+      const reason = v && checkTarget(v, root, '`start-process`', base);
+      if (reason) return reason;
+    }
+    return null;
+  }
+  // A one-line Invoke-Expression runs its string as PowerShell.
+  if (prog === 'invoke-expression' || prog === 'iex') {
+    const ps = positionals(rest, shell);
+    const named = rest.findIndex((t) => isWord(t) && /^-c(o(m(m(a(n(d)?)?)?)?)?)?$/i.test(t.text));
+    const script = named >= 0 && rest[named + 1] ? rest[named + 1].text : ps[0] ? ps[0].text : null;
+    return script && depth < MAX_DEPTH ? analyze(script, 'powershell', root, depth + 1, base) : null;
+  }
   const isWriter = PS_WRITE_FIRST.has(prog) || PS_WRITE_LAST.has(prog);
-  const linkish = prog === 'new-item' && rest.some((t) => /^(junction|symboliclink|hardlink)$/i.test(t.text));
+  // A link is a door out of the folder, so where it POINTS is checked too:
+  // New-Item's -Target, whose real name is -Value (review 2026-09-28: read as
+  // content, `-Value C:\Users\x` made an unchecked junction), and mklink under
+  // cmd, whose last word is the target.
+  const linkish = (prog === 'new-item' && rest.some((t) => /^(junction|symboliclink|hardlink)$/i.test(t.text))) || prog === 'mklink';
   if (!isWriter && !linkish) return null;
   // Compress-Archive and Expand-Archive read their -Path and write only to
   // -DestinationPath, so they are read like a copy (review 2026-09-25):
@@ -1436,7 +1854,8 @@ function checkSegment(tokens, root, shell, base) {
     if (!next || next.redirect || /[:=]/.test(t.text)) continue;
     const source = archive && PS_SOURCE_PARAM.test(t.text);
     if (source) namedSource = true;
-    if (source || PS_VALUE_PARAMS.test(t.text) || PS_COMMON_VALUE.test(t.text.slice(1).toLowerCase())) {
+    const content = PS_VALUE_PARAMS.test(t.text) && !(linkish && /^-value$/i.test(t.text));
+    if (source || content || PS_COMMON_VALUE.test(t.text.slice(1).toLowerCase())) {
       const list = psList(next, rest, k + 1);
       for (let j = k + 1; j <= list.end; j++) skip.add(rest[j]);
       k = list.end;
@@ -1452,26 +1871,47 @@ function checkSegment(tokens, root, shell, base) {
     k = list.end;
   }
 
+  if (prog === 'mklink') return firstReason(groups.flat());
+
   // Named parameters, including PowerShell's `-Param:Value` and `-Param=Value`.
   let sawNamedDest = false;
   const named = [];
+  let namedSrc = null;
+  let namedName = null;
   for (let k = 0; k < rest.length; k++) {
     const t = rest[k];
     if (!isWord(t) || !/^-/.test(t.text)) continue;
-    const which = destOnly && !/^-target(:|=|$)/i.test(t.text) ? PS_DEST_ONLY : PS_DEST_PARAMS;
-    if (!which.test(t.text)) continue;
     const glued = t.text.match(/^-[A-Za-z]+[:=](.+)$/);
-    if (glued) {
-      named.push(...psList(gluedWord(t, glued[1]), rest, k).values);
-      sawNamedDest = true;
+    const value = () => (glued ? psList(gluedWord(t, glued[1]), rest, k) : rest[k + 1] && !rest[k + 1].redirect ? psList(rest[k + 1], rest, k + 1) : null);
+    if (PS_RENAME.has(prog)) {
+      // A rename is read below, from its source and its new name.
+      const list = value();
+      if (!list) continue;
+      if (PS_SOURCE_PARAM.test(t.text.replace(/[:=].*$/, ''))) namedSrc = list.values[0] ?? null;
+      else if (/^-newname(:|=|$)/i.test(t.text)) namedName = list.values[0] ?? null;
+      else continue;
+      if (!glued) k = list.end;
       continue;
     }
-    if (rest[k + 1] && !rest[k + 1].redirect) {
-      const list = psList(rest[k + 1], rest, k + 1);
-      named.push(...list.values);
-      k = list.end;
-      sawNamedDest = true;
-    }
+    const which = linkish ? /^-(path|literalpath|value|target)(:|=|$)/i
+      : destOnly && !/^-target(:|=|$)/i.test(t.text) ? PS_DEST_ONLY : PS_DEST_PARAMS;
+    if (!which.test(t.text)) continue;
+    const list = value();
+    if (!list) continue;
+    named.push(...list.values);
+    if (!glued) k = list.end;
+    sawNamedDest = true;
+  }
+  if (PS_RENAME.has(prog)) {
+    const pos = groups.flat().filter((v) => v !== namedSrc && v !== namedName);
+    const src = namedSrc ?? (namedName !== null ? pos[0] : pos[0]) ?? null;
+    const name = namedName ?? (namedSrc !== null ? pos[0] : pos[1]) ?? null;
+    if (!name) return null;
+    if (/[\\/]/.test(name)) return checkTarget(name, root, what, base);
+    if (!src) return checkTarget(name, root, what, base);
+    if (resolveStatic(src, base.toLowerCase()).dynamic) return checkTarget(`\u0000${src}`, root, what, base);
+    const folder = /[\\/]/.test(src) ? src.replace(/[\\/][^\\/]*$/, '') : '.';
+    return checkTarget(`${folder || '/'}/${name}`, root, what, base);
   }
   if (sawNamedDest) return firstReason(named);
 
@@ -1487,10 +1927,107 @@ function checkSegment(tokens, root, shell, base) {
   if (destOnly) return firstReason(groups[groups.length - 1]);
   // The first word is the path, checked in full. A later word is usually the
   // content (`Set-Content x.txt $text`), so one built at run time is passed
-  // over there; a literal path that points outside is still refused.
+  // over there; a literal path that points outside is still refused. A link's
+  // second word is where it points, and is checked in full.
   const reason = firstReason(groups[0]);
   if (reason) return reason;
+  if (linkish) return firstReason(groups.slice(1).flat());
   return firstReason(groups.slice(1).flat().filter((v) => !resolveStatic(v, base.toLowerCase()).dynamic));
+}
+
+/**
+ * PowerShell words joined back into the parenthesised expression they came
+ * from: `(Join-Path`, `$env:USERPROFILE`, `'x')` become one word starting
+ * with `(`, which resolveStatic reads as built at run time. Quoted parentheses
+ * are text (`lit`, from tokenize).
+ */
+function psGroupParens(tokens) {
+  const out = [];
+  for (let k = 0; k < tokens.length; k++) {
+    const t = tokens[k];
+    if (t.redirect || !/^[$@]?\(/.test(t.text) || (t.lit && t.lit[0])) { out.push(t); continue; }
+    let depth = 0;
+    const parts = [];
+    let end = k;
+    for (; end < tokens.length; end++) {
+      const u = tokens[end];
+      if (u.redirect) break;
+      for (let i = 0; i < u.text.length; i++) {
+        if (u.lit && u.lit[i]) continue;
+        if (u.text[i] === '(') depth++;
+        else if (u.text[i] === ')') depth--;
+      }
+      parts.push(u.text);
+      if (depth <= 0) break;
+    }
+    out.push({ text: parts.join(' '), legacy: parts.join(' ') });
+    k = end;
+  }
+  return out;
+}
+
+/**
+ * A .NET call that writes, read from the segment's own text: the arguments
+ * of `[IO.File]::WriteAllText('C:\x\a.txt', ...)`, `[IO.Directory]::
+ * CreateDirectory(...)` and the rest of DOTNET_DEST. A single-quoted argument
+ * is the path as written; a double-quoted one is, unless it holds a variable;
+ * anything else is built at run time.
+ */
+function dotnetWrites(segment, root, base) {
+  for (const m of segment.matchAll(DOTNET_WRITE)) {
+    const dests = DOTNET_DEST[m[1].toLowerCase()][m[2].toLowerCase()];
+    if (!dests) continue;
+    const args = callArgs(segment, m.index + m[0].length - 1);
+    for (const d of dests) {
+      const a = args[d];
+      if (a === undefined || a === '') continue;
+      const lit = /^'([^']*)'$/.exec(a) || /^"([^"$`]*)"$/.exec(a);
+      const reason = checkTarget(lit ? lit[1] : `\u0000${a}`, root, `\`[IO.${m[1]}]::${m[2]}\``, base);
+      if (reason) return reason;
+    }
+  }
+  return null;
+}
+
+/**
+ * The commands inside `$( )`, backticks and `<( )` / `>( )` of one bash
+ * segment, each read as a command of its own. Only single quotes hide them:
+ * inside double quotes they still run (review 2026-09-28: `echo $(cp a
+ * /c/x)` ran its copy unread, since only a segment's first program is judged).
+ */
+function substitutions(text) {
+  const out = [];
+  let q = null;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q === "'") { if (ch === "'") q = null; continue; }
+    if (ch === '\\') { i++; continue; }
+    if (ch === "'" && !q) { q = "'"; continue; }
+    if (ch === '"') { q = q ? null : '"'; continue; }
+    if (ch === '`') {
+      let end = i + 1;
+      while (end < text.length && text[end] !== '`') end += text[end] === '\\' ? 2 : 1;
+      out.push(text.slice(i + 1, end));
+      i = end;
+      continue;
+    }
+    if ((ch === '$' || ch === '<' || ch === '>') && text[i + 1] === '(') {
+      let depth = 0;
+      let iq = null;
+      let j = i + 1;
+      for (; j < text.length; j++) {
+        const c = text[j];
+        if (iq) { if (c === '\\') j++; else if (c === iq) iq = null; continue; }
+        if (c === "'" || c === '"') { iq = c; continue; }
+        if (c === '\\') { j++; continue; }
+        if (c === '(') depth++;
+        else if (c === ')' && --depth === 0) break;
+      }
+      out.push(text.slice(i + 2, j));
+      i = j;
+    }
+  }
+  return out;
 }
 
 const BASH_SHELLS = new Set(['bash', 'sh', 'zsh', 'dash']);
@@ -1502,6 +2039,81 @@ const UNKNOWN_DIR = '\u0000unknown';
 // PowerShell's common parameters: these take a value, these are switches.
 const PS_COMMON_VALUE = /^(erroraction|ea|warningaction|wa|informationaction|infa|progressaction|proga|errorvariable|ev|warningvariable|wv|informationvariable|iv|outvariable|ov|outbuffer|ob|pipelinevariable|pv)$/;
 const PS_COMMON_SWITCH = /^(verbose|vb|debug|db)$/;
+
+/**
+ * A here-document read by an interpreter (`python3 - <<'EOF'`, `node <<'EOF'`)
+ * or by a shell (`bash <<'EOF'`) is a script, not data: its body is read the
+ * way an inline script or an inline shell is. A reader given a script file
+ * (`python x.py <<EOF`) or a -c script takes the body as that script's input,
+ * and every other reader (cat, tee, sort) takes it as data.
+ */
+function heredocRisk(prog, rest, docs, root, shell, depth, base) {
+  if (shell === 'powershell' || depth >= MAX_DEPTH) return null;
+  const files = positionals(rest, 'bash').filter((t) => t.text !== '-');
+  if (files.length > 0) return null;
+  const inline = INLINE_SCRIPT[prog];
+  if (inline && !rest.some((t) => isWord(t) && inline.test(t.text))) {
+    for (const body of docs) {
+      const reason = inlineScriptRisk(body, prog, root, base);
+      if (reason) return reason;
+    }
+  } else if (BASH_SHELLS.has(prog) && !rest.some((t) => isWord(t) && /^-[a-z]*c/.test(t.text))) {
+    for (const body of docs) {
+      const reason = analyze(body, 'bash', root, depth + 1, base);
+      if (reason) return reason;
+    }
+  }
+  return null;
+}
+
+/**
+ * The shells and interpreters a command starts with a script in an argument,
+ * read as commands of their own: `bash -c`, `-lc` and friends (the flag is
+ * clustered), `powershell -Command`, `-EncodedCommand`, `cmd /c` and Git
+ * Bash's `cmd //c` (review 2026-09-28: only `/c` was read), and `eval`.
+ */
+function innerShells(tokens, root, shell, depth, here) {
+  if (depth >= MAX_DEPTH) return null;
+  const pi = programIndex(tokens, shell);
+  if (pi < 0) return null;
+  const prog = programName(tokens[pi]);
+  const rest = tokens.slice(pi + 1);
+  if (BASH_SHELLS.has(prog)) {
+    const ci = rest.findIndex((t) => isWord(t) && /^-[a-z]*c$/.test(t.text));
+    if (ci >= 0 && rest[ci + 1]) return analyze(rest[ci + 1].text, 'bash', root, depth + 1, here);
+    return null;
+  }
+  if (prog === 'eval' && shell === 'bash') {
+    return analyze(rest.filter((t) => !t.redirect).map((t) => t.text).join(' '), 'bash', root, depth + 1, here);
+  }
+  if (PS_SHELLS.has(prog)) {
+    const ci = rest.findIndex((t) => isWord(t) && /^-c(o(m(m(a(n(d)?)?)?)?)?)?$/i.test(t.text));
+    if (ci >= 0 && rest.length > ci + 1) {
+      const inner = analyze(rest.slice(ci + 1).map((t) => t.text).join(' '), 'powershell', root, depth + 1, here);
+      if (inner) return inner;
+    }
+    const ei = rest.findIndex((t) => isWord(t) && /^-e(c|nc(odedcommand)?)?$/i.test(t.text));
+    if (ei >= 0) {
+      // No value, or one that does not decode, is a command nobody can read.
+      let decoded = '';
+      try {
+        decoded = rest[ei + 1] ? Buffer.from(rest[ei + 1].text, 'base64').toString('utf16le') : '';
+      } catch {
+        decoded = '';
+      }
+      if (!decoded) {
+        return 'an encoded PowerShell command cannot be read, so it cannot be proven to write inside the project folder';
+      }
+      return analyze(decoded, 'powershell', root, depth + 1, here);
+    }
+    return null;
+  }
+  if (prog === 'cmd') {
+    const ci = rest.findIndex((t) => isWord(t) && /^\/\/?c$/i.test(t.text));
+    if (ci >= 0 && rest.length > ci + 1) return analyze(rest.slice(ci + 1).map((t) => t.text).join(' '), 'other', root, depth + 1, here);
+  }
+  return null;
+}
 
 /**
  * Where a cd, pushd, Set-Location or Push-Location goes: `dest` is the folder
@@ -1618,7 +2230,8 @@ function analyze(command, shell, root, depth = 0, cwd = root) {
     pushed = [];
     stackKnown = false;
   };
-  for (const segment of splitSegments(command, shell)) {
+  for (const seg of splitSegments(command, shell)) {
+    const segment = seg.text;
     const tokens = tokenize(segment, shell);
     if (tokens.length === 0) continue;
     const parens = shell === 'bash' ? subshellParens(segment) : { opens: 0, closes: 0 };
@@ -1626,6 +2239,18 @@ function analyze(command, shell, root, depth = 0, cwd = root) {
     const leave = () => {
       for (let k = 0; k < parens.closes && outer.length > 0; k++) ({ here, pushed, stackKnown } = outer.pop());
     };
+
+    // The commands inside `$( )`, backticks and `<( )` run too, from the same
+    // folder. A `cd` inside them moves nothing outside.
+    if (shell === 'bash') {
+      for (const inner of substitutions(segment)) {
+        const reason = depth < MAX_DEPTH ? analyze(inner, 'bash', root, depth + 1, here) : null;
+        if (reason) return reason;
+      }
+    } else if (shell === 'powershell') {
+      const reason = dotnetWrites(segment, root, here);
+      if (reason) return reason;
+    }
 
     const pi = programIndex(tokens, shell);
     const prog = pi >= 0 ? programName(tokens[pi]) : '';
@@ -1664,45 +2289,17 @@ function analyze(command, shell, root, depth = 0, cwd = root) {
       continue;
     }
 
-    const reason = checkSegment(tokens, root, shell === 'bash' ? 'bash' : 'powershell', here);
+    const reason = checkSegment(tokens, root, shell === 'bash' ? 'bash' : 'powershell', here, depth);
     if (reason) return reason;
 
     if (pi < 0) { leave(); continue; }
-    const rest = tokens.slice(pi + 1);
     // Inline shells carry a whole script in an argument — scan it too.
-    // `-lc`, `-ec` and friends cluster the flag, so match the shape.
-    if (BASH_SHELLS.has(prog)) {
-      const ci = rest.findIndex((t) => isWord(t) && /^-[a-z]*c$/.test(t.text));
-      if (ci >= 0 && rest[ci + 1]) {
-        const inner = analyze(rest[ci + 1].text, 'bash', root, depth + 1, here);
-        if (inner) return inner;
-      }
-    } else if (PS_SHELLS.has(prog)) {
-      const ci = rest.findIndex((t) => isWord(t) && /^-c(o(m(m(a(n(d)?)?)?)?)?)?$/i.test(t.text));
-      if (ci >= 0 && rest.length > ci + 1) {
-        const inner = analyze(rest.slice(ci + 1).map((t) => t.text).join(' '), 'powershell', root, depth + 1, here);
-        if (inner) return inner;
-      }
-      const ei = rest.findIndex((t) => isWord(t) && /^-e(c|nc(odedcommand)?)?$/i.test(t.text));
-      if (ei >= 0 && rest[ei + 1]) {
-        let decoded = '';
-        try {
-          decoded = Buffer.from(rest[ei + 1].text, 'base64').toString('utf16le');
-        } catch {
-          decoded = '';
-        }
-        if (!decoded) {
-          return 'an encoded PowerShell command cannot be read, so it cannot be proven to write inside the project folder';
-        }
-        const inner = analyze(decoded, 'powershell', root, depth + 1, here);
-        if (inner) return inner;
-      }
-    } else if (prog === 'cmd') {
-      const ci = rest.findIndex((t) => isWord(t) && /^\/c$/i.test(t.text));
-      if (ci >= 0 && rest.length > ci + 1) {
-        const inner = analyze(rest.slice(ci + 1).map((t) => t.text).join(' '), 'other', root, depth + 1, here);
-        if (inner) return inner;
-      }
+    const inner = innerShells(tokens, root, shell, depth, here);
+    if (inner) return inner;
+    // A here-document this command reads as a script.
+    if (seg.docs.length > 0) {
+      const doc = heredocRisk(prog, tokens.slice(pi + 1), seg.docs, root, shell, depth, here);
+      if (doc) return doc;
     }
     leave();
   }
@@ -1774,8 +2371,24 @@ function main() {
 // reads stdin and exits.
 export { INLINE_SCRIPT, SCRIPT_SPAWN_CALLS, maskStrings, callArgs, destShape, receiverBefore, spawnedCommands };
 
+/**
+ * Is this file the one node was started on? Compared by the real path as well
+ * as the spelled one: node resolves the main module through junctions and
+ * symbolic links, so a guard started through a linked project folder never
+ * matched itself, read no stdin and allowed everything, silently (review
+ * 2026-09-28).
+ */
+function isMainModule() {
+  const arg = process.argv[1];
+  if (!arg) return false;
+  const self = norm(fileURLToPath(import.meta.url)).toLowerCase();
+  const spellings = [path.resolve(arg)];
+  try { spellings.push(fs.realpathSync(arg)); } catch { /* not on disk under that name */ }
+  return spellings.some((s) => norm(s).toLowerCase() === self);
+}
+
 // Importable for the test; only the direct run touches stdin and exits.
-if (process.argv[1] && norm(path.resolve(process.argv[1])).toLowerCase() === norm(fileURLToPath(import.meta.url)).toLowerCase()) {
+if (isMainModule()) {
   let code = ALLOW;
   try {
     code = main();

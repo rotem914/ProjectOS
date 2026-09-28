@@ -21,16 +21,19 @@
 // runs. On Windows a session opened in a subfolder loads only that folder's
 // settings, while on macOS and Linux it also loads the git root's
 // settings.local.json. Where the guards land decides what the path becomes:
-//   - the personal file (the default) gets this project's own path instead,
-//     because on macOS and Linux that subfolder session reads this file while
-//     CLAUDE_PROJECT_DIR names the subfolder, and a guard named through it
-//     would not be found there (review 2026-09-25); on Windows the plugin
-//     covers a subfolder session;
+//   - the personal file (the default) keeps "${CLAUDE_PROJECT_DIR}" on
+//     Windows, so a renamed or moved project keeps its guards; on macOS and
+//     Linux it gets this project's own path instead, because a subfolder
+//     session reads this file there while CLAUDE_PROJECT_DIR names the
+//     subfolder, and a guard named through it would not be found (review
+//     2026-09-25). The guard itself then walks up from that subfolder to the
+//     project root, so it guards the whole project, not the subfolder;
 //   - the shared file (--shared) keeps "${CLAUDE_PROJECT_DIR}", so the same
 //     committed file works on every computer and in a cloud session. Open
 //     sessions at the project root there.
-// A moved or renamed project is covered by the plugin, which runs its own copy
-// of a guard whose file is gone. A project whose folder path holds a $, a
+// On macOS and Linux a moved or renamed project is covered by the plugin,
+// which runs its own copy of a guard whose file is gone; without the plugin,
+// run this installer again there. A project whose folder path holds a $, a
 // backtick or a double quote (or, on macOS and Linux, a backslash) is refused,
 // because each one breaks the quoted path inside the hook command and the
 // guards would silently not run.
@@ -238,8 +241,11 @@ const unsafeReminders = Object.entries(incoming.hooks)
       return !!m && /['"`$\\]/.test(m[1]);
     })))
   .map(([event]) => event);
-if (!SHARED) {
-  // Forward slashes, which every shell on every platform accepts.
+if (!SHARED && process.platform !== 'win32') {
+  // Forward slashes, which every shell on every platform accepts. On Windows
+  // the placeholder stays: a subfolder session loads only that folder's
+  // settings there, so the absolute path bought nothing and lost the guards
+  // the day the project folder was renamed or moved (review 2026-09-28).
   const rootForward = root.split('\\').join('/');
   incoming = JSON.parse(JSON.stringify(incoming).split('${CLAUDE_PROJECT_DIR}').join(rootForward));
 }

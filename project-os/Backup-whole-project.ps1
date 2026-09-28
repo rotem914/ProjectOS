@@ -24,12 +24,18 @@
 # changing.
 #
 # WHAT IS NEVER IN THE ZIP, whatever the list below says: the backups/ and .tmp/
-# (scratch) folders at the project root, the assistant's machine-local folders
-# (.claude, .codex) at any depth, atomic-write leftovers (*.tmp, *.tmp.*), and
-# the env files (.env*, .dev.vars*; the .env.example and .dev.vars.example
-# templates are kept), so a restore recreates them by hand from the templates.
-# Any other key file inside the project travels in the ZIP, so keep keys
-# outside the project.
+# (scratch) folders at the project root, the assistant's personal settings
+# (.claude/settings.local.json and its .backup copy, which can hold keys and
+# this machine's paths), its worktree copies (.claude/worktrees, whole copies
+# of the repository), the .codex folder at any depth, atomic-write leftovers
+# (*.tmp, *.tmp.*), and the env files (.env*, .dev.vars*; the .env.example and
+# .dev.vars.example templates are kept), so a restore recreates them by hand
+# from the templates. The rest of .claude travels: the committed
+# settings.json, which can carry the team's guard wiring, and the project's
+# own commands, agents and skills (review 2026-09-28: leaving the whole folder
+# out restored a project with no guards, and the next commit could record the
+# team's settings file as deleted). Any other key file inside the project
+# travels in the ZIP, so keep keys outside the project.
 #
 # A git worktree or submodule is refused: its .git is a file pointing at
 # history kept in another folder, so the ZIP would hold no history. Commit
@@ -68,16 +74,20 @@ $ExcludeDirs = @(
 # is safe everywhere.
 $RepoName = ((Split-Path $root -Leaf) -replace '\s+', '_')
 
-# Forced regardless of the list above: the assistant's machine-local folders at
-# any depth, and at the project root only, the backup output (never nest the
-# ZIP inside itself) and the scratch folder. Those are per-machine state; a
-# restore recreates them. Forced so the secrets and local-state posture cannot
-# be widened by editing the list. A folder called backups or .tmp deeper down
-# is ordinary project content and travels.
-foreach ($force in @('.claude', '.codex')) {
+# Forced regardless of the list above: the .codex folder at any depth, the
+# assistant's worktree copies under .claude, and at the project root only, the
+# backup output (never nest the ZIP inside itself) and the scratch folder.
+# Those are per-machine state; a restore recreates them. Forced so the secrets
+# and local-state posture cannot be widened by editing the list. A folder
+# called backups or .tmp deeper down is ordinary project content and travels.
+foreach ($force in @('.codex')) {
     if ($ExcludeDirs -notcontains $force) { $ExcludeDirs = @($ExcludeDirs) + $force }
 }
 $RootOnlyDirs = @('backups', '.tmp')
+# Inside any .claude folder: the personal settings file and its backup copy
+# stay on this machine, and the worktrees folder is left out.
+$ClaudeLocalFiles = @('settings.local.json', 'settings.local.json.backup', 'settings.json.backup')
+$ClaudeLocalDirs  = @('worktrees')
 
 $stamp   = Get-Date -Format 'yyyy-MM-dd_HH-mm'
 $backups = Join-Path $root 'backups'
@@ -101,10 +111,12 @@ function Get-BackupFiles($dir) {
         $script:enumErrors += "$dir  --  $($_.Exception.Message)"
         return
     }
+    $inClaude = ((Split-Path $dir -Leaf) -eq '.claude')
     foreach ($entry in $entries) {
         if ($entry.PSIsContainer) {
             if (($ExcludeDirs -contains $entry.Name) -or
-                (($dir -eq $root) -and ($RootOnlyDirs -contains $entry.Name))) {
+                (($dir -eq $root) -and ($RootOnlyDirs -contains $entry.Name)) -or
+                ($inClaude -and ($ClaudeLocalDirs -contains $entry.Name))) {
                 # Recorded, so a skipped source folder shows in the output.
                 $script:pruned += $entry.FullName.Substring($root.Length + 1).Replace('\', '/')
                 continue
@@ -112,6 +124,8 @@ function Get-BackupFiles($dir) {
             Get-BackupFiles $entry.FullName
             continue
         }
+        # The assistant's personal settings stay on this machine.
+        if ($inClaude -and ($ClaudeLocalFiles -contains $entry.Name)) { continue }
         # Atomic-write leftovers.
         if ($entry.Name -like '*.tmp' -or $entry.Name -like '*.tmp.*') { continue }
         # Real secret files stay on this machine; the templates travel.

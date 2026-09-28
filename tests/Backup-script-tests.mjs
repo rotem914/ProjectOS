@@ -124,8 +124,12 @@ function caseWhatGoesIn() {
     'src/features/backups/b.txt': 'nested backups travels',
     'node_modules/pkg/index.js': 'dependency',
     '.tmp/scratch.txt': 'root scratch',
-    '.claude/settings.local.json': '{}',
-    'src/.claude/notes.md': 'machine-local at any depth',
+    '.claude/settings.local.json': '{}',                 // personal: stays on this machine
+    '.claude/settings.local.json.backup': '{}',          // the installer's copy of it
+    '.claude/settings.json': '{ "hooks": {} }',           // committed: the team's guard wiring travels
+    '.claude/commands/go.md': 'a project command',         // travels
+    '.claude/worktrees/w/a.txt': 'a whole repository copy',
+    'src/.claude/notes.md': 'a .claude folder deeper down travels',
     '.env': 'SECRET=1', '.env.local': 'SECRET=2', '.env.example': 'SECRET=',
     '.dev.vars': 'KEY=1', '.dev.vars.example': 'KEY=',
     'x.tmp': 'atomic-write leftover', 'y.tmp.1': 'atomic-write leftover',
@@ -139,16 +143,19 @@ function caseWhatGoesIn() {
   check(`${label}: the ZIP lands in backups/`, path.dirname(zip) === backupsOf(root), zip);
   check(`${label}: no .partial is left behind`, !listBackups(root).some((f) => f.endsWith('.partial')), listBackups(root).join(', '));
   const z = readZip(zip);
-  const expected = ['.dev.vars.example', '.env.example', '.git/HEAD', 'README.md', 'project-os/Backup-whole-project.ps1',
-    'src/.tmp/keep.txt', 'src/a.txt', 'src/features/backups/b.txt'].sort();
+  // [R10] The committed .claude/settings.json and the project's commands
+  // travel, so a restore comes back with its guard wiring; the personal
+  // settings file, its backup copy and the worktree copies stay behind.
+  const expected = ['.claude/commands/go.md', '.claude/settings.json', '.dev.vars.example', '.env.example', '.git/HEAD', 'README.md',
+    'project-os/Backup-whole-project.ps1', 'src/.claude/notes.md', 'src/.tmp/keep.txt', 'src/a.txt', 'src/features/backups/b.txt'].sort();
   check(`${label}: exactly the right files are in the ZIP`, z.names.join('|') === expected.join('|'),
     `got ${z.names.join(', ')}`);
   check(`${label}: a file's bytes come back out`, z.content('src/a.txt') === 'alpha content\n');
   const left = ((/^Left out by name: (.+?)\r?$/m.exec(r.stdout) || [])[1] || '').split(', ');
-  for (const dir of ['.claude', '.tmp', 'backups', 'node_modules', 'src/.claude', 'src/build']) {
+  for (const dir of ['.claude/worktrees', '.tmp', 'backups', 'node_modules', 'src/build']) {
     check(`${label}: "${dir}" is reported as left out by name`, left.includes(dir), `Left out: ${left.join(', ')}`);
   }
-  for (const dir of ['src/.tmp', 'src/features/backups']) {
+  for (const dir of ['.claude', 'src/.claude', 'src/.tmp', 'src/features/backups']) {
     check(`${label}: "${dir}" is not reported as left out`, !left.includes(dir), `Left out: ${left.join(', ')}`);
   }
 }

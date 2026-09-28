@@ -79,8 +79,15 @@ differ per path, which is exactly why only one path gets tested and only one pat
 works. Watch the console and the network the whole time. Reload and confirm what
 survived. Glance at neighboring screens for damage.
 
-**2 · Be a destructive user.** The resting state is where nothing hides. Go at the
-transitions:
+**2 · Be a destructive user, never with the owner's real content.** Before the
+first destructive input, decide where the test edits land: a throwaway copy of
+the data, throwaway entries made for this pass, or a snapshot taken first (the
+`Go backup` ZIP counts). The inputs below can erase or corrupt a real entry, and
+the undo that step 4 asks for is often the very thing under test; the guards
+also refuse the git commands that would roll the data files back, so a failed
+undo is the owner's to repair. Touching the owner's real entries needs their
+yes first (CLAUDE.md rule 4). The resting state is where nothing hides. Go at
+the transitions:
 
 - clear a required field, then leave it;
 - type something, then delete all of it;
@@ -111,8 +118,9 @@ more than a missed one, because it sends someone to fix code that was never brok
 **4 · Confirm against the source of truth, then clean up.** What the screen shows
 must match what was actually stored — the file, the database, the response — and
 must survive a reload. A screen can display "Saved" over nothing at all; eyes alone
-cannot tell the difference. Then undo your test edits, or work on a throwaway copy,
-so the pass leaves no residue in real data.
+cannot tell the difference. Then undo your test edits; the throwaway copy,
+throwaway entries or snapshot from step 2 are what make that possible, so the
+pass leaves no residue in real data.
 
 ## Universal dimensions
 

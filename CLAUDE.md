@@ -634,7 +634,7 @@ when the owner says so.
 > Looks like you're tuning by eye, where speed matters more than paperwork.
 >
 > We have FAST MODE for this: it cuts the wait between rounds.
-> It skips the documentation and review steps and leaves them for the end of the task.
+> It skips the paperwork and the code review: you check each round yourself, and I write the docs when it ends.
 >
 > Say FAST ON to switch it on.
 > Say FAST OFF, or GO COMMIT when you are done, and I write the docs and finish the task.
@@ -739,10 +739,12 @@ disaster recovery that depends on no git host and no sync folder. Flow:
 
 1. Run `project-os/Backup-whole-project.ps1` (PowerShell; `pwsh` on macOS or Linux). It zips
    the whole project, git history included, and leaves out the regenerable
-   folders named in its setup block, the assistant's machine-local folders, the
-   `.tmp/` scratch folder and the env files (`.env*`, `.dev.vars*`; the
-   `.env.example` and `.dev.vars.example` templates travel). Any other key file
-   inside the project travels in the ZIP, so keep keys outside the project.
+   folders named in its setup block, the assistant's personal settings file
+   (`.claude/settings.local.json` and its `.backup` copy) and worktree copies,
+   the `.tmp/` scratch folder and the env files (`.env*`, `.dev.vars*`; the
+   `.env.example` and `.dev.vars.example` templates travel). The committed
+   `.claude/settings.json` and the project's own commands travel. Any other key
+   file inside the project travels in the ZIP, so keep keys outside the project.
    Every file name is checked in the finished archive (names, not content).
    The run either passes that check or fails and leaves no ZIP at all; there
    is no "mostly worked".
@@ -758,8 +760,14 @@ file kept anywhere else in the project goes into the ZIP with everything else.
 
 **Restore.** Unzip the chosen `backups/*.zip` into a NEW folder, never over the
 live tree; reinstall dependencies; recreate the env files from their
-templates; then run the project as usual. The full git history is inside the
-snapshot's `.git` folder, so nothing has to be fetched from anywhere.
+templates; then switch the guards back on, since the personal settings file
+never travels: run `node project-os/Install-project-hooks.mjs` in the restored
+folder (with `--shared` too if the project used it), or confirm the plugin's
+start line names the new folder, and run the two guard probes from
+`project-os/Hooks.md`. Then run the project as usual. The full git history is
+inside the snapshot's `.git` folder, so nothing has to be fetched from
+anywhere. Say in the restore report, in one line, that the guards were wired
+again.
 
 ### `Go commit and backup`
 

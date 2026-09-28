@@ -513,10 +513,15 @@ A format lesson learned mid-conversation is added HERE, in place.
 A second home means the rules drift, duplicate, and sit somewhere the owner
 cannot see or edit.
 
+One thing is not a second home: the row a correction earns in
+`project-os/Mistakes.md` (CLAUDE.md rule 20). That row records the slip, so a
+repeat can be seen and promoted; the RULE it points at still lives here, and
+only here. A correction on how a reply was written gets both: nothing new in
+this file when the rule already exists, and one row there every time.
+
 ~~~
 That rule is already rule 6 here.
-Nothing to record.
-I broke a rule that exists.
+One row goes on the mistakes list; the rule stays as it is.
 ~~~
 
 ### 17 · Never a long dash

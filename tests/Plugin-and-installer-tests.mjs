@@ -101,6 +101,16 @@ try {
   fs.mkdirSync(path.join(PROJ, 'src', 'deep'), { recursive: true });
   r = dispatch('session', {}, PROJ);
   t('marker: session start prints the reminder and the active line', r.code === 0 && r.out.includes('PROJECT RULES') && r.out.includes('[ProjectOS plugin] hooks active for'), r.out);
+  // [R10] The active line names the kit version the plugin carries, and a
+  // project whose guard files differ from the plugin's copy is told so, with
+  // the one command that updates the plugin folder.
+  const VERSION = JSON.parse(fs.readFileSync(path.join(KIT, '.claude-plugin', 'plugin.json'), 'utf8')).version;
+  t('[R10] the active line names the kit version', r.out.includes(`(kit ${VERSION})`), r.out);
+  t('[R10] a project with the same guards gets no update line', !r.out.includes('differ from the plugin'), r.out);
+  const NEWER = kitProject(path.join(TMP, 'newer guards'));
+  fs.appendFileSync(path.join(NEWER, 'project-os', 'guards', 'Destructive-guard.mjs'), '\n// a newer kit\n');
+  r = dispatch('session', {}, NEWER);
+  t('[R10] a project whose delete guard differs is told, with the pull command', r.code === 0 && r.out.includes("this project's Destructive-guard.mjs differ from the plugin's copy") && r.out.includes(`git -C "${fwd(KIT)}" pull`), r.out);
   r = dispatch('prompt', {}, PROJ);
   t('marker: every prompt prints the standing rules once', r.code === 0 && r.out.startsWith('[ProjectOS plugin]') && count(r.out, 'STANDING RULES') === 1, r.out);
   r = dispatch('pretool', pay(PROJ, P.writeOut), PROJ);
@@ -192,7 +202,16 @@ try {
   r = install(FRESH);
   let s = settingsOf(FRESH);
   t('fresh install adds all three events', r.code === 0 && r.out.includes(`added:    ${ALL}`), r.out);
-  t('fresh install names the guards by this project\'s own path', cmdsOf(s, 'PreToolUse').join('|') === `${guardCmd(FRESH, 'Path-guard.mjs')}|${guardCmd(FRESH, 'Destructive-guard.mjs')}`, cmdsOf(s, 'PreToolUse').join('\n'));
+  // [R10] On Windows the personal file keeps ${CLAUDE_PROJECT_DIR}, so a
+  // renamed or moved project keeps its guards; on macOS and Linux it names the
+  // project's own path, which a subfolder session needs.
+  const personal = (dir, name) => (WIN ? `node "\${CLAUDE_PROJECT_DIR}/project-os/guards/${name}"` : guardCmd(dir, name));
+  t(WIN ? '[R10] Windows: a fresh install keeps the placeholder in the personal file' : 'fresh install names the guards by this project\'s own path', cmdsOf(s, 'PreToolUse').join('|') === `${personal(FRESH, 'Path-guard.mjs')}|${personal(FRESH, 'Destructive-guard.mjs')}`, cmdsOf(s, 'PreToolUse').join('\n'));
+  const FRESH_L = kitProject(path.join(TMP, 'fresh linux'));
+  install(FRESH_L, [], { linux: true });
+  t('[R10] Linux: a fresh install names the guards by this project\'s own path', cmdsOf(settingsOf(FRESH_L), 'PreToolUse')[0] === guardCmd(FRESH_L, 'Path-guard.mjs'), cmdsOf(settingsOf(FRESH_L), 'PreToolUse').join('\n'));
+  r = dispatch('pretool', pay(FRESH, P.rm), FRESH);
+  t('[R10] after a personal install the plugin stands down for the placeholder wiring too', standsDown(r, 2), r.log);
   r = install(FRESH);
   t('a second run changes nothing', r.code === 0 && r.out.includes('nothing to change'), r.out);
   r = install(FRESH, ['--dry']);

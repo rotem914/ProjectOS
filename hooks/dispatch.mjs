@@ -303,6 +303,30 @@ function runReminders(kit, root, event) {
   return lines;
 }
 
+// The kit version this plugin folder carries, from its own manifest.
+function pluginVersion() {
+  const manifest = readJson(path.join(PLUGIN_ROOT, '.claude-plugin', 'plugin.json'));
+  return (manifest && typeof manifest.version === 'string' && manifest.version) || 'unknown';
+}
+
+// The guards whose copy in the project differs from the plugin's. The plugin
+// runs its own copy, so a project that received a newer kit is protected by
+// an older guard until the plugin folder is updated, and nothing said so
+// (review 2026-09-28). Compared by content, so a rename or a re-download that
+// changed nothing stays quiet.
+function staleGuards(root) {
+  const out = [];
+  for (const name of ['Path-guard.mjs', 'Destructive-guard.mjs']) {
+    try {
+      const theirs = path.join(root, 'project-os', 'guards', name);
+      const ours = path.join(PLUGIN_ROOT, 'project-os', 'guards', name);
+      if (!fs.existsSync(theirs) || !fs.existsSync(ours)) continue;
+      if (!fs.readFileSync(theirs).equals(fs.readFileSync(ours))) out.push(name);
+    } catch { /* unreadable: nothing to say */ }
+  }
+  return out;
+}
+
 function runGuard(name, rawPayload, root) {
   const script = path.join(PLUGIN_ROOT, 'project-os', 'guards', name);
   if (!fs.existsSync(script)) { log(`${name}: missing in plugin, allow`); return 0; }
@@ -344,7 +368,9 @@ try {
     const settingsRemind = (event) => settingsCommands(settingsDir(root), event).some((c) => reminderText(c) !== null);
     if (mode === 'session') {
       const lines = kit ? runReminders(kit, root, 'SessionStart') : [];
-      if (kit) lines.push(`[ProjectOS plugin] hooks active for ${norm(root)} from ${norm(PLUGIN_ROOT)}; nothing to install in this project.`);
+      if (kit) lines.push(`[ProjectOS plugin] hooks active for ${norm(root)} from ${norm(PLUGIN_ROOT)} (kit ${pluginVersion()}); nothing to install in this project.`);
+      const differ = staleGuards(root);
+      if (differ.length) lines.push(`[ProjectOS plugin] this project's ${differ.join(' and ')} differ from the plugin's copy, and where the plugin runs a guard it runs its own. If the project carries the newer kit, update this computer's copy: git -C "${norm(PLUGIN_ROOT)}" pull`);
       else if (settingsRemind('SessionStart') || settingsRemind('UserPromptSubmit')) lines.push(`[ProjectOS plugin] ${markerName} is not valid JSON in ${norm(root)}: the reminders come only from this project's settings, in the wording they were installed with. Guards still active.`);
       else lines.push(`[ProjectOS plugin] reminders OFF for ${norm(root)}: ${markerName} is not valid JSON, so the plugin sends none. Guards still active.`);
       process.stdout.write(lines.join('\n') + '\n');

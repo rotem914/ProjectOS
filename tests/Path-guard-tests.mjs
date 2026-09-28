@@ -22,8 +22,10 @@
 //   4. the HOOK CONTRACT: run as a real process, a blocked write exits 2 with a
 //      reason on stderr and an allowed one exits 0.
 //
-// A case marked [R] is one a review round found open. Only cases that pass
+// A case marked [R] is one a review round found open ([R10]: the kit review of
+// 2026-09-28). Only cases that pass
 // today are seeded here; a known hole joins the file when it is fixed.
+import fs from 'node:fs';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -654,6 +656,187 @@ t('[R9] a glued header is not an output file', bash('curl -HAuthorization:Bearer
 t('[R9] a glued quoted header is not an output file', bash('curl -H"Authorization: Bearer tok" https://e.com/x -o .tmp/x'), false);
 t('[R9] install -o takes an owner, so the last word is still the destination', bash(`install -oroot a.txt ${OUT}/a.txt`), true);
 
+// [R10] Kit review 2026-09-28: PowerShell writers the guard did not read, and
+// the usual spellings of the ones it did; a script fed through a here-document;
+// writers inside substitutions, groups, blocks and find -exec; a link by its
+// real parameter; a rename beside its item; and writing programs it did not
+// know. Each block pairs the refused form with its allowed twin.
+console.log('path-guard: PowerShell writers, casts and expressions');
+t('[R10] [IO.File]::WriteAllText outside', ps("[System.IO.File]::WriteAllText('C:\\Users\\User\\x.txt', 'hi')"), true);
+t('[R10] [IO.File]::AppendAllText outside', ps("[IO.File]::AppendAllText('C:\\Users\\User\\x.txt', 'hi')"), true);
+t('[R10] [IO.File]::Copy to an outside destination', ps("[IO.File]::Copy('a.txt', 'C:\\Users\\User\\a.txt')"), true);
+t('[R10] [IO.Directory]::CreateDirectory outside', ps("[IO.Directory]::CreateDirectory('C:\\Users\\User\\newdir')"), true);
+t('[R10] [IO.File]::WriteAllText to a variable path', ps('[IO.File]::WriteAllText($p, "hi")'), true);
+t('[R10] [IO.File]::WriteAllText after $null =', ps("$null = [IO.File]::WriteAllText('C:\\Users\\User\\x.txt', 'hi')"), true);
+t('[R10] $null=New-Item outside, glued', ps('$null=New-Item C:\\Users\\User\\x.txt'), true);
+t('[R10] [IO.File]::WriteAllText inside', ps("[IO.File]::WriteAllText('.tmp/x.txt', 'hi')"), false);
+t('[R10] [IO.File]::WriteAllText with the project path in double quotes', ps(`[IO.File]::WriteAllText("${ROOT}/.tmp/x.txt", "hi")`), false);
+t('[R10] [IO.File]::ReadAllText is a read', ps("[IO.File]::ReadAllText('C:\\Users\\User\\x.txt')"), false);
+t('[R10] [IO.File]::Copy INTO the project', ps("[IO.File]::Copy('C:\\Users\\User\\a.txt', '.tmp/a.txt')"), false);
+t('[R10] $null = New-Item outside', ps('$null = New-Item -ItemType Directory -Force -Path C:\\Users\\User\\newdir'), true);
+t('[R10] [void](New-Item ...) outside', ps('[void](New-Item -ItemType File -Path C:\\Users\\User\\x.txt)'), true);
+t('[R10] $x = Set-Content outside', ps('$x = Set-Content C:\\Users\\User\\x.txt hi -PassThru'), true);
+t('[R10] $null = New-Item inside', ps('$null = New-Item -ItemType Directory -Force -Path .tmp\\x'), false);
+t('[R10] $out = a read', ps('$out = Get-Content C:\\Users\\User\\x.txt'), false);
+t('[R10] a Join-Path expression as the path is built at runtime', ps("New-Item -ItemType File -Path (Join-Path $env:USERPROFILE 'x.txt')"), true);
+t('[R10] a Join-Path expression as a copy destination', ps("Copy-Item a.txt (Join-Path $env:USERPROFILE 'x.txt')"), true);
+t('[R10] a Join-Path expression inside the project is still unprovable', ps("Set-Content -Path (Join-Path .tmp 'x.txt') -Value hi"), true);
+t('[R10] robocopy outside', ps('robocopy dist C:\\Users\\User\\Desktop\\site /E'), true);
+t('[R10] xcopy outside', ps('xcopy dist C:\\Users\\User\\Desktop\\site /E /I'), true);
+t('[R10] robocopy with an outside log', ps('robocopy src .tmp\\copy /E /LOG:C:\\Users\\User\\r.log'), true);
+t('[R10] robocopy inside', ps('robocopy dist .tmp\\site /E'), false);
+t('[R10] robocopy INTO the project from outside', ps('robocopy C:\\Users\\User\\Downloads\\shots public\\media /E'), false);
+t('[R10] irm -OutFile outside', ps('irm https://e.com/x.json -OutFile C:\\Users\\User\\x.json'), true);
+t('[R10] Invoke-RestMethod -OutFile inside', ps('Invoke-RestMethod https://e.com/x.json -OutFile .tmp\\x.json'), false);
+t('[R10] irm to the screen', ps('irm https://e.com/x.json'), false);
+t('[R10] Start-Process with its output sent outside', ps('Start-Process node -ArgumentList x.mjs -RedirectStandardOutput C:\\Users\\User\\out.txt -Wait'), true);
+t('[R10] Start-Process of a program by its path is not a write', ps('Start-Process -FilePath C:\\Windows\\notepad.exe'), false);
+t('[R10] Start-Process with its output inside', ps('Start-Process node -RedirectStandardOutput .tmp\\out.txt -Wait'), false);
+t('[R10] a dot-sourced write outside', ps('. Set-Content C:\\Users\\User\\x.txt hi'), true);
+t('[R10] Invoke-Expression of an outside write, one line', ps('Invoke-Expression "Set-Content C:\\Users\\User\\x.txt hi"'), true);
+t('[R10] iex of an inside write', ps('iex "Set-Content .tmp\\x.txt hi"'), false);
+
+console.log('path-guard: the usual spellings, comments and here-strings');
+t('[R10] sed -Ei on an outside file', bash("sed -Ei 's/a/b/' /c/Users/User/.bashrc"), true);
+t('[R10] sed -ni on an outside file', bash("sed -ni 's/a/b/p' /c/Users/User/.bashrc"), true);
+t('[R10] sed -i.bak on an outside file', bash("sed -i.bak 's/a/b/' /c/Users/User/.bashrc"), true);
+t('[R10] sed -i -e with an outside file', bash("sed -i -e 's/a/b/' -e 's/c/d/' /c/Users/User/.bashrc"), true);
+t('[R10] sed -E without -i is a read', bash("sed -E 's/a/b/' /c/Users/User/.bashrc"), false);
+t('[R10] sed -i on a project file', bash("sed -i 's/a/b/' src/x.ts"), false);
+t('[R10] sed -Ei on a project file', bash("sed -Ei 's/a/b/' README.md"), false);
+t('[R10] perl -pi -e on an outside file', bash("perl -pi -e 's/a/b/' /c/Users/User/.bashrc"), true);
+t('[R10] perl -i.bak -pe on an outside file', bash("perl -i.bak -pe 's/a/b/' /c/Users/User/.bashrc"), true);
+t('[R10] perl -pe without -i is a read', bash("perl -pe 's/a/b/' /c/Users/User/.bashrc"), false);
+t('[R10] tar -czf to an outside archive', bash('tar -czf /c/Users/User/out.tgz src'), true);
+t('[R10] tar czf old style to an outside archive', bash('tar czf /c/Users/User/out.tgz src'), true);
+t('[R10] tar --create --file= outside', bash('tar --create --file=/c/Users/User/out.tar src'), true);
+t('[R10] tar -cf - to stdout', bash('tar -cf - src | gzip > .tmp/x.tgz'), false);
+t('[R10] tar -czf inside', bash('tar -czf .tmp/x.tgz src'), false);
+t('[R10] tar -xf reads its archive', bash('tar -xf /c/Users/User/in.tgz -C .tmp'), false);
+t('[R10] PowerShell tar -czf to an outside archive', ps('tar -czf C:\\Users\\User\\out.tgz src'), true);
+t('[R10] a trailing comment does not become the destination', bash('cp a.txt /c/Users/User/x.txt # note'), true);
+t('[R10] a trailing comment on an inside copy', bash('cp a.txt .tmp/x.txt # note'), false);
+t('[R10] a # inside a word is not a comment', bash('cp a.txt .tmp/x#1.txt'), false);
+t('[R10] a here-string does not hide the next line', bash('cat <<< "abc"\ncp a.txt /c/Users/User/x.txt'), true);
+t('[R10] a here-string alone', bash('cat <<< "abc"'), false);
+t('[R10] a delimiter with a dot ends where bash ends it', bash('cat <<END.\nx\nEND.\ncp a.txt /c/Users/User/x.txt'), true);
+t('[R10] a << in a comment opens nothing', bash('# see <<EOF\ncp a.txt /c/Users/User/x.txt'), true);
+t('[R10] a backslash-quoted delimiter', bash("cat <<\\EOF > .tmp/a.txt\nbody\nEOF\ncp a.txt /c/Users/User/x.txt"), true);
+t('[R10] a heredoc into a project file, then an inside copy', bash("cat <<'EOF' > .tmp/a.txt\nbody\nEOF\ncp a.txt .tmp/x.txt"), false);
+
+console.log('path-guard: scripts fed through a here-document');
+t('[R10] python3 - <<EOF that writes outside', bash("python3 - <<'EOF'\nopen('C:/Users/User/x.txt','w').write('x')\nEOF"), true);
+t('[R10] python3 <<EOF that writes outside', bash("python3 <<'EOF'\nopen('C:/Users/User/x.txt','w').write('x')\nEOF"), true);
+t('[R10] node - <<EOF that writes outside', bash("node - <<'EOF'\nrequire('fs').writeFileSync('C:/Users/User/x.txt','x')\nEOF"), true);
+t('[R10] node - <<EOF that writes to the home folder', bash("node - <<'EOF'\nconst os = require('os');\nrequire('fs').writeFileSync(os.homedir() + '/x.txt', 'x');\nEOF"), true);
+t('[R10] bash <<EOF that copies outside', bash("bash <<'EOF'\ncp a.txt /c/Users/User/x.txt\nEOF"), true);
+t('[R10] sh <<EOF that cds out and writes', bash("sh <<'EOF'\ncd /c/Users/User\ntouch x\nEOF"), true);
+t('[R10] python3 - <<EOF that writes inside', bash("python3 - <<'EOF'\nopen('.tmp/x.txt','w').write('x')\nEOF"), false);
+t('[R10] python3 - <<EOF that only reads', bash("python3 - <<'EOF'\nprint(open('C:/Users/User/x.txt').read())\nEOF"), false);
+t('[R10] node - <<EOF that only reads', bash("node - <<'EOF'\nconsole.log(require('fs').readFileSync('C:/Users/User/x.txt','utf8').length)\nEOF"), false);
+t('[R10] a script file takes the heredoc as its input', bash("python3 tool.py <<'EOF'\nopen('C:/Users/User/x.txt','w').write('x')\nEOF"), false);
+t('[R10] cat takes the heredoc as data', bash("cat <<'EOF'\nopen('C:/Users/User/x.txt','w').write('x')\nEOF"), false);
+t('[R10] bash <<EOF that writes inside', bash("bash <<'EOF'\ncp a.txt .tmp/x.txt\nEOF"), false);
+
+console.log('path-guard: substitutions, groups, blocks and find -exec');
+t('[R10] a copy inside $( )', bash('echo $(cp a.txt /c/Users/User/x.txt)'), true);
+t('[R10] a copy inside backticks', bash('echo `cp a.txt /c/Users/User/x.txt`'), true);
+t('[R10] a copy inside $( ) in double quotes', bash('echo "$(cp a.txt /c/Users/User/x.txt)"'), true);
+t('[R10] a copy inside single quotes is text', bash("echo '$(cp a.txt /c/Users/User/x.txt)'"), false);
+t('[R10] a read inside $( ) is fine', bash('n=$(wc -l < /c/Users/User/x.txt)'), false);
+t('[R10] a cd inside $( ) does not move the command after it', bash('x=$(cd /c/Users/User && pwd); touch .tmp/y'), false);
+t('[R10] find -exec cp to the Desktop', bash("find . -name '*.png' -exec cp {} /c/Users/User/Desktop \\;"), true);
+t('[R10] find -exec sh -c with an outside write', bash("find . -maxdepth 0 -exec sh -c 'touch /c/Users/User/x' \\;"), true);
+t('[R10] find -fprint to an outside file', bash('find src -type f -fprint /c/Users/User/list.txt'), true);
+t('[R10] find -exec cp into the project', bash("find . -name '*.png' -exec cp {} .tmp/ +"), false);
+t('[R10] find -exec grep is a read', bash('find src -exec grep -l TODO {} +'), false);
+t('[R10] eval of an outside copy', bash('eval "cp a.txt /c/Users/User/x.txt"'), true);
+t('[R10] eval of an inside copy', bash('eval "cp a.txt .tmp/x.txt"'), false);
+t('[R10] exec in front of a writer', bash('exec tee /c/Users/User/x.txt'), true);
+t('[R10] a negated writer', bash('! cp a.txt /c/Users/User/x.txt'), true);
+t('[R10] cmd //c copy outside, the Git Bash spelling', bash('cmd //c copy a.txt C:\\\\Users\\\\User\\\\x.txt'), true);
+t('[R10] cmd //c dir is a read', bash('cmd //c dir'), false);
+t('[R10] timeout with a unit in front of a writer', bash('timeout 10s tee /c/Users/User/x.txt'), true);
+t('[R10] timeout -k in front of a writer', bash('timeout -k 5 30 tee /c/Users/User/x.txt'), true);
+t('[R10] sudo -u in front of a writer', bash('sudo -u me tee /c/Users/User/x.txt'), true);
+t('[R10] timeout with a unit in front of a build', bash('timeout 30s npm run build'), false);
+t('[R10] a bash group with an outside copy', bash('{ cp a.txt /c/Users/User/x.txt; }'), true);
+t('[R10] a function body with an outside copy', bash('f() { cp a.txt /c/Users/User/x.txt; }; f'), true);
+t('[R10] time with a group', bash('time { cp a.txt /c/Users/User/x.txt; }'), true);
+t('[R10] a bash group with an inside copy', bash('{ cp a.txt .tmp/x.txt; }'), false);
+t('[R10] a group whose output goes outside', bash('{ echo a; echo b; } > /c/Users/User/x.txt'), true);
+t('[R10] ForEach-Object with an outside copy', ps('Get-ChildItem *.png | ForEach-Object { Copy-Item $_ C:\\Users\\User\\Desktop }'), true);
+t('[R10] % with an outside copy', ps('Get-ChildItem *.png | % { Copy-Item $_.FullName C:\\Users\\User\\Desktop }'), true);
+t('[R10] a try block with an outside write', ps('try { Set-Content C:\\Users\\User\\x.txt hi } catch {}'), true);
+t('[R10] a compact if block with an outside write', ps('if (1) {Set-Content C:\\Users\\User\\x.txt hi}'), true);
+t('[R10] ForEach-Object with an inside copy', ps('Get-ChildItem *.png | ForEach-Object { Copy-Item $_ .tmp\\ }'), false);
+t('[R10] a hash table is not a block', ps('$h = @{ a = 1; b = 2 }; $h.Keys'), false);
+t('[R10] a script block that only reads', ps('Get-ChildItem | Where-Object { $_.Length -gt 1kb }'), false);
+
+console.log('path-guard: links, renames and programs the guard did not know');
+t('[R10] a junction whose target is given as -Value', ps('New-Item -ItemType Junction -Path .tmp\\esc -Value C:\\Users\\User'), true);
+t('[R10] a symbolic link whose target is given as -Value', ps('New-Item -ItemType SymbolicLink -Path .tmp\\esc -Value C:\\Users\\User\\x.txt'), true);
+t('[R10] a junction given positionally', ps('New-Item .tmp\\esc C:\\Users\\User -ItemType Junction'), true);
+t('[R10] a junction inside the project', ps('New-Item -ItemType Junction -Path .tmp\\link -Value .tmp\\real'), false);
+t('[R10] -Value on a plain file is content', ps('New-Item -ItemType File -Path .tmp\\x.txt -Value "C:\\note"'), false);
+t('[R10] mklink under cmd //c', bash('cmd //c mklink /J .tmp\\\\esc C:\\\\Users\\\\User'), true);
+t('[R10] mklink under cmd /c from PowerShell', ps('cmd /c mklink /D .tmp\\esc C:\\Users\\User'), true);
+t('[R10] mklink inside the project', ps('cmd /c mklink /J .tmp\\link .tmp\\real'), false);
+t('[R10] Rename-Item of a file in Downloads', ps('Rename-Item C:\\Users\\User\\Downloads\\a.png b.png'), true);
+t('[R10] Rename-Item -Path -NewName outside', ps('Rename-Item -Path C:\\Users\\User\\a.png -NewName b.png'), true);
+t('[R10] the ren alias outside', ps('ren C:\\Users\\User\\a.png b.png'), true);
+t('[R10] cmd /c ren outside', ps('cmd /c ren C:\\Users\\User\\a.png b.png'), true);
+t('[R10] Rename-Item of a variable item', ps('Rename-Item $f b.png'), true);
+t('[R10] Rename-Item inside the project', ps('Rename-Item .tmp\\a.png b.png'), false);
+t('[R10] Rename-Item -NewName inside', ps('Rename-Item -Path public\\media\\a.png -NewName b.png'), false);
+t('[R10] Rename-Item with no item, from the pipeline', ps('Get-ChildItem .tmp | Rename-Item -NewName { $_.Name + ".bak" }'), false);
+t('[R10] zip to the Desktop', bash('zip -r /c/Users/User/Desktop/site.zip dist'), true);
+t('[R10] zip inside', bash('zip -r .tmp/site.zip dist'), false);
+t('[R10] git archive -o outside', bash('git archive -o /c/Users/User/Desktop/repo.zip HEAD'), true);
+t('[R10] git archive --output= outside', bash('git archive --output=/c/Users/User/repo.zip HEAD'), true);
+t('[R10] git archive inside', bash('git archive -o .tmp/repo.zip HEAD'), false);
+t('[R10] git bundle create outside', bash('git bundle create /c/Users/User/repo.bundle main'), true);
+t('[R10] git format-patch -o outside', bash('git format-patch -o /c/Users/User/patches HEAD~1'), true);
+t('[R10] git format-patch inside', bash('git format-patch -o .tmp/patches HEAD~1'), false);
+t('[R10] sort -o outside', bash('sort -o /c/Users/User/x.txt a.txt'), true);
+t('[R10] sort -o inside', bash('sort a.txt -o .tmp/x.txt'), false);
+t('[R10] sort to the screen', bash('sort /c/Users/User/x.txt'), false);
+t('[R10] scp to another computer', bash('scp a.txt user@host:/x'), true);
+t('[R10] scp to an outside folder', bash('scp a.txt /c/Users/User/x.txt'), true);
+t('[R10] scp from another computer into the project', bash('scp user@host:/x/a.txt .tmp/'), false);
+t('[R10] install -d outside', bash('install -d /c/Users/User/newdir'), true);
+t('[R10] install -d inside', bash('install -d .tmp/newdir'), false);
+t('[R10] mktemp -d in the system temp folder', bash('mktemp -d'), true);
+t('[R10] mktemp -t in the system temp folder', bash('tmp=$(mktemp -t x.XXXX)'), true);
+t('[R10] mktemp with a template inside', bash('mktemp -d .tmp/x.XXXX'), false);
+t('[R10] mktemp -p inside', bash('mktemp -p .tmp'), false);
+t('[R10] npm install after a cd out', bash('cd /c/Users/User/other && npm install'), true);
+t('[R10] npm ci after Set-Location out', ps('Set-Location C:\\Users\\User\\other; npm ci'), true);
+t('[R10] npm install inside', bash('npm install'), false);
+t('[R10] npm install of a global tool', bash('npm install -g some-cli'), false);
+t('[R10] pnpm add inside', bash('pnpm add -D vitest'), false);
+t('[R10] curl -O after a cd out', bash('cd /c/Users/User && curl -O https://e.com/x.zip'), true);
+t('[R10] curl -sSLO after a cd out', bash('cd /c/Users/User && curl -sSLO https://e.com/x.zip'), true);
+t('[R10] curl -O inside', bash('curl -O https://e.com/x.zip'), false);
+t('[R10] curl -o inside is not -O', bash(`cd /c/Users/User && curl -o "${ROOT}/.tmp/x.zip" https://e.com/x.zip`), false);
+
+console.log('path-guard: long data scripts');
+t('[R10] pandas to_csv to Downloads over several lines', bash("python3 -c \"\nimport pandas as pd\ndf = pd.DataFrame()\ndf.to_csv('C:/Users/User/Downloads/r.csv')\n\""), true);
+t('[R10] savefig to an outside file over several lines', bash("python3 -c \"\nimport matplotlib.pyplot as plt\nplt.plot([1])\nplt.savefig('C:/Users/User/x.png')\n\""), true);
+t('[R10] a ZipFile opened for writing outside', bash("python3 -c \"\nimport zipfile\nz = zipfile.ZipFile('C:/Users/User/x.zip', 'w')\nz.close()\n\""), true);
+t('[R10] a tarfile opened for writing outside', bash("python3 -c \"\nimport tarfile\nt = tarfile.open('C:/Users/User/x.tgz', 'w:gz')\nt.close()\n\""), true);
+t('[R10] an aliased writeFileSync', bash("node -e \"\nconst { writeFileSync: w } = require('fs');\nw('C:/Users/User/x.txt', 'a');\n\""), true);
+t('[R10] a write function kept under another name', bash("node -e \"\nconst fs = require('fs');\nconst put = fs.writeFileSync;\nput('C:/Users/User/x.txt', 'a');\n\""), true);
+t('[R10] from shutil import copy as cp, to an outside folder', bash("python3 -c \"\nfrom shutil import copy as cp\ncp('a.png', 'C:/Users/User/Desktop/a.png')\n\""), true);
+t('[R10] open with keyword arguments only', bash("python3 -c \"\nf = open(file='C:/Users/User/x.txt', mode='w')\nf.write('x')\n\""), true);
+t('[R10] pandas to_csv inside', bash("python3 -c \"\nimport pandas as pd\ndf = pd.DataFrame()\ndf.to_csv('.tmp/r.csv')\n\""), false);
+t('[R10] pandas to_csv to a relative name is not read', bash("python3 -c \"\nimport pandas as pd\ndf = pd.DataFrame()\ndf.to_csv('r.csv')\n\""), false);
+t('[R10] a ZipFile opened for reading', bash("python3 -c \"\nimport zipfile\nz = zipfile.ZipFile('C:/Users/User/x.zip')\nprint(z.namelist())\n\""), false);
+t('[R10] a tarfile opened for reading', bash("python3 -c \"\nimport tarfile\nt = tarfile.open('C:/Users/User/x.tgz', 'r:gz')\nprint(t.getnames())\n\""), false);
+t('[R10] an aliased writeFileSync writing inside', bash("node -e \"\nconst { writeFileSync: w } = require('fs');\nw('.tmp/x.txt', 'a');\n\""), false);
+t('[R10] a model saved under a name inside', bash("python3 -c \"\nimport torch\ntorch.save(model, '.tmp/m.pt')\n\""), false);
+t('[R10] pd.to_datetime is not a file', bash("python3 -c \"\nimport pandas as pd\nprint(pd.to_datetime('2020-01-01'))\n\""), false);
+
 console.log('path-guard: the Monitor tool runs shell commands too');
 t('[R] Monitor writing outside', mon(`echo hi > ${OUT}/x.txt`), true);
 t('Monitor writing inside', mon('echo hi > .tmp/x.txt'), false);
@@ -737,6 +920,48 @@ hookIn('[R9] from an outside folder, a relative Write is refused', ROOT, { ...wr
 hookIn('[R9] from an outside folder, an absolute write inside is allowed', ROOT, { ...write(`${ROOT}/.tmp/x.md`), cwd: 'C:/review/outside' }, 0);
 hookIn('[R9] POSIX: from a subfolder, ../x lands in the project', PROOT, { ...bash('touch ../x'), cwd: `${PROOT}/src` }, 0);
 hookIn('[R9] POSIX: from a subfolder, ../../x leaves the project', PROOT, { ...bash('touch ../../x'), cwd: `${PROOT}/src` }, 2);
+
+// [R10] The guard started through a junction or a symbolic link still runs:
+// node resolves the main module to its real path, and the guard used to
+// compare that with the spelled one, match nothing, and exit 0 unread.
+{
+  const linkRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'projectos-link-'));
+  const link = path.join(linkRoot, 'guards');
+  let made = false;
+  try {
+    fs.symlinkSync(path.dirname(GUARD), link, process.platform === 'win32' ? 'junction' : 'dir');
+    made = true;
+  } catch {
+    // no link rights on this account: the case is skipped, and says so
+  }
+  if (made) {
+    checks += 1;
+    const r = spawnSync(process.execPath, [path.join(link, 'Path-guard.mjs')], { input: payload(write(`${OUT}/x.md`)), encoding: 'utf8' });
+    if (r.status !== 2) {
+      failures += 1;
+      console.error(`  FAIL [R10] the guard started through a link still refuses: expected exit 2, got ${r.status}`);
+    }
+  } else {
+    console.log('  [R10] the guard through a link: skipped, this account cannot make a link');
+  }
+  fs.rmSync(linkRoot, { recursive: true, force: true });
+}
+
+// [R10] With CLAUDE_PROJECT_DIR naming a subfolder of a project that carries
+// the kit's marker (a macOS or Linux session opened there), the project is
+// the folder that carries the marker, not the subfolder.
+{
+  const proj = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'projectos-root-')));
+  fs.mkdirSync(path.join(proj, 'project-os'), { recursive: true });
+  fs.mkdirSync(path.join(proj, 'src', 'deep'), { recursive: true });
+  fs.writeFileSync(path.join(proj, 'project-os', 'Hooks-settings.json'), '{}');
+  const sub = path.join(proj, 'src', 'deep');
+  const fwd = (p) => p.split('\\').join('/');
+  hookIn('[R10] from a subfolder session, a Write to the project root lands inside', sub, { ...write(`${fwd(proj)}/notes.md`), cwd: sub }, 0);
+  hookIn('[R10] from a subfolder session, a relative Write climbs to the project root', sub, { ...write('../../notes.md'), cwd: sub }, 0);
+  hookIn('[R10] from a subfolder session, a write beside the project is still refused', sub, { ...write(`${fwd(path.dirname(proj))}/other.md`), cwd: sub }, 2);
+  fs.rmSync(proj, { recursive: true, force: true });
+}
 
 // The root really does come from the session, not from where this file happens
 // to live: the property that lets one copy of the guard serve every project.

@@ -572,6 +572,14 @@ installer replace it. In the report, "# Rules switched on" says
 they come from the plugin on this computer, and that another computer needs
 the same once-per-computer command.
 
+The plugin runs the guards from its own folder, not from the copy this install
+just put in the project, so an older plugin guards a newer project with older
+rules. The plugin says so itself: its start line ends in the kit version it
+carries, and when this project's guard files differ from its copy a second line
+names them and gives the one `git pull` that updates the plugin folder. That
+folder is outside the project, so the command is the owner's to run: put it in
+the report under "# Rules switched on" (section 8), never run it yourself.
+
 **The installer path**, as part of the install:
 
 - Read `project-os/Hooks.md`.
@@ -813,8 +821,10 @@ sentence per line, plain words. Length is what lifts, because a report that
 drops a problem or a clash to fit a line budget defeats its own purpose. The
 same exemption is written into Conversations.md, so the two cannot disagree.
 
-Sections, in this order. On a refused install, section 5 becomes "# Rules not
-enforced" and moves to the top.
+Sections, in this order. On a refused install, section 4 becomes "# Rules not
+enforced" and moves to the top. The owner's questions come LAST, as
+Conversations.md rule 13 requires of every reply: placed fourth of six, they
+were read past and left unanswered (review 2026-09-28).
 
 1. **What was set.** Each value, and where it came from: the repo, or the
    owner's answer. The first line is the kit commit the files came from, the
@@ -830,15 +840,8 @@ enforced" and moves to the top.
    rule or process it blocks, what keeping it will cost in practice, and a
    keep-or-override recommendation. This is a decision list for the owner;
    nothing has been overridden.
-4. **Waiting on you.** Everything that needs the owner's answer or verdict,
-   numbered, so each item can be answered in one word. When the client has a
-   question panel, every item with options goes through it right after the
-   report, as Conversations.md rule 13 requires; this section lists them one
-   line each and says the panel follows.
-
-5. **The rules are on.** Second to last in the report, except on a refused
-   install (below). Short, and written for someone who does not read code.
-   Use this shape:
+4. **The rules are on.** Fourth, except on a refused install (below). Short,
+   and written for someone who does not read code. Use this shape:
 
    > ----
    > # Rules switched on
@@ -872,6 +875,16 @@ enforced" and moves to the top.
    > written in project-os/Hooks.md under "Two ways the hooks get wired".
    > If I read your rules back to you, they are reaching me.
 
+   When the session's start line said this project's guard files differ from
+   the plugin's copy (6b, the plugin path), add two lines to that block: this
+   computer's copy of the kit is behind the one in this project, and the one
+   command that updates it, which is the owner's to run because the plugin
+   folder is outside the project:
+
+   ```
+   git -C "$HOME/.claude/skills/projectos" pull
+   ```
+
    If the install could not write that setting, this section is REPLACED by
    the honest version, and it moves to the top as the report's FIRST section:
    the rules are documents only until one command runs. Give the command, say it
@@ -900,7 +913,7 @@ enforced" and moves to the top.
    default, and team-wide is available on request. Do not turn it into a
    question.
 
-6. **What to say.** The closing section, after the rules are on.
+5. **What to say.** After the rules are on, before the owner's questions.
    The owner has just been handed a folder of rules and knows none of the
    phrases that drive it, so list them: a title, then ONE line saying what it
    does. Nothing else, no flags, no explanation of the machinery.
@@ -950,6 +963,13 @@ enforced" and moves to the top.
    Adapt the list to what this project ended up with, and drop anything that
    does not exist here. A trigger the owner never learns is a trigger nobody
    uses.
+
+6. **Waiting on you.** The closing section: everything that needs the owner's
+   answer or verdict, numbered, so each item can be answered in one word. When
+   the client has a question panel, every item with options goes through it
+   right after the report, as Conversations.md rule 13 requires; this section
+   lists them one line each and says the panel follows. An install with
+   nothing waiting says so in one line, so the owner knows the report is over.
 
 If a rule in the kit contradicts how this project actually works, it belongs
 in Clashes too, said plainly, instead of quietly adapting the kit.
