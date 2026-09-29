@@ -394,9 +394,11 @@ that specific element.
 >   the assistant's preview pane IS the owner's window, not a second instance,
 >   and starting a server there is allowed. Rewrite the rule to say so.
 > - *There is no server at all.* The rule is dormant until there is one.
-> - *The owner will run one, but its address is not decided yet.* The rule
->   below stands as written, with `none yet` as the address; the change that
->   first gives the project an address writes it in.
+> - *The owner will run one, but its address is not decided yet.* Rewrite
+>   the first sentence below to say so: the owner will run one; until an
+>   address is written in there is nothing to drive, and a visual check waits
+>   on it. The change that first gives the project an address writes it in
+>   and restores that sentence with the address.
 
 Assume the owner already has one running at `{{DEV_URL}}`, and drive that. Do not
 launch one, in the foreground or the background, at any point.

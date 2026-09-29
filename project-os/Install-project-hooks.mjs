@@ -63,7 +63,12 @@
 // also counts what the committed settings.json carries. On Windows that proves
 // a --shared install as well. On macOS and Linux it still wants the guards in
 // the personal file (see coveredByOther below), so there a --shared install is
-// proven only by `--dry --shared`.
+// proven only by `--dry --shared`. Under the once-per-computer plugin (README,
+// "Once per computer") the hooks run from its folder for any project with
+// project-os/, so there "will add:" means this file only; the run says so when
+// it sees the plugin folder (install report, 2026-09-29). Only the folder can
+// be seen from here; that the assistant loaded it is proven by the live check
+// in Installation.md 6b.
 //
 // A WARNING, NEVER A REFUSAL. A reminder's text sits inside '...' inside "..."
 // in a shell command, so an apostrophe, a double quote, a backtick, a $ or a
@@ -72,6 +77,7 @@
 // same file are not affected.
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -82,6 +88,9 @@ const REPLACE = args.has('--replace') || args.has('--force');
 
 const root = process.cwd();
 const sourcePath = path.join(root, 'project-os', 'Hooks-settings.json');
+// The once-per-computer plugin folder (README, "Once per computer").
+const pluginDir = path.join(os.homedir(), '.claude', 'skills', 'projectos');
+const pluginFound = fs.existsSync(path.join(pluginDir, 'hooks', 'dispatch.mjs'));
 const targetDir = path.join(root, '.claude');
 const targetName = SHARED ? 'settings.json' : 'settings.local.json';
 const targetPath = path.join(targetDir, targetName);
@@ -320,6 +329,10 @@ for (const [event, entries] of Object.entries(incoming.hooks)) {
 // written. "added:" appears only after the file is in place.
 console.log(`Install-project-hooks: target ${path.relative(root, targetPath)}${SHARED ? ' (shared, committed)' : ' (personal to this machine)'}`);
 console.log(`  node:     ${process.version} (the hooks run through it, so this is the proof it is available)`);
+if (pluginFound) {
+  console.log(`  plugin:   found at ${pluginDir}; the ProjectOS plugin covers this project from there,`);
+  console.log('            so "will add" below is about this settings file only, not about whether the hooks run.');
+}
 if (unsafeReminders.length) {
   console.log(`  warning:  the ${unsafeReminders.join(' and ')} reminder text holds an apostrophe, a double quote, a backtick, a $ or a backslash.`);
   console.log('            The shell reads those as code, so that reminder may arrive cut short or not at all.');
@@ -334,7 +347,7 @@ for (const { event, length } of reminderLengths) {
   }
 }
 if (alreadyThere.length) console.log(`  present:  ${alreadyThere.join(', ')} (already wired, nothing to do)`);
-if (added.length) console.log(`  will add: ${added.join(', ')} (NOT wired yet)`);
+if (added.length) console.log(`  will add: ${added.join(', ')} ${pluginFound ? '(not in this file; the ProjectOS plugin covers this project)' : '(NOT wired yet)'}`);
 if (combined.length) console.log(`  will combine: ${combined.join(', ')} (yours kept, ours runs beside it)`);
 if (replaced.length) console.log(`  will REPLACE: ${replaced.join(', ')} (existing hooks removed)`);
 
@@ -344,7 +357,9 @@ if (!added.length && !combined.length && !replaced.length) {
 }
 
 if (DRY) {
-  console.log('Install-project-hooks: --dry, nothing written. Every event above under "will add" is not installed.');
+  console.log(pluginFound
+    ? 'Install-project-hooks: --dry, nothing written. The events above under "will add" are not in this file; the ProjectOS plugin covers them.'
+    : 'Install-project-hooks: --dry, nothing written. Every event above under "will add" is not installed.');
   process.exit(0);
 }
 

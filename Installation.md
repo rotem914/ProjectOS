@@ -283,6 +283,10 @@ Pass and fail are not the only outcomes:
 Ask only what the repo cannot tell you, in one sitting, before any setup work.
 That is one panel, or several panels back to back with nothing done in between.
 The reply language is the one exception: it is always asked (see below).
+An install repeated in the same conversation, after a wiped folder or a false
+start, is a first install by the files but not by the owner: every answer
+already given in this conversation stands, and only what is still open is
+asked, plus the language, which is always asked.
 
 **Real questions go in the question panel, when the client has one.** Claude
 Code and its desktop app offer a built-in question panel, a form with the
@@ -370,7 +374,9 @@ the yes it gets back is worthless.
 **The worst-class lines.** In the same batch, propose one sentence for each
 worst-class line (`project-os/Code_review.md` and `project-os/Visual_QA.md`),
 written as its consequence, which is often the first invariant, and ask a yes
-or no on each. One tick-list tab holds both.
+or no on each. One tick-list tab holds both. With no code and no plan, the
+same as the invariants: propose none, ask nothing, and the one Waiting-on-you
+line covers both.
 
 **The tool folders.** One question per folder under `project-os/mcp/`, with
 two options: keep it, and its setup is asked at the first request that needs
@@ -557,10 +563,12 @@ it, so CLAUDE.md rule 4 does not turn it into a question. Read the result:
 
 **The plugin path.** When the live check proved the plugin on: read
 `Hooks.md` and adapt the wording exactly as the installer path below says (the
-plugin reads the same file), write NOTHING under `.claude`, do not run the
-installer, and skip the wiring, speaking and guard checks below. A `--dry`
-run would say "will add" and that is expected, and the refusal you just got is
-the guard proof. The speaking check has its own form here: after adapting the
+plugin reads the same file), write NOTHING under `.claude`, and skip the
+wiring, speaking and guard checks below. Run the installer once, with `--dry`
+only: it writes nothing, prints each reminder's length against the recipe,
+and says the plugin folder covers this project; its "will add" lines are
+about the settings file only, and the refusal you just got is the guard
+proof. The speaking check has its own form here: after adapting the
 wording, run the plugin's reminder once from the project root and confirm the
 new text comes back:
 
@@ -821,6 +829,14 @@ rows; on a re-run they follow the ones already there. Both name the kit commit
 the files came from, so a later update can tell which kit this project runs:
 the one step 0 noted, on a re-run the one the earlier install row names, or
 unknown when the files were copied in by hand.
+
+The row's shape, since the install runs more checks than a row holds (the
+file asks for about 900 characters): the kit commit, the files placed, the
+questions answered in a word each, and the checks BY NAME only, two or three
+words apiece (Node found, hooks proved, reminder read back, browser found,
+check command run). What each check returned goes in the message of the
+commit that lands the install, which `git show` keeps; the row never carries
+it twice.
 The kit's rules apply to the kit.
 
 ## 8. The install report
@@ -898,6 +914,10 @@ were read past and left unanswered (review 2026-09-28).
    ```
    git -C "$HOME/.claude/skills/projectos" pull
    ```
+
+   The pull is ALSO one Waiting-on-you item, a single line: it is the one
+   thing that keeps the guards current, and as a line under this block alone
+   it was read past twice (install reports, 2026-09-29).
 
    If the install could not write that setting, this section is REPLACED by
    the honest version, and it moves to the top as the report's FIRST section:

@@ -70,9 +70,10 @@ function dispatch(mode, payload, session, { linux = false } = {}) {
   });
   return { code: r.status, out: (r.stdout || '').trim(), err: (r.stderr || '').trim(), log: fs.readFileSync(LOG, 'utf8') };
 }
-function install(dir, flags = [], { linux = false } = {}) {
+function install(dir, flags = [], { linux = false, home } = {}) {
   const env = { ...process.env };
   delete env.CLAUDE_PROJECT_DIR;
+  if (home) { env.HOME = home; env.USERPROFILE = home; }
   const r = spawnSync(process.execPath, [...(linux ? LINUX : []), path.join('project-os', 'Install-project-hooks.mjs'), ...flags], { cwd: dir, encoding: 'utf8', env });
   return { code: r.status, out: (r.stdout || '') + (r.stderr || '') };
 }
@@ -267,6 +268,16 @@ try {
   r = install(FRESH, ['--dry']);
   t('the shipped reminder texts give no warning', !r.out.includes('warning:'), r.out);
   t('the shipped reminder lengths are printed', /reminder: UserPromptSubmit text is \d+ characters/.test(r.out) && /reminder: SessionStart text is \d+ characters/.test(r.out), r.out);
+
+  const HOME_ON = path.join(TMP, 'home with plugin');
+  fs.mkdirSync(path.join(HOME_ON, '.claude', 'skills', 'projectos', 'hooks'), { recursive: true });
+  fs.writeFileSync(path.join(HOME_ON, '.claude', 'skills', 'projectos', 'hooks', 'dispatch.mjs'), '// stand-in for the plugin\n');
+  r = install(kitProject(path.join(TMP, 'under plugin')), ['--dry'], { home: HOME_ON });
+  t('[R] with the plugin folder on this computer, the dry run says the plugin covers the project, never "NOT wired"', r.code === 0 && r.out.includes('plugin:   found at') && r.out.includes('covers this project') && !r.out.includes('NOT wired yet') && !r.out.includes('is not installed'), r.out);
+  const HOME_OFF = path.join(TMP, 'home without plugin');
+  fs.mkdirSync(HOME_OFF, { recursive: true });
+  r = install(kitProject(path.join(TMP, 'no plugin')), ['--dry'], { home: HOME_OFF });
+  t('without the plugin folder the dry run still says NOT wired yet', r.code === 0 && r.out.includes('NOT wired yet') && !r.out.includes('plugin:'), r.out);
 } finally {
   fs.rmSync(TMP, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
