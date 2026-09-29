@@ -36,8 +36,8 @@ the reading step.
      and no `CLAUDE-kit.md` is made: its records and its merged `CLAUDE.md`
      are not the kit's to replace.
 
-   Never copy the kit's `README.md`, `LICENSE`, `.gitignore`, `tests/`,
-   `hooks/` or `.claude-plugin/`. They belong to the kit repository, and the
+   Never copy the kit's `README.md`, `LICENSE`, `.gitignore`, `.gitattributes`,
+   `tests/`, `hooks/` or `.claude-plugin/`. They belong to the kit repository, and the
    last two together make the plugin take this project for the kit itself and
    stay silent here.
 3. Delete the fetch, and the ZIP if there was one:
@@ -318,7 +318,7 @@ and, if a build plan sits loose in the repo, that it moves to
 cannot be derived, and what would be wrong to guess. Number these.
 Typically: their role on this project, the language replies are written in
 (always asked, see below), who starts the dev server and where it runs
-(CLAUDE.md rule 16 has three honest answers and is rewritten from this one),
+(CLAUDE.md rule 16 has four honest answers and is rewritten from this one),
 whether this project uses each tool folder under `project-os/mcp/` (see
 below), and anything step 3 came up empty on, except the "none yet" rows of a
 folder with no code and no plan, which are never asked.
@@ -357,6 +357,11 @@ project-os/Conversations.md.
 **The project invariants.** Do not leave that section empty and move on. Read
 the code, propose the three to six things this project cannot afford to break,
 and ask for a yes or no on each. Nothing is faster than judging a real list.
+With no code, read the plan instead and propose from it. With no code and no
+plan there is nothing to read: propose none, ask nothing, leave the section as
+it ships, and put one Waiting-on-you line, that the invariants are proposed at
+the first change that adds code, the same shape as the check command's "none
+yet".
 Write every one as its CONSEQUENCE, in the owner's language: whose data could
 be exposed, what a customer would see, what would be lost. A candidate written
 as a technical noun cannot be judged by the person who has to approve it, so
@@ -580,6 +585,11 @@ names them and gives the one `git pull` that updates the plugin folder. That
 folder is outside the project, so the command is the owner's to run: put it in
 the report under "# Rules switched on" (section 8), never run it yourself.
 
+A plugin older than that second line prints nothing even when the files
+differ. So when no second line comes, compare the two guard files yourself,
+`project-os/guards/` against the plugin folder's copy, and treat a difference
+exactly as if the line had come.
+
 **The installer path**, as part of the install:
 
 - Read `project-os/Hooks.md`.
@@ -591,7 +601,8 @@ the report under "# Rules switched on" (section 8), never run it yourself.
   - Five to seven rules, each one line, numbered. A rule earns a line when
     breaking it costs the owner a round of correction; a rule nobody breaks
     does not.
-  - Under about 600 characters. The text is paid for on every message.
+  - Under about 600 characters. The text is paid for on every message. The
+    installer prints the length of each reminder and warns above 600.
   - No apostrophes, double quotes, backticks, dollar signs or backslashes
     anywhere in it. The text sits in single quotes inside a double-quoted shell
     command, so each of those ends the string, runs as a command, or is read
@@ -717,7 +728,9 @@ Finding one working browser never ends the step.
    app's built-in browser pane counts when it actually loads a page; close
    every tab you opened to test it. The Claude in Chrome extension counts only
    for a Chrome on this computer: its connected-browsers tool lists one marked
-   as on this computer (the list covers every computer on the account). Where
+   as on this computer, or as the one this session's actions go to (in use);
+   a mark saying only that its system matches this one is a weak hint and does
+   not count alone (the list covers every computer on the account). Where
    that tool does not exist, it counts when its tab-context tool answers
    without saying the extension is not connected; an empty tab list is normal
    at install time. Never ask it to create a tab group, a window or a tab, so
@@ -876,8 +889,9 @@ were read past and left unanswered (review 2026-09-28).
    > If I read your rules back to you, they are reaching me.
 
    When the session's start line said this project's guard files differ from
-   the plugin's copy (6b, the plugin path), add two lines to that block: this
-   computer's copy of the kit is behind the one in this project, and the one
+   the plugin's copy, or your own comparison found them different (6b, the
+   plugin path), add two lines to that block: this computer's copy of the kit
+   is behind the one in this project, and the one
    command that updates it, which is the owner's to run because the plugin
    folder is outside the project:
 

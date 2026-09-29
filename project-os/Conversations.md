@@ -398,7 +398,7 @@ Say enabled and I create the bucket.
 The new page is at:
 
 ```
-{{DEV_URL}}/settings/notifications
+http://localhost:3000/settings/notifications
 ```
 
 Nothing on the existing pages changed.

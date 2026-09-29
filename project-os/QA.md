@@ -188,13 +188,13 @@ exactly like a check that was skipped.
 |---|---|
 | `Manual QA passed` | `Opened the settings screen, changed the name field, confirmed the save indicator fired and the stored record updated.` |
 | `Looks good` | `Changed list-row padding, opened the screen, checked alignment, hover, and that nothing clipped at the narrow width.` |
-| `Tested` | `Ran {{CHECK_COMMAND}}; passed. Loaded the page; no console errors.` |
+| `Tested` | `Ran the project check; passed. Loaded the page; no console errors.` |
 
 Two lines, always, in the History row: what you ran, and what it returned.
 
 ```md
 **Verification run**
-Ran `{{CHECK_COMMAND}}`, then opened the changed screen, made an edit, reloaded.
+Ran the project check, then opened the changed screen, made an edit, reloaded.
 
 **Verification result**
 Passed: checks green, the edit rendered, the record updated, the change survived the

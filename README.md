@@ -89,7 +89,9 @@ install must end with, problems and clashes included.
 2. Paste the install prompt below into your assistant. Or skip step 1, and
    just tell it to install ProjectOS and give it this link: it reads
    `Installation.md` either way, and brings the files in itself when they are
-   not there yet (its step 0).
+   not there yet (its step 0). That fetch goes into `.tmp/projectos-kit`
+   inside your project, never into the project itself or beside it, and is
+   deleted once the files are copied.
 3. Answer its questions. It asks once, in one batch.
 4. Read its closing report: what was set, what broke, and where your existing
    rules clash with the kit's process.
@@ -109,6 +111,9 @@ Set up ProjectOS — the files I just copied into this project.
 
 Read Installation.md at the project root and follow it exactly, every step,
 in order. Do not change anything before its reading step is complete.
+
+If the files are not here yet, fetch the kit into .tmp/projectos-kit first,
+never into the project root or beside it, and read Installation.md there.
 
 The install ends with the report Installation.md defines: what was set, every
 problem you hit, every clash between this project's existing rules and the

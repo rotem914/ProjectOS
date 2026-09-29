@@ -258,8 +258,15 @@ try {
   fs.writeFileSync(path.join(QUOTE, 'project-os', 'Hooks-settings.json'), JSON.stringify(q, null, 2));
   r = install(QUOTE, ['--dry']);
   t('[R] a double quote in a reminder text is warned about, and the run goes on', r.code === 0 && r.out.includes('warning:  the UserPromptSubmit reminder text'), r.out);
+  const LONG = kitProject(path.join(TMP, 'long reminder'));
+  const l = JSON.parse(fs.readFileSync(path.join(LONG, 'project-os', 'Hooks-settings.json'), 'utf8'));
+  l.hooks.UserPromptSubmit[0].hooks[0].command = l.hooks.UserPromptSubmit[0].hooks[0].command.replace('Change only what was asked', 'Change only what was asked ' + 'and nothing beside it, '.repeat(6));
+  fs.writeFileSync(path.join(LONG, 'project-os', 'Hooks-settings.json'), JSON.stringify(l, null, 2));
+  r = install(LONG, ['--dry']);
+  t('[R] a reminder text over 600 characters is warned about, and the run goes on', r.code === 0 && /warning:  the UserPromptSubmit reminder text is \d+ characters/.test(r.out), r.out);
   r = install(FRESH, ['--dry']);
   t('the shipped reminder texts give no warning', !r.out.includes('warning:'), r.out);
+  t('the shipped reminder lengths are printed', /reminder: UserPromptSubmit text is \d+ characters/.test(r.out) && /reminder: SessionStart text is \d+ characters/.test(r.out), r.out);
 } finally {
   fs.rmSync(TMP, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }

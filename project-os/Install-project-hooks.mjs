@@ -241,6 +241,19 @@ const unsafeReminders = Object.entries(incoming.hooks)
       return !!m && /['"`$\\]/.test(m[1]);
     })))
   .map(([event]) => event);
+// The length of each reminder text. Installation.md's recipe asks for about
+// 600 characters, because the text is paid for on every message, and nobody
+// should have to count it by hand (install report, 2026-09-29).
+const REMINDER_CAP = 600;
+const reminderLengths = [];
+for (const [event, entries] of Object.entries(incoming.hooks)) {
+  for (const group of (Array.isArray(entries) ? entries : [])) {
+    for (const h of ((group && Array.isArray(group.hooks)) ? group.hooks : [])) {
+      const m = isCommandHook(h) && /console\.log\('([\s\S]*?)'\)/.exec(h.command);
+      if (m) reminderLengths.push({ event, length: m[1].length });
+    }
+  }
+}
 if (!SHARED && process.platform !== 'win32') {
   // Forward slashes, which every shell on every platform accepts. On Windows
   // the placeholder stays: a subfolder session loads only that folder's
@@ -311,6 +324,14 @@ if (unsafeReminders.length) {
   console.log(`  warning:  the ${unsafeReminders.join(' and ')} reminder text holds an apostrophe, a double quote, a backtick, a $ or a backslash.`);
   console.log('            The shell reads those as code, so that reminder may arrive cut short or not at all.');
   console.log('            Reword it in project-os/Hooks-settings.json without them.');
+}
+for (const { event, length } of reminderLengths) {
+  if (length > REMINDER_CAP) {
+    console.log(`  warning:  the ${event} reminder text is ${length} characters; the recipe in Installation.md asks for about ${REMINDER_CAP}.`);
+    console.log('            It is paid for on every message, so trim it in project-os/Hooks-settings.json.');
+  } else {
+    console.log(`  reminder: ${event} text is ${length} characters (the recipe asks for about ${REMINDER_CAP})`);
+  }
 }
 if (alreadyThere.length) console.log(`  present:  ${alreadyThere.join(', ')} (already wired, nothing to do)`);
 if (added.length) console.log(`  will add: ${added.join(', ')} (NOT wired yet)`);

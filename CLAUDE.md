@@ -387,13 +387,16 @@ that specific element.
 
 > **Setup step — the install fills this, then deletes this block.** Ask the
 > owner in pile two: who starts the dev server, and where does it run? The
-> three honest answers, and what each one makes of this rule:
+> four honest answers, and what each one makes of this rule:
 >
 > - *The owner runs it, at an address.* The rule below stands as written.
 > - *Nobody runs one; the owner works through the assistant's own app.* Then
 >   the assistant's preview pane IS the owner's window, not a second instance,
 >   and starting a server there is allowed. Rewrite the rule to say so.
 > - *There is no server at all.* The rule is dormant until there is one.
+> - *The owner will run one, but its address is not decided yet.* The rule
+>   below stands as written, with `none yet` as the address; the change that
+>   first gives the project an address writes it in.
 
 Assume the owner already has one running at `{{DEV_URL}}`, and drive that. Do not
 launch one, in the foreground or the background, at any point.
