@@ -774,6 +774,11 @@ inside the snapshot's `.git` folder, so nothing has to be fetched from
 anywhere. Say in the restore report, in one line, that the guards were wired
 again.
 
+`.mcp.json` travels in the snapshot but is written for the system that made
+it: restoring on the other system, switch its `chrome-devtools` entry to this
+system's form (Installation.md 6d step 3). A copy with no `.mcp.json`, such as
+a fresh clone, copies `.mcp.json.example` to `.mcp.json` the same way.
+
 ### `Go commit and backup`
 
 Run both flows back to back: `Go commit` in full (the assistant commits and

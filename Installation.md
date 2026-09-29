@@ -40,7 +40,19 @@ the reading step.
    `tests/`, `hooks/` or `.claude-plugin/`. They belong to the kit repository, and the
    last two together make the plugin take this project for the kit itself and
    stay silent here.
-3. Delete the fetch, and the ZIP if there was one:
+3. Run the fetch's fast suite once, from the project root:
+
+   ```
+   node .tmp/projectos-kit/tests/Plugin-and-installer-tests.mjs
+   ```
+
+   From a ZIP, the path starts at the one folder inside it. It takes seconds
+   and proves the hook scripts run on this machine's Node.
+   Its scratch projects go to the system's temp folder and are removed when it
+   ends. Note its last line for the install row (step 7). A failure never
+   stops the install: it is one Problems line in the report, naming the
+   failing cases.
+4. Delete the fetch, and the ZIP if there was one:
 
    ```
    rm -rf .tmp/projectos-kit
@@ -48,7 +60,7 @@ the reading step.
 
    In PowerShell, `Remove-Item -Recurse -Force .tmp/projectos-kit`. The guards
    let a delete under `.tmp/` through as disposable.
-4. Never clone into the project root, and never outside `.tmp/`. A clone at the
+5. Never clone into the project root, and never outside `.tmp/`. A clone at the
    root makes the public kit repository this project's history and push
    address, so the owner's first push could send their work there. A clone
    outside the project is refused by the folder guard.
@@ -286,7 +298,9 @@ The reply language is the one exception: it is always asked (see below).
 An install repeated in the same conversation, after a wiped folder or a false
 start, is a first install by the files but not by the owner: every answer
 already given in this conversation stands, and only what is still open is
-asked, plus the language, which is always asked.
+asked. The language is still asked, but in pile one, as the answer already
+given, where silence means yes: a panel opened for that one question is a
+chore.
 
 **Real questions go in the question panel, when the client has one.** Claude
 Code and its desktop app offer a built-in question panel, a form with the
@@ -346,7 +360,8 @@ different limit edits that rule later, with the file in front of them.
 owner writes in is not always the one they want to read: an owner can type in
 one language and want every answer in another. So it is a pile-two question on
 every install, with its own tab in the panel, even when the whole conversation
-so far has been in one language. Offer the language they have been writing in
+so far has been in one language. The one exception is an install repeated in
+the same conversation, where it goes in pile one (above). Offer the language they have been writing in
 and one other likely one (English, or the language the project's own content is
 in). When the project's existing rules already name a reply language, offer
 that one first and mark it as recommended; it outranks the global instructions
@@ -733,8 +748,9 @@ Finding one working browser never ends the step.
 1. **Look first.** Search the tool list for `browser`, and again for `chrome`
    (a deferred tool is invisible until searched for). A search may find only a
    tool that switches one of them on; call it, then search again. The desktop
-   app's built-in browser pane counts when it actually loads a page; close
-   every tab you opened to test it. The Claude in Chrome extension counts only
+   app's built-in browser pane counts when it actually loads a page: load
+   `https://example.com`, the address reserved for exactly this, never a site
+   of your choosing, and close every tab you opened to test it. The Claude in Chrome extension counts only
    for a Chrome on this computer: its connected-browsers tool lists one marked
    as on this computer, or as the one this session's actions go to (in use);
    a mark saying only that its system matches this one is a weak hint and does
@@ -830,13 +846,13 @@ the files came from, so a later update can tell which kit this project runs:
 the one step 0 noted, on a re-run the one the earlier install row names, or
 unknown when the files were copied in by hand.
 
-The row's shape, since the install runs more checks than a row holds (the
-file asks for about 900 characters): the kit commit, the files placed, the
-questions answered in a word each, and the checks BY NAME only, two or three
-words apiece (Node found, hooks proved, reminder read back, browser found,
-check command run). What each check returned goes in the message of the
-commit that lands the install, which `git show` keeps; the row never carries
-it twice.
+The row's shape, since the file asks for about 900 characters: the kit
+commit, the files placed, the questions answered in a word each, and every
+check with its result in two or three words (kit tests 47 passed, Node 24,
+hooks proved, reminder read back, Chrome found, check command none yet). The
+report carries the detail. Never send a result to a commit message: the
+install lands on the owner's `Go commit`, often in another session that never
+saw the results, so the row is the record that lasts.
 The kit's rules apply to the kit.
 
 ## 8. The install report
