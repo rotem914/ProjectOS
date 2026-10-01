@@ -23,11 +23,8 @@
 //
 // Flags, each the .ps1 parameter in kebab case, with the same default:
 //   --dry-run                 (-DryRun)
-//   --target-kb 80            (-TargetKB) soft size target per live History file
-//   --max-months 3            (-MaxMonths) deep rows older than this may move
 //   --min-keep-rows 20        (-MinKeepRows)
 //   --max-keep-rows 20        (-MaxKeepRows) hard cap on live deep rows
-//   --min-keep-days 0         (-MinKeepDays) 0 keeps it a pure count
 //   --row-char-budget 900     (-RowCharBudget) warn on longer live rows
 //   --max-keep-scan-rows 80   (-MaxKeepScanRows) 0 never rotates the Scan log
 //   --max-keep-decisions 25   (-MaxKeepDecisions)
@@ -67,11 +64,8 @@ const SELF = 'Archive-old-rows.mjs';
 // Parameters
 // ---------------------------------------------------------------------------
 const PARAMS = {
-  'target-kb': 80,
-  'max-months': 3,
   'min-keep-rows': 20,
   'max-keep-rows': 20,
-  'min-keep-days': 0,
   'row-char-budget': 900,
   'max-keep-scan-rows': 80,
   'max-keep-decisions': 25,
@@ -405,8 +399,6 @@ function dayNumber(y, m, d) {
   const mm = m + (a ? 9 : -3);
   return 365 * yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) + Math.floor((153 * mm + 2) / 5) + d;
 }
-const MIN_DAY = dayNumber(1, 1, 1);
-const MAX_DAY = dayNumber(9999, 12, 31);
 function fromDayNumber(n) {
   let y = Math.floor((n - 60) / 365.2425) - 1;
   while (dayNumber(y + 1, 1, 1) <= n) y++;
@@ -418,20 +410,6 @@ const fmtDate = (n) => {
   const { y, m, d } = fromDayNumber(n);
   return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 };
-function addMonths(n, months) {
-  if (months < -120000 || months > 120000) throw new RunError('Exception calling "AddMonths" with "1" argument(s): "Months value must be between +/-120000."');
-  const { y, m, d } = fromDayNumber(n);
-  const total = y * 12 + (m - 1) + months;
-  const ny = Math.floor(total / 12);
-  const nm = total - ny * 12 + 1;
-  if (ny < 1 || ny > 9999) throw new RunError('Exception calling "AddMonths" with "1" argument(s): "The added or subtracted value results in an un-representable DateTime."');
-  return dayNumber(ny, nm, Math.min(d, daysInMonth(ny, nm)));
-}
-function addDays(n, days) {
-  const r = n + days;
-  if (r < MIN_DAY || r > MAX_DAY) throw new RunError('Exception calling "AddDays" with "1" argument(s): "Value to add was out of range."');
-  return r;
-}
 // [datetime]::ParseExact(x, 'yyyy-MM-dd'): ASCII digits and a real day only.
 function parseRowDate(s) {
   const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(s);
@@ -480,11 +458,8 @@ function featureDirs(featuresDir) {
 function main(argv) {
   const opts = parseArgs(argv);
   const DryRun = opts['dry-run'];
-  const TargetKB = opts['target-kb'];
-  const MaxMonths = opts['max-months'];
   const MinKeepRows = opts['min-keep-rows'];
   const MaxKeepRows = opts['max-keep-rows'];
-  const MinKeepDays = opts['min-keep-days'];
   const RowCharBudget = opts['row-char-budget'];
   const MaxKeepScanRows = opts['max-keep-scan-rows'];
   const MaxKeepDecisions = opts['max-keep-decisions'];
@@ -576,13 +551,8 @@ function main(argv) {
 
   const now = new Date();
   const today = dayNumber(now.getFullYear(), now.getMonth() + 1, now.getDate());
-  const cutoff = addMonths(today, -MaxMonths);
-  const keepNewerThan = addDays(today, -MinKeepDays);
-  const floorDesc = MinKeepDays <= 0 && MinKeepRows === MaxKeepRows
-    ? `keep newest ${MaxKeepRows} rows (pure count)`
-    : `keep newest ${MinKeepRows}-${MaxKeepRows} rows, calendar window ${MinKeepDays}d`;
   log();
-  log(`HISTORY  today ${fmtDate(today)} | cutoff ${fmtDate(cutoff)} | ${floorDesc} | target ${TargetKB} KB`);
+  log(`HISTORY  today ${fmtDate(today)} | keep newest ${MaxKeepRows} rows`);
 
   for (const t of historyTargets) {
     log();
@@ -618,25 +588,13 @@ function main(argv) {
     }
 
     // Protection floor: the newest rows are the TAIL of the oldest-first list.
-    const within = rotatable.filter((r) => r.date >= keepNewerThan).length;
-    let protectedCount = Math.max(MinKeepRows, within);
-    protectedCount = Math.min(protectedCount, MaxKeepRows);
+    let protectedCount = Math.min(MinKeepRows, MaxKeepRows);
     if (protectedCount > rotatable.length) protectedCount = rotatable.length;
     const candidateCount = rotatable.length - protectedCount;
     const candidates = candidateCount <= 0 ? [] : rotatable.slice(0, candidateCount);
 
     const move = [];
-    for (const r of candidates) if (r.date < cutoff) move.push(r);
-    const targetBytes = TargetKB * 1024;
     const indexSet = (list) => new Set(list.map((m) => m.index));
-    if (keptBytes(indexSet(move)) > targetBytes) {
-      const inMove = indexSet(move);
-      const remaining = candidates.filter((r) => !inMove.has(r.index));
-      for (const r of remaining) {
-        if (keptBytes(indexSet(move)) <= targetBytes) break;
-        move.push(r);
-      }
-    }
     // Hard cap: never keep more than MaxKeepRows deep rows live.
     if (rotatable.length - move.length > MaxKeepRows) {
       const inMove = indexSet(move);
@@ -692,15 +650,14 @@ function main(argv) {
     const movedCount = move.length;
     const keptCount = rotatable.length - movedCount;
     const overBudget = rotatable.filter((r) => r.text.length > RowCharBudget).length;
-    const floorBlocked = afterBytes > targetBytes;
     grandMoved += movedCount + scanMovedCount;
 
     log(`  live size BEFORE     : ${fmtKB(beforeBytes)}`);
     log(`  deep rows total      : ${rotatable.length}`);
-    log(`  protected by floor   : ${pad(protectedCount, 3)}   (cap ${MaxKeepRows}, min ${MinKeepRows}, within-${MinKeepDays}d ${within})`);
+    log(`  protected by floor   : ${pad(protectedCount, 3)}   (cap ${MaxKeepRows}, min ${MinKeepRows})`);
     log(`  rows MOVED           : ${pad(movedCount, 3)}`);
     log(`  rows KEPT live       : ${pad(keptCount, 3)}`);
-    log(`  live size AFTER (est): ${fmtKB(afterBytes)}${floorBlocked ? `   [above ${TargetKB} KB target - held by protection floor]` : ''}`);
+    log(`  live size AFTER (est): ${fmtKB(afterBytes)}`);
     log(`  rows > ${RowCharBudget} chars      : ${pad(overBudget, 3)}${overBudget > 0 ? '   (warning)' : ''}`);
     if (t.scan) {
       log(`  scan log rows        : ${pad(scanCount, 3)}   (cap ${MaxKeepScanRows > 0 ? MaxKeepScanRows : 'off'})`);

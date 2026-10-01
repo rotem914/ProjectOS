@@ -34,12 +34,11 @@ param(
     [switch]$DryRun,
 
     # --- History engine ---------------------------------------------------
-    # Size target per live History file (soft: the row floors override it).
-    [int]$TargetKB        = 80,
-    [int]$MaxMonths       = 3,    # deep rows older than this are rotation candidates
+    # The newest deep rows stay live; every older one moves. There is no age,
+    # day or size setting: with both counts at 20 they never acted, so they
+    # were removed (2026-10-01).
     [int]$MinKeepRows     = 20,   # never keep fewer than this many newest deep rows
     [int]$MaxKeepRows     = 20,   # HARD cap: never keep more than this (the jam-killer)
-    [int]$MinKeepDays     = 0,    # calendar courtesy; 0 = pure count (the default)
     [int]$RowCharBudget   = 900,  # warn (do not act) on live rows longer than this
     [int]$MaxKeepScanRows = 80,   # newest Scan-log rows kept live (0 = never rotate it)
 
@@ -207,12 +206,8 @@ if (Test-Path -LiteralPath $featuresDir) {
 }
 
 $today  = (Get-Date).Date
-$cutoff = $today.AddMonths(-$MaxMonths)
-$keepNewerThan = $today.AddDays(-$MinKeepDays)
-$floorDesc = if ($MinKeepDays -le 0 -and $MinKeepRows -eq $MaxKeepRows) { "keep newest $MaxKeepRows rows (pure count)" }
-             else { "keep newest $MinKeepRows-$MaxKeepRows rows, calendar window ${MinKeepDays}d" }
 Write-Host ''
-Write-Host ("HISTORY  today {0:yyyy-MM-dd} | cutoff {1:yyyy-MM-dd} | {2} | target {3} KB" -f $today, $cutoff, $floorDesc, $TargetKB)
+Write-Host ("HISTORY  today {0:yyyy-MM-dd} | keep newest {1} rows" -f $today, $MaxKeepRows)
 
 foreach ($t in $historyTargets) {
     Write-Host ''
@@ -243,25 +238,13 @@ foreach ($t in $historyTargets) {
     # Protection floor: $rotatable is oldest-first (rows append at the bottom),
     # so the newest are the TAIL. Protect the last $protectedCount; candidates
     # are the leading, oldest rows.
-    $within = @($rotatable | Where-Object { $_.Date -ge $keepNewerThan }).Count
-    $protectedCount = [Math]::Max($MinKeepRows, $within)
-    $protectedCount = [Math]::Min($protectedCount, $MaxKeepRows)
+    $protectedCount = [Math]::Min($MinKeepRows, $MaxKeepRows)
     if ($protectedCount -gt $rotatable.Count) { $protectedCount = $rotatable.Count }
     $candidateCount = $rotatable.Count - $protectedCount
     if   ($candidateCount -le 0) { $candidates = @() }
     else { $candidates = $rotatable[0..($candidateCount - 1)] }
 
     $move = New-Object System.Collections.Generic.List[object]
-    foreach ($r in $candidates) { if ($r.Date -lt $cutoff) { $move.Add($r) | Out-Null } }
-    $targetBytes = $TargetKB * $kb
-    if ((Get-KeptBytes $lines $doc.Eol $move) -gt $targetBytes) {
-        $inMove = @{}; foreach ($m in $move) { $inMove[$m.Index] = $true }
-        $remaining = @($candidates | Where-Object { -not $inMove.ContainsKey($_.Index) })
-        foreach ($r in $remaining) {
-            if ((Get-KeptBytes $lines $doc.Eol $move) -le $targetBytes) { break }
-            $move.Add($r) | Out-Null
-        }
-    }
     # Hard cap: never keep more than MaxKeepRows deep rows live.
     if (($rotatable.Count - $move.Count) -gt $MaxKeepRows) {
         $inMove = @{}; foreach ($m in $move) { $inMove[$m.Index] = $true }
@@ -336,15 +319,14 @@ foreach ($t in $historyTargets) {
     $movedCount   = $move.Count
     $keptCount    = $rotatable.Count - $movedCount
     $overBudget   = @($rotatable | Where-Object { $_.Text.Length -gt $RowCharBudget }).Count
-    $floorBlocked = ($afterBytes -gt $targetBytes)
     $grandMoved  += $movedCount + $scanMovedCount
 
     Write-Host ("  live size BEFORE     : {0}" -f (FmtKB $beforeBytes))
     Write-Host ("  deep rows total      : {0}" -f $rotatable.Count)
-    Write-Host ("  protected by floor   : {0,3}   (cap {1}, min {2}, within-{3}d {4})" -f $protectedCount, $MaxKeepRows, $MinKeepRows, $MinKeepDays, $within)
+    Write-Host ("  protected by floor   : {0,3}   (cap {1}, min {2})" -f $protectedCount, $MaxKeepRows, $MinKeepRows)
     Write-Host ("  rows MOVED           : {0,3}" -f $movedCount)
     Write-Host ("  rows KEPT live       : {0,3}" -f $keptCount)
-    Write-Host ("  live size AFTER (est): {0}{1}" -f (FmtKB $afterBytes), $(if ($floorBlocked) { "   [above {0} KB target - held by protection floor]" -f $TargetKB } else { '' }))
+    Write-Host ("  live size AFTER (est): {0}" -f (FmtKB $afterBytes))
     Write-Host ("  rows > {0} chars      : {1,3}{2}" -f $RowCharBudget, $overBudget, $(if ($overBudget -gt 0) { '   (warning)' } else { '' }))
     if ($t.Scan) {
         Write-Host ("  scan log rows        : {0,3}   (cap {1})" -f $scanCount, $(if ($MaxKeepScanRows -gt 0) { $MaxKeepScanRows } else { 'off' }))
