@@ -343,7 +343,7 @@ function caseStops(engine) {
   const hist = pos(root, 'History.md');
   write(hist, ['# Fake - History', '', '## Appendix', '', '| Date | Task |', '|---|---|', '| 2020-02-30 | Bad day |', `| ${day(5)} | Fine |`]);
   const histBefore = read(hist);
-  r = run(engine, root, { 'max-keep-rows': 0, 'min-keep-rows': 0 });
+  r = run(engine, root, { 'max-keep-rows': 0 });
   check(`${label}: a date that is not a day exits 1`, r.status === 1, r.out);
   check(`${label}: and says so on stderr`, /ParseExact[\s\S]*DateTime/.test(r.stderr), r.stderr.slice(0, 300));
   check(`${label}: and nothing is written`, read(hist) === histBefore && read(live) === original && read(pos(root, 'History-archive.md')) === null);

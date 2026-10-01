@@ -23,7 +23,6 @@
 //
 // Flags, each the .ps1 parameter in kebab case, with the same default:
 //   --dry-run                 (-DryRun)
-//   --min-keep-rows 20        (-MinKeepRows)
 //   --max-keep-rows 20        (-MaxKeepRows) hard cap on live deep rows
 //   --row-char-budget 900     (-RowCharBudget) warn on longer live rows
 //   --max-keep-scan-rows 80   (-MaxKeepScanRows) 0 never rotates the Scan log
@@ -64,7 +63,6 @@ const SELF = 'Archive-old-rows.mjs';
 // Parameters
 // ---------------------------------------------------------------------------
 const PARAMS = {
-  'min-keep-rows': 20,
   'max-keep-rows': 20,
   'row-char-budget': 900,
   'max-keep-scan-rows': 80,
@@ -458,7 +456,6 @@ function featureDirs(featuresDir) {
 function main(argv) {
   const opts = parseArgs(argv);
   const DryRun = opts['dry-run'];
-  const MinKeepRows = opts['min-keep-rows'];
   const MaxKeepRows = opts['max-keep-rows'];
   const RowCharBudget = opts['row-char-budget'];
   const MaxKeepScanRows = opts['max-keep-scan-rows'];
@@ -588,7 +585,7 @@ function main(argv) {
     }
 
     // Protection floor: the newest rows are the TAIL of the oldest-first list.
-    let protectedCount = Math.min(MinKeepRows, MaxKeepRows);
+    let protectedCount = MaxKeepRows;
     if (protectedCount > rotatable.length) protectedCount = rotatable.length;
     const candidateCount = rotatable.length - protectedCount;
     const candidates = candidateCount <= 0 ? [] : rotatable.slice(0, candidateCount);
@@ -654,7 +651,7 @@ function main(argv) {
 
     log(`  live size BEFORE     : ${fmtKB(beforeBytes)}`);
     log(`  deep rows total      : ${rotatable.length}`);
-    log(`  protected by floor   : ${pad(protectedCount, 3)}   (cap ${MaxKeepRows}, min ${MinKeepRows})`);
+    log(`  protected by floor   : ${pad(protectedCount, 3)}   (cap ${MaxKeepRows})`);
     log(`  rows MOVED           : ${pad(movedCount, 3)}`);
     log(`  rows KEPT live       : ${pad(keptCount, 3)}`);
     log(`  live size AFTER (est): ${fmtKB(afterBytes)}`);

@@ -34,11 +34,10 @@ param(
     [switch]$DryRun,
 
     # --- History engine ---------------------------------------------------
-    # The newest deep rows stay live; every older one moves. There is no age,
-    # day or size setting: with both counts at 20 they never acted, so they
-    # were removed (2026-10-01).
-    [int]$MinKeepRows     = 20,   # never keep fewer than this many newest deep rows
-    [int]$MaxKeepRows     = 20,   # HARD cap: never keep more than this (the jam-killer)
+    # The newest deep rows stay live; every older one moves. One count decides
+    # it: the age, day and size settings and the separate minimum never changed
+    # what moved, so they were removed (2026-10-01).
+    [int]$MaxKeepRows     = 20,   # newest deep rows kept live; every older one moves
     [int]$RowCharBudget   = 900,  # warn (do not act) on live rows longer than this
     [int]$MaxKeepScanRows = 80,   # newest Scan-log rows kept live (0 = never rotate it)
 
@@ -238,7 +237,7 @@ foreach ($t in $historyTargets) {
     # Protection floor: $rotatable is oldest-first (rows append at the bottom),
     # so the newest are the TAIL. Protect the last $protectedCount; candidates
     # are the leading, oldest rows.
-    $protectedCount = [Math]::Min($MinKeepRows, $MaxKeepRows)
+    $protectedCount = $MaxKeepRows
     if ($protectedCount -gt $rotatable.Count) { $protectedCount = $rotatable.Count }
     $candidateCount = $rotatable.Count - $protectedCount
     if   ($candidateCount -le 0) { $candidates = @() }
@@ -323,7 +322,7 @@ foreach ($t in $historyTargets) {
 
     Write-Host ("  live size BEFORE     : {0}" -f (FmtKB $beforeBytes))
     Write-Host ("  deep rows total      : {0}" -f $rotatable.Count)
-    Write-Host ("  protected by floor   : {0,3}   (cap {1}, min {2})" -f $protectedCount, $MaxKeepRows, $MinKeepRows)
+    Write-Host ("  protected by floor   : {0,3}   (cap {1})" -f $protectedCount, $MaxKeepRows)
     Write-Host ("  rows MOVED           : {0,3}" -f $movedCount)
     Write-Host ("  rows KEPT live       : {0,3}" -f $keptCount)
     Write-Host ("  live size AFTER (est): {0}" -f (FmtKB $afterBytes))
