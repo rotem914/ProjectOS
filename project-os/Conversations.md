@@ -524,7 +524,31 @@ That rule is already rule 6 here.
 One row goes on the mistakes list; the rule stays as it is.
 ~~~
 
-### 17 · Never a long dash
+### 17 · After a commit, never print the push command
+
+End a commit report with a `# Next` section carrying one line:
+`Push to live, <joke> <emoji>`.
+One clause, short, WITTY with a little sting, a tease, never a silly pun.
+BUILD IT FROM THE WORK JUST COMMITTED, so the line can never repeat.
+It should read like a sharp friend ribbing the owner, not a dad joke.
+Never lift a line from this file, and never read past sessions for one.
+Close with ONE emoji, LONG-ESTABLISHED: a newer one renders as a white square.
+Rule 12 does not apply here: there is no command to fence.
+
+The owner pushes (CLAUDE.md rule 22), often by clicking a button in a desktop
+git client, so a pasted push command at the end of a report is dead weight.
+Building the line from the work just committed is the whole anti-repeat
+mechanism; reading past sessions to check for repeats is not worth the cost.
+
+~~~
+----
+
+# Next
+
+Push to live, the footer only needed three reminders 🕰️
+~~~
+
+### 18 · Never a long dash
 
 Never write a dash longer than a hyphen: not `—`, not `–`, not a `--` pair.
 Use a comma, a period, a colon, or a new line instead.
