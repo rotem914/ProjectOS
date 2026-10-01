@@ -682,18 +682,21 @@ Decisions with empty templates.
    It reads the commit this project came from in `project-os/Kit-version.json`.
    With no such file, add `--base <commit>` from the install's History row.
    When neither names one, run it as it is and say in the report that the
-   starting commit is unknown: a file the kit has and this project lacks still
-   comes in as new, but every file both hold that differs shows as "cannot
+   starting commit is unknown: a machinery file the kit has and this project
+   lacks still comes in as new, but every file both hold that differs shows as "cannot
    tell who changed it", is never copied, and is compared by hand in step 5.
 3. Show the owner the report in plain words: the files the kit changed that
    this project never touched, the files new in the kit, and the files both
-   changed (the ones the install calibrated, and any the owner edited). Ask
-   one question: apply? Nothing is applied before the owner's word.
+   changed (the ones the install calibrated, and any the owner edited). A file
+   this project removed, such as Installation.md, stays removed. Ask one
+   question: apply? Nothing is applied before the owner's word.
 4. On that word, run the same command with `--apply` added. It copies only
-   the files the kit changed and this project never touched, plus the files
-   new in the kit. It records the new kit commit in
-   `project-os/Kit-version.json` only when no file is left as changed on both
-   sides or as cannot tell; otherwise it lists them and records nothing.
+   the machinery files the kit changed and this project never touched, plus
+   the machinery files new in the kit. It records the new kit commit in
+   `project-os/Kit-version.json` only when nothing is left to carry over by
+   hand: no file changed on both sides or cannot tell, and no calibrated file
+   with a kit change or new in the kit. Otherwise it lists them and records
+   nothing.
    Nothing outside
    `CLAUDE.md`, `Installation.md` and `project-os/` ever comes in from the
    fetch: the kit's `hooks/` and `.claude-plugin/` would make the plugin take
@@ -703,12 +706,16 @@ Decisions with empty templates.
    is deleted or reworded on your own, every clash goes in the report for the
    owner's verdict, and the rule numbers never shift. The living files
    (History, Decisions, Backlog, Map, BugAtlas, Mistakes) keep every row; only
-   a change to the instructions at their top comes over. A placeholder in
+   a change to the instructions at their top comes over, and the report
+   counts the lines the kit changed in each one's template. A calibrated file
+   new in the kit is copied by hand and its setup block filled from what this
+   project already says. A placeholder in
    double curly braces that the new text brings is filled from what this
    project already says, and asked only when nothing does.
    Carry over the files `--apply` listed the same way, then run the command
    once more with `--record` in place of `--apply`: it records the new kit
-   commit and lists every file still different from the kit. Never record
+   commit and lists every file still different from the kit, calibrated ones
+   included. Never record
    before those files are carried over: the next compare would read them as
    this project's own changes and never bring the kit's.
 6. Run the checks: `{{CHECK_COMMAND}}` as `Go commit` runs it, and when a guard
@@ -734,11 +741,16 @@ disaster recovery that depends on no git host and no sync folder. Flow:
 
 1. Run `node project-os/Backup-whole-project.mjs`. Its PowerShell twin,
    `Backup-whole-project.ps1`, makes the same ZIP for anyone who prefers
-   it. The script zips the whole project, git history included, and leaves
-   out the regenerable folders named in its setup block, the assistant's personal settings file
-   (`.claude/settings.local.json` and its `.backup` copy) and worktree copies,
-   the `.tmp/` scratch folder and the env files (`.env*`, `.dev.vars*`; the
-   `.env.example` and `.dev.vars.example` templates travel). The committed
+   it; where Node cannot run, use the twin, and where neither can, say so
+   and make no ZIP. The script zips the whole project, git history
+   included, and leaves out the regenerable folders named in its setup
+   block, the `.codex` folder at any depth, the assistant's personal
+   settings (`.claude/settings.local.json`, its `.backup` copy and
+   `.claude/settings.json.backup`) and worktree copies, the `backups/` and
+   `.tmp/` folders at the root, `*.tmp` leftovers, and the env files
+   (`.env*`, `.dev.vars*`; a template, a name with example, sample or
+   template as one of its parts, travels). The script's own header holds
+   the full list. The committed
    `.claude/settings.json` and the project's own commands travel. Common key
    files stay out too, by name (certificates, SSH private keys, cloud
    credential files), and the run names each one it left out. A secret saved
@@ -749,7 +761,9 @@ disaster recovery that depends on no git host and no sync folder. Flow:
 2. The ZIP lands in `backups/` at the project root, which is gitignored.
 3. Never commit or push a ZIP.
 4. Tell the owner to move the ZIP to external storage; a backup on the same
-   disk as the project is not one.
+   disk as the project is not one. When the run named key files it left
+   out, give the owner that list beside the ZIP's location, so it can travel
+   with the ZIP: a restore needs it, and the run's output is gone by then.
 
 **Env files and common key files never travel.** They are excluded on
 purpose, so a full restore recreates the env files from their templates and

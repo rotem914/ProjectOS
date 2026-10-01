@@ -948,13 +948,15 @@ function programIndex(tokens, shell) {
  * and quoted `>` characters in sed and grep patterns read as redirections.
  *
  * The review of 2026-10-01 found writes that only the old literal scan of
- * one-line scripts had been stopping, so the reading grew instead of the scan
- * coming back (see prepareScript and inlineScriptRisk): a script that changes
- * its own folder (`process.chdir`, `os.chdir`, `Dir.chdir`), code run through
- * eval, exec or new Function, a method named by a string (`fs['writeFileSync']`),
- * Perl and Ruby calls written without parentheses, an argument list handed to
- * a program (`execFileSync('cp', [...])`), and calls that make a file without
- * the word write in their name (`sqlite3.connect`, `tempfile.mkstemp`).
+ * one-line scripts had been stopping, so the reading grew (see prepareScript
+ * and inlineScriptRisk), and a final review that day brought the scan back
+ * for one-line scripts as well (see oneLineRisk). The reading now also sees a
+ * script that changes its own folder (`process.chdir`, `os.chdir`,
+ * `Dir.chdir`), code run through eval, exec or new Function, a method named by
+ * a string (`fs['writeFileSync']`), Perl and Ruby calls written without
+ * parentheses, an argument list handed to a program (`execFileSync('cp',
+ * [...])`), and calls that make a file without the word write in their name
+ * (`sqlite3.connect`, `tempfile.mkstemp`).
  */
 const SCRIPT_WRITE_CALLS = [
   // `dest` lists the arguments written; 'receiver' is the object the method is
@@ -1767,9 +1769,10 @@ const FS_ABSOLUTE = /^(?:[A-Za-z]:[\\/]|[\\/]{2}[^\\/]|~[\\/]|\/(?:[A-Za-z]|home
  * The first absolute path outside the project that a script names, or null.
  * A write to a path built at run time cannot be proven inside when the script
  * also names a folder outside, the same as when it uses the home folder:
- * `['C:/x/a.txt'].forEach((p) => fs.writeFileSync(p, ''))` writes there. Until
- * 2026-10-01 a one-line script was refused for any such path, read or written;
- * this keeps the writes refused and lets the reads through.
+ * `['C:/x/a.txt'].forEach((p) => fs.writeFileSync(p, ''))` writes there. This
+ * keeps such writes refused in a script of any length and lets its reads
+ * through; a one-line script is also refused for the path itself unless it is
+ * provably a read (oneLineRisk, 2026-10-01).
  */
 function namedOutside(body, root, base) {
   for (let i = 0; i < body.length; i++) {
@@ -2408,6 +2411,411 @@ function inlineScriptRisk(body, prog, root, base, argv = []) {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// One-line scripts: a path outside the project is named only to be read
+// ---------------------------------------------------------------------------
+//
+// Until 2026-10-01 every absolute path literal in a one-line inline script was
+// checked like the target of a write, so a script that only READ a file
+// outside the project was refused. The same day that scan was dropped and the
+// reading of a script's writes was left to judge one-line scripts alone, and a
+// review found 31 one-line writes it let through, each spelled in a way that
+// reading does not know (`fs.writeFileSync.call`, `__import__('os').remove`,
+// Perl's `qx`, a mode kept in a variable). So the scan is back for one-line
+// scripts, and a script that names a path outside the project passes it only
+// when it is provably a read (see whyNotARead). Multi-line scripts are judged
+// by their writes alone, as before; their own gaps are a separate matter.
+
+/**
+ * Absolute-looking path literals in a one-line inline script, found the way
+ * the scan before 2026-10-01 found them: every quoted text that starts with a
+ * drive or a slash. `at` is its opening quote and `end` is just past its
+ * closing one.
+ *
+ * The quantifier must have no minimum: with `{3,}` the engine skipped the
+ * short literal `'fs'` and then paired the WRONG quotes, the closing one of
+ * `'fs'` with the opening one of the path, so the path was never seen (caught
+ * by the test, 2026-08-02).
+ */
+function scriptLiterals(text) {
+  return [...String(text).matchAll(/(['"])([^'"\n]+)\1/g)]
+    .filter((m) => /^([A-Za-z]:[\\/]|\/)/.test(m[2]))
+    .map((m) => ({ text: m[2], at: m.index, end: m.index + m[0].length }));
+}
+
+// The names a one-line script must not hold anywhere, its strings included,
+// to pass as a read (2026-10-01): each writes, starts a program or runs code
+// this guard cannot read. Case does not matter. The first list is found
+// anywhere in a word (`writeFileSync`, `createWriteStream` and `os.unlink`
+// each hold one), the second only as a whole word or a call, where a longer
+// word is harmless (`literal_eval`, `System32`). The lists err wide on
+// purpose: a read refused costs one retry, and a write let through is what
+// this guard exists to stop.
+const NOT_A_READ_PART = /write|append|unlink|remove|rmtree|rmdir|rm_rf|rmsync|mkdir|makedirs|rename|copy|move|link|chmod|chown|truncate|utime|fileio|os\.open|exec|spawn|fork|popen|__import__|getattr|importlib|subprocess|child_process|shutil|sqlite|tempfile|set-content|out-file|new-item|remove-item|copy-item|move-item|rename-item|add-content|start-process|invoke-expression/i;
+const NOT_A_READ_WORD = /\b(?:system|eval|function|reflect|qx|iex)\b|\.\s*(?:call|apply|bind)\s*\(|%x\s*[^\w\s]/i;
+// More of the same kind, looked for in the script's code only, since a folder
+// can carry one of these words in its name: a temporary file, a pipe, a device
+// node or a key-value store made; a file opened by a system call or sent to
+// another; code run from a file or a binding; a module, function or method
+// reached by a name; a stream sent somewhere else; and a file deleted or
+// touched by a short name; Ruby's FileUtils, Perl's tie to a database file
+// and Deno.run, which exist to write or to start a program.
+const NOT_A_READ_CODE = /mkdtemp|maketemp|mknod|mkfifo|sysopen|syscall|dbmopen|openkv|startfile|sendfile|chflags|setxattr|__dict__|builtins|ctypes|winreg|const_get|instance_eval|class_eval|module_eval|define_method|alias_method|runin\w*context|compilefunction|dlopen|binding|core::global|file::temp|fileutils|deno\.run\b|\b(?:rm|cp|cpsync|delete|touch|send|__send__|public_send|constructor|prototype|globalthis|vm|worker|command|breakpoint|vars|globals|locals|reopen|chroot|alias|refine|method_missing|tie)\b/i;
+// Shapes that do the same in one language, each a way to reach a function by
+// a name built at run time or to run code the rest of this check cannot see.
+// Perl: a command in backticks, code and glob references, a method or a code
+// reference called through a variable, `can`, the symbol table, the in-place
+// edit switch, `do FILE`, code inside a pattern and a substitution run as
+// code (`s/x/.../e`). Ruby: backticks, `method(...)` and its `.()` call,
+// `methods`, `bind_call`, `to_proc` and ObjectSpace. Python: every name of a
+// module at once (`from os import *`), the double-underscore names that reach
+// any object's members, and operator's attrgetter and methodcaller.
+// JavaScript: a module loaded by a value (`import(x)`), the double-underscore
+// names, and Object's calls that hand out a module's functions or replace them.
+const NOT_A_READ_SHAPES = {
+  perl: /`|&\s*[{$]|->\s*[$&(]|\bcan\s*\(|\*\s*\{|::\s*\{|%(?:main)?::|\$\^I|\bdo\s+["'$]|\(\?\??\{|\bs\s*([^\w\s{(\[<])(?:\\.|(?!\1)[^\\\n])*\1(?:\\.|(?!\1)[^\\\n])*\1[a-z]*e|\bs\s*[{(\[<][^})\]>]*[})\]>]\s*[{(\[<][^})\]>]*[})\]>][a-z]*e/,
+  ruby: /`|\b(?:public_|instance_|singleton_)?methods?\s*[(\b]|\.\s*\(|\bbind_call\b|\bto_proc\b|\bObjectSpace\b/,
+  py: /\bfrom\s+[\w.]+\s+import\s+\*|__(?!name__|file__|main__|doc__)\w+__|\b(?:attrgetter|methodcaller)\b/,
+  js: /\bimport\s*\(|__\w+__|\bObject\s*\.\s*(?:values|entries|getOwnProperty\w*|defineProperty|defineProperties|assign|setPrototypeOf|getPrototypeOf|fromEntries)\b/,
+};
+// The modules a one-line script may load and still pass as a read. Each one
+// writes only through calls the rest of this check refuses; a module not
+// listed (a third-party library, a database, a process pool) may write by a
+// name this guard has never heard of.
+const READ_SAFE_MODULES = {
+  js: /^(?:node:)?(?:fs|fs\/promises|path|path\/posix|path\/win32|os|url|util|crypto|buffer|assert|events|string_decoder|querystring|readline|zlib|timers|perf_hooks)$/,
+  py: /^(?:os|sys|json|glob|pathlib|re|csv|hashlib|hmac|ast|datetime|time|calendar|collections|itertools|functools|operator|math|statistics|string|textwrap|pprint|base64|binascii|struct|codecs|io|unicodedata|platform|locale|fnmatch|stat|difflib|enum|typing|dataclasses|decimal|fractions|random|uuid|html|xml|mimetypes|filecmp|zipfile|tarfile|gzip|bz2|lzma|zlib|pickle|shlex|heapq|bisect|array|tomllib|configparser|getpass|keyword|numbers|secrets|warnings|contextlib|urllib)$/,
+  perl: /^(?:strict|warnings|utf8|feature|open|constant|File::Basename|File::Spec(?:::Functions)?|Cwd|Data::Dumper|JSON::PP|List::Util|Scalar::Util|Encode|Time::Local|Time::HiRes|Digest::MD5|Digest::SHA|MIME::Base64|Getopt::Long|Text::Wrap|v?[\d._]+)$/,
+  ruby: /^(?:json|set|pp|digest(?:\/\w+)?|time|date|csv|yaml|psych|English|shellwords|securerandom|base64|zlib|stringio|ostruct|optparse|find)$/,
+};
+// What `from os import ...` may bring in by name: the path helpers and the
+// calls that only read. Anything else from os is a write by a short name.
+const PY_OS_READ_NAMES = /^(?:path|sep|linesep|pathsep|curdir|pardir|name|environ|getenv|getcwd|listdir|walk|scandir|stat|lstat|fspath)$/;
+// The calls a path outside the project may be the path argument of, per
+// language, by what sits just before the path's opening quote: each one reads
+// and nothing else. The name must be the call's own, not the end of a longer one.
+const READ_CALL_BEFORE = {
+  js: /(?:^|[^\w$])(readFileSync|readFile|existsSync|statSync|lstatSync|readdirSync|accessSync|createReadStream|readTextFileSync|readDirSync)\s*\(\s*$/,
+  py: /(?:^|[^\w.])(open|os\.listdir|os\.path\.(?:exists|isfile|isdir|getsize)|glob\.glob|(?:pathlib\.)?(?:Pure)?(?:Windows|Posix)?Path)\s*\(\s*([rRbBuU]{0,2})$/,
+  perl: /(?:^|[^\w$@%&])(open)\s*\(\s*(?:(?:my|our|local)\s+)?[$*]?\w+\s*,\s*(['"])<(?::[^'"]*)?\2\s*,\s*$/,
+  ruby: /(?:^|[^\w:.])(File\.(?:read|readlines|exist\?|file\?|directory\?)|IO\.readlines|Dir\.(?:glob|entries|children))(\s*\(\s*|\s+)$/,
+};
+// The read calls by their bare names, for hiddenSpelling's check that none of
+// them is given another meaning.
+const READ_CALL_NAMES = {
+  js: 'readFileSync|readFile|existsSync|statSync|lstatSync|readdirSync|accessSync|createReadStream|readTextFileSync|readDirSync',
+  py: 'open|listdir|exists|isfile|isdir|getsize|glob|(?:Pure)?(?:Windows|Posix)?Path|read_text|read_bytes|is_file|is_dir|iterdir|stat',
+  perl: 'open',
+  ruby: 'read|readlines|exist\\?|file\\?|directory\\?|glob|entries|children',
+};
+// The methods a `Path(...)` built from a path outside may be read with.
+const PATH_READ_METHOD = /^\s*\.\s*(?:read_text|read_bytes|exists|is_file|is_dir|iterdir|stat)\s*\(/;
+// Modes that only read. tarfile spells a compressed one `r:gz`.
+const PY_READ_MODE = /^(?:r[bt]?|[bt]r|r[:|][\w*]*)$/;
+const RUBY_READ_MODE = /^r[bt]?(?::[\w|-]+)*$/;
+const JS_ENCODING = /^(?:utf-?8|utf-?16le|ucs-?2|latin1|binary|base64(?:url)?|hex|ascii)$/i;
+// Python modules whose open() takes the path first and the mode second.
+const PY_OPEN_MODULE = /^(?:io|codecs|tarfile|gzip|bz2|lzma|zipfile|dbm(?:\.\w+)?|shelve|wave|aifc|sunau|urllib\.request|request)$/;
+
+/** The text of the string literal that is the whole of `expr`, or null. */
+function wholeLiteral(expr) {
+  const e = String(expr ?? '').trim();
+  const l = stringLiteralAt(e, 0);
+  return l && l.end === e.length && l.prefix === null ? l.text : null;
+}
+
+/**
+ * Is this options object one that only reads? `{ encoding: 'utf8' }`,
+ * `{ flag: 'r' }`, `{ read: true }`. A spread, a computed key or a `flag`
+ * given by a variable (`{ flag }`, `{ flag: f }`) can each be a write.
+ */
+function readOptions(s) {
+  if (writeModeIn([s]) || /\.\.\.|\[/.test(s)) return false;
+  for (const m of s.matchAll(/\bflags?\b/g)) {
+    if (!/^\s*:\s*(['"`])(?:r|rs|sr)\1/.test(s.slice(m.index + m[0].length))) return false;
+  }
+  return true;
+}
+
+/**
+ * Python open() arguments after the path (or every argument, for a method):
+ * the mode, if given, only reads. The seventh one after the mode, or an
+ * `opener=`, is a function that opens the file itself, so it is refused.
+ */
+function pyOpenArgs(args) {
+  let positional = 0;
+  for (const a of args.filter((x) => x !== '')) {
+    const kw = /^(\w+)\s*=(?!=)\s*([\s\S]*)$/.exec(a);
+    if (kw) {
+      if (/^(?:mode|flag|flags)$/.test(kw[1]) && !PY_READ_MODE.test(wholeLiteral(kw[2]) ?? '')) return false;
+      if (kw[1] === 'opener') return false;
+      continue;
+    }
+    if (positional === 0 && !PY_READ_MODE.test(wholeLiteral(a) ?? '')) return false;
+    if (positional > 5) return false;
+    positional++;
+  }
+  return true;
+}
+
+/** Ruby open arguments after the path: a mode, if given, only reads, and no flags are passed. */
+function rubyOpenArgs(args) {
+  let positional = 0;
+  for (const a of args.filter((x) => x !== '')) {
+    const kw = /^:?(\w+)(?::(?!:)\s*|\s*=>\s*)([\s\S]+)$/.exec(a);
+    if (kw) {
+      if (kw[1] === 'mode' && !RUBY_READ_MODE.test(wholeLiteral(kw[2]) ?? '')) return false;
+      if (/^(?:flags|open_args)$/.test(kw[1])) return false;
+      continue;
+    }
+    if (positional === 0 && !RUBY_READ_MODE.test(wholeLiteral(a) ?? '')) return false;
+    positional++;
+  }
+  return true;
+}
+
+/** Perl open arguments: a three-argument open with a `<` mode, or a two-argument one whose literal only reads. */
+function perlOpenArgs(args) {
+  if (args.length === 3) return /^<(?::\S*)?$/.test(wholeLiteral(args[1]) ?? '');
+  if (args.length !== 2) return false;
+  const t = wholeLiteral(args[1]);
+  if (t === null || t.includes('|')) return false;
+  const s = t.trim();
+  return s.startsWith('<') || (!/[$@]/.test(s) && !/^[>+&-]/.test(s));
+}
+
+/**
+ * Does every call in the script that opens a file open it only to read? A
+ * mode kept in a variable, a numeric flag or an options object that writes
+ * all count against it, as does Ruby's Kernel#open (and IO.read) of a path
+ * that is not a literal, which may be a `|command`. So does an open function
+ * named without being called (`o = open`, `from io import open as o`,
+ * `File.method(:open)`, `*CORE::open`): what it is later called with is not
+ * read here.
+ */
+function opensOnlyToRead(text, code, fam) {
+  const re = { js: /\b\w*open(?:Sync)?\s*\(/g, py: /\b\w*(?:open|File)\s*\(/g, ruby: /\b(?:open|new|read|readlines|foreach|binread)\s*\(/g, perl: /\bopen\s*\(/g }[fam];
+  const named = { js: /\b\w*open(?:Sync)?\b(?!\s*\()/, py: /\b\w*(?:open|File)\b(?!\s*\()/, ruby: /\bopen\b(?!\s*\()/, perl: /\bopen\b(?!\s*\()/ }[fam];
+  if (!re || named.test(code)) return false;
+  for (const m of code.matchAll(re)) {
+    const at = m.index;
+    if (/[$@%&]/.test(code[at - 1] ?? '')) continue; // a Perl or Ruby variable called open
+    const word = m[0].replace(/\s*\($/, '');
+    const args = callArgs(text, at + m[0].length - 1);
+    const dot = code[at - 1] === '.' ? at - 1 : -1;
+    const receiver = dot >= 0 ? receiverBefore(text, dot) : '';
+    if (fam === 'js') {
+      const flags = (args[1] ?? '').trim();
+      const ok = flags === '' || /^(?:r|rs|sr)$/.test(wholeLiteral(flags) ?? '')
+        || (flags.startsWith('{') && readOptions(flags)) || /^(?:\([^()]*\)|[\w$]+)\s*=>/.test(flags);
+      if (!ok) return false;
+    } else if (fam === 'py') {
+      const moduleForm = dot < 0 || word.endsWith('File') || PY_OPEN_MODULE.test(receiver);
+      if (!pyOpenArgs(moduleForm ? args.slice(1) : args)) return false;
+    } else if (fam === 'perl') {
+      if (!perlOpenArgs(args)) return false;
+    } else if (word === 'new') {
+      if (/^(?:::)?(?:File|IO)$/.test(receiver) && !rubyOpenArgs(args.slice(1))) return false;
+    } else if (word === 'open') {
+      if (/^(?:|Kernel|URI)$/.test(receiver) && wholeLiteral(args[0]) === null) return false;
+      if (!rubyOpenArgs(args.slice(1))) return false;
+    } else if (/^(?:::)?IO$/.test(receiver) && wholeLiteral(args[0]) === null) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Is the path literal `lit` the path argument of one of READ_CALL_BEFORE's calls, with nothing in the call that could write? */
+function readCallHolds(text, lit, fam) {
+  const before = text.slice(0, lit.at);
+  const m = READ_CALL_BEFORE[fam]?.exec(before);
+  if (!m) return false;
+  const name = m[1];
+  if (fam === 'ruby' && !m[2].includes('(')) {
+    // Written without parentheses, the path must be the call's only argument.
+    return /^\s*(?:$|[;)}\]]|(?:if|unless|or|and|do|then|end)\b)/.test(text.slice(lit.end));
+  }
+  // The call's own parenthesis, the first one after its name: a Perl mode
+  // such as "<:encoding(UTF-8)" holds one of its own.
+  const open = m.index + m[0].indexOf('(', m[0].indexOf(name) + name.length);
+  const args = callArgs(text, open);
+  const k = fam === 'perl' ? 2 : 0;
+  if (args[k] !== `${fam === 'py' ? m[2] : ''}${text.slice(lit.at, lit.end)}`) return false;
+  const rest = args.slice(k + 1).filter((a) => a !== '');
+  if (fam === 'perl') return rest.length === 0;
+  if (fam === 'js') {
+    return rest.every((a) => {
+      const l = wholeLiteral(a);
+      if (l !== null) return JS_ENCODING.test(l);
+      const flat = a.replace(/require\(\s*(['"])[\w:/]+\1\s*\)/g, 'm');
+      return /^(?:null|undefined)$/.test(a) || /^[\w$.]*\b[RWXF]_OK(?:\s*\|\s*[\w$.]*\b[RWXF]_OK)*$/.test(flat)
+        || (a.startsWith('{') && readOptions(a)) || /^(?:\([^()]*\)|[\w$]+)\s*=>/.test(a);
+    });
+  }
+  if (fam === 'ruby') {
+    return rest.every((a) => /^(?:\d+|File::FNM_\w+(?:\s*\|\s*File::FNM_\w+)*)$/.test(a)
+      || (/^:?(?:encoding|chomp|base|sort|mode)(?::(?!:)|\s*=>)/.test(a) && rubyOpenArgs([a])));
+  }
+  if (name === 'open') return pyOpenArgs(rest);
+  if (name === 'glob.glob') return rest.every((a) => /^(?:recursive|root_dir|include_hidden)\s*=(?!=)/.test(a));
+  if (/Path$/.test(name)) return rest.length === 0 && PATH_READ_METHOD.test(text.slice(args.end));
+  return rest.length === 0;
+}
+
+/** The first module the script loads that READ_SAFE_MODULES does not list, as a phrase, or null. */
+function foreignModule(text, code, fam) {
+  const safe = READ_SAFE_MODULES[fam];
+  if (fam === 'js') {
+    for (const m of code.matchAll(/\brequire\b/g)) {
+      const paren = /^\s*\(/.exec(code.slice(m.index + 7));
+      if (!paren) return '`require` by a value';
+      const args = callArgs(text, m.index + 7 + paren[0].length - 1);
+      const mod = args.length === 1 ? wholeLiteral(args[0]) : null;
+      if (mod === null || !safe.test(mod)) return `\`${mod ?? args.join(', ')}\``;
+    }
+    for (const m of code.matchAll(/\bimport\b/g)) {
+      const after = text.slice(m.index);
+      if (/^import\s*\.\s*meta\b/.test(after)) continue;
+      const stmt = /^import\s+(?:[\w$*{},\s]+?\s+from\s*)?(['"])([^'"]+)\1/.exec(after);
+      if (!stmt || !safe.test(stmt[2])) return stmt ? `\`${stmt[2]}\`` : 'a module in a way this guard does not read';
+    }
+  } else if (fam === 'py') {
+    for (const m of code.matchAll(/\bimport\b/g)) {
+      const start = Math.max(code.lastIndexOf(';', m.index), code.lastIndexOf('\n', m.index)) + 1;
+      const stop = code.slice(m.index).search(/[;\n]/);
+      const stmt = text.slice(start, stop < 0 ? text.length : m.index + stop).trim();
+      const from = /^from\s+([\w.]+)\s+import\s+([\s\S]+)$/.exec(stmt);
+      const plain = /^import\s+([\s\S]+)$/.exec(stmt);
+      if (from) {
+        if (!safe.test(from[1].split('.')[0])) return `\`${from[1]}\``;
+        if (from[1] !== 'os') continue;
+        for (const item of from[2].replace(/[()]/g, '').split(',')) {
+          const n = item.trim().split(/\s+/)[0];
+          if (!PY_OS_READ_NAMES.test(n)) return `\`${n}\` from os`;
+        }
+      } else if (plain) {
+        for (const item of plain[1].split(',')) {
+          const [mod, as, alias] = item.trim().split(/\s+/);
+          if (!safe.test(mod.split('.')[0])) return `\`${mod}\``;
+          if (as === 'as' && alias && /^(?:os|pathlib)$/.test(mod)) return `\`${mod}\` under another name`;
+        }
+      } else {
+        return 'a module in a way this guard does not read';
+      }
+    }
+  } else if (fam === 'perl') {
+    for (const m of code.matchAll(/(?:^|[^\w$@%&>:])(?:use|no|require)\b\s*([^;\s(]*)/g)) {
+      if (!safe.test(m[1])) return `\`${m[1] || 'a file'}\``;
+    }
+  } else if (fam === 'ruby') {
+    for (const m of code.matchAll(/(?:^|[^\w.:])(require|require_relative|load|autoload)\b/g)) {
+      if (m[1] !== 'require') return `\`${m[1]}\``;
+      const r = /^\s*\(?\s*(['"])([^'"]+)\1/.exec(text.slice(m.index + m[0].length));
+      if (!r || !safe.test(r[2])) return r ? `\`${r[2]}\`` : 'a library by a value';
+    }
+  }
+  return null;
+}
+
+/**
+ * A spelling that hides what runs, as a phrase, or null: code inside a string
+ * (a template's `${...}`, a Python f-string, Ruby's `#{...}`, Perl's `@{...}`
+ * and `${...}`), which every reading of the code here leaves out with the
+ * string; a read call given another meaning (assigned, defined, used as a key
+ * or an alias, or named in a string); a JavaScript member reached by a key
+ * that is not a plain number; a Python replace() that can be pathlib's move;
+ * and a Perl or Ruby string that opens a command through a pipe.
+ */
+function hiddenSpelling(text, code, fam) {
+  if ((fam === 'ruby' && /#\{/.test(text)) || (fam === 'perl' && /[@$]\{/.test(text))) return 'it runs code inside a string';
+  const names = READ_CALL_NAMES[fam];
+  const redefined = new RegExp(`(?:^|[^\\w$])(?:${names})\\s*(?:=(?![=>~])|:(?!:))|\\b(?:def|function|sub|class|let|const|var|get|set|static|async|as)\\s+(?:[\\w:]+\\.)?(?:${names})(?![\\w?])|:\\s*(?:${names})(?![\\w$?(])`);
+  const re = redefined.exec(code);
+  if (re) return `it gives a read call another meaning (\`${re[0].trim()}\`)`;
+  const exact = new RegExp(`^(?:${names})$`);
+  for (let i = 0; i < text.length; i++) {
+    const l = stringLiteralAt(text, i);
+    if (!l) continue;
+    i = l.end - 1;
+    if (l.prefix !== null) return 'it runs code inside a string';
+    if (exact.test(l.text)) return `it names the read call \`${l.text}\` in a string`;
+    const t = l.text.trim();
+    if ((fam === 'perl' || fam === 'ruby') && (t.startsWith('|') || t.endsWith('|'))) return 'it opens a command through a pipe';
+  }
+  if (fam === 'js') {
+    for (let i = 1; i < code.length; i++) {
+      if (code[i] !== '[' || !/[\w$)\]]/.test(code[i - 1])) continue;
+      const close = closingBracket(code, i);
+      if (close < 0 || !/^\s*\d+\s*$/.test(code.slice(i + 1, close))) return 'it reaches a member by a key that is not a plain number';
+    }
+  }
+  if (fam === 'py') {
+    for (const m of code.matchAll(/\.\s*replace\s*\(/g)) {
+      // A string's replace() takes two arguments; pathlib's, a move, takes one.
+      if (callArgs(text, m.index + m[0].length - 1).filter((a) => a !== '').length < 2) return 'it calls a replace() that can move a file';
+    }
+  }
+  return null;
+}
+
+/**
+ * Why a one-line script that names the paths `outside` (outside the project)
+ * is not provably a read, as { lit, why }, or null when it is one: every such
+ * path is the path argument of a known read call (READ_CALL_BEFORE), and the
+ * script holds nothing that could write. "Nothing that could write" is read
+ * wide: no name from the NOT_A_READ lists, no module outside
+ * READ_SAFE_MODULES, no write, program or run-time code that the reading of
+ * writes finds (its own functions, asked here only whether they find anything
+ * at all, wherever it lands), no hidden spelling, and no file opened in a mode
+ * that is not a plain read.
+ */
+function whyNotARead(body, prog, root, base, argv, outside) {
+  const fam = scriptFamily(prog);
+  const no = (why, lit = outside[0].text) => ({ lit, why });
+  if (!READ_CALL_BEFORE[fam]) return no('a script in this language is never read as one that only reads');
+  const word = NOT_A_READ_PART.exec(body) ?? NOT_A_READ_WORD.exec(body);
+  if (word) return no(`it also holds \`${word[0].trim()}\`, which can write, start a program or run code`);
+  const { text, unprovable } = prepareScript(body, fam);
+  const code = maskStrings(text);
+  const more = NOT_A_READ_CODE.exec(code) ?? NOT_A_READ_SHAPES[fam]?.exec(code);
+  // Quoted from the script itself: the copy searched has its strings blanked.
+  if (more) return no(`it also holds \`${text.slice(more.index, more.index + more[0].length).trim().slice(0, 40)}\`, which can write, start a program or run code`);
+  const module = foreignModule(text, code, fam);
+  if (module) return no(`it loads ${module}, which this guard does not know to be read-only`);
+  if (unprovable.length > 0 || scriptWrites(text, writeDestinations(text, fam), spawnCalls(text, code, prog), argv)) {
+    return no('it also writes files, starts a program or runs code built at run time');
+  }
+  const hidden = hiddenSpelling(text, code, fam);
+  if (hidden) return no(hidden);
+  if (!opensOnlyToRead(text, code, fam)) return no('it opens a file in a way that is not a plain read');
+  const lits = scriptLiterals(text).filter((l) => checkTarget(l.text, root, '', base));
+  const missing = outside.find((o) => !lits.some((l) => l.text === o.text));
+  if (missing) return no('that path is not the path of a plain read call', missing.text);
+  const loose = lits.find((l) => !readCallHolds(text, l, fam));
+  if (loose) return no('that path is not the path of a plain read call', loose.text);
+  return null;
+}
+
+/**
+ * Why a one-line inline script naming a path outside the project is refused,
+ * or null. The paths are the ones scriptLiterals finds; a script naming none,
+ * or one that is provably a read (whyNotARead), passes. The reason names the
+ * path, as the scan before 2026-10-01 did, and says what kept the script
+ * from passing as a read.
+ */
+function oneLineRisk(body, prog, root, base, argv) {
+  const what = `the script passed to \`${prog}\``;
+  const outside = scriptLiterals(body).filter((l) => checkTarget(l.text, root, what, base));
+  if (outside.length === 0) return null;
+  const blocked = whyNotARead(body, prog, root, base, argv, outside);
+  if (!blocked) return null;
+  const where = resolveStatic(blocked.lit, base.toLowerCase()).dynamic
+    ? 'which cannot be proven to be inside the project folder'
+    : `which is outside the project folder (${root})`;
+  return `${what} names "${blocked.lit}", ${where}, and ${blocked.why}. A one-line script may name a path outside the project only as the path of a plain read call (readFileSync, open(path), os.listdir, File.read and the like), in a script with nothing else in it that could write`;
+}
+
 /**
  * Every value a flag from `spec` is given (see BASH_FLAG_TARGETS): `--name=V`,
  * `--name V`, and a single-dash cluster holding one of the letters before any
@@ -2494,20 +2902,25 @@ function checkSegment(tokens, root, shell, base, depth = 0) {
   const prog = programName(tokens[pi]);
   let rest = tokens.slice(pi + 1);
 
-  // 2. Inline scripts: heuristic, and honest about it. A one-line script is
-  //    judged like a multi-line one, by where it writes (inlineScriptRisk).
-  //    Until 2026-10-01 a one-line script was also refused for every absolute
-  //    path literal in it, so a script that only READ a file outside the
-  //    project was refused as a write, while the same script split over two
-  //    lines was allowed. The words after the script go along, since the
-  //    script can read them as paths or as code (2026-10-01).
+  // 2. Inline scripts: heuristic, and honest about it. Every script is judged
+  //    by where it writes (inlineScriptRisk). A one-line script is also
+  //    refused for every absolute path literal in it that lands outside the
+  //    project, as it was until 2026-10-01, unless it is provably a read
+  //    (oneLineRisk): dropping that scan that day let one-line writes through
+  //    that the reading of writes does not know. The words after the script
+  //    go along, since the script can read them as paths or as code.
   const inline = INLINE_SCRIPT[prog];
   if (inline) {
     for (let k = 0; k < rest.length; k++) {
       if (!isWord(rest[k]) || !inline.test(rest[k].text) || !rest[k + 1]) continue;
       const after = rest.slice(k + 2).filter((t, i, a) => !t.redirect && !(i > 0 && a[i - 1].redirect)).map((t) => t.text);
-      const risk = inlineScriptRisk(rest[k + 1].text, prog, root, base, after);
+      const body = rest[k + 1].text;
+      const risk = inlineScriptRisk(body, prog, root, base, after);
       if (risk) return risk;
+      if (!body.includes('\n')) {
+        const named = oneLineRisk(body, prog, root, base, after);
+        if (named) return named;
+      }
     }
   }
 

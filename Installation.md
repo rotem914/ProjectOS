@@ -1098,10 +1098,11 @@ files point at it by name, so deleting it leaves a reader following a pointer
 to nothing. To find them all, search the whole project for `Installation.md`;
 the search is the list, since files change. Today it finds CLAUDE.md rule 6,
 the one pointer that sends the assistant to step 6d when a browser search
-comes back empty, CLAUDE.md's `Go update kit` and Restore, and also
-`project-os/Hooks.md`, `project-os/Conversations.md`, the headers of
-`project-os/Install-project-hooks.mjs` and `project-os/Compare-kit-files.mjs`,
-and both tool files under `project-os/mcp/`. Say once in
+comes back empty, CLAUDE.md's `Go update kit` and the `.mcp.json` paragraph
+after Restore, and also `project-os/Hooks.md`, `project-os/Conversations.md`,
+the headers of `project-os/Install-project-hooks.mjs` and
+`project-os/Audit-project-records.mjs`, and both tool files under
+`project-os/mcp/`. Say once in
 the report that it is kept as the record of how the install was done, and that
 the owner may delete it later if they want; if they do, every pointer the
 search finds is theirs to update. For the ones that send the assistant to

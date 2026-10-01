@@ -19,10 +19,17 @@
 // and every file that comes out is compared byte for byte with its source. The
 // fake projects live in the OS temp folder, or under PROJECTOS_TEST_TMP when
 // that is set (a project whose rules keep every write inside it points this at
-// its own scratch folder). Nothing else is touched. The folder is removed at the
-// end, or kept and named when a check failed, so the failure can be looked at.
+// its own scratch folder). Nothing else is touched. The folder is removed when
+// the run ends, whether it passed, failed, threw or was stopped with Ctrl+C
+// (2026-10-01): removing it only after a clean finish left one behind on every
+// failed or stopped run. A process killed outright runs no handler, so that
+// one alone still leaves the folder, named projectos-backup-tests-*.
 //
-// What it pins: the right files go in and the right ones stay out, a folder
+// What it pins: the right files go in and the right ones stay out, a template
+// travels only when example, sample or template is a whole part at the end of
+// its name (env files too: .env.sample, .env.production.example), an SSH key
+// with a suffix (id_rsa_work) stays out while its .pub travels, every key
+// file left out is named and both twins print that line in one order, a folder
 // named build or target travels (either can hold real work, 2026-10-01), a
 // folder named like a scratch or backup folder deeper down still travels, every
 // folder left out by name is reported, each entry carries its file's
@@ -31,8 +38,9 @@
 // PROJECTOS_FORCE_ZIP64=1, so no huge disk is needed), a ZIP name held open
 // by another program ends in a loud failure instead of a false OK (Windows
 // only: other systems do not lock files that way), and the two twins' setup
-// blocks name the same folders to leave out. That last check reads the kit's
-// own files, so it runs even where PowerShell cannot.
+// blocks name the same folders to leave out, and their fixed lists the same
+// key files, public keys and template words. Those last checks read the kit's
+// own files, so they run even where PowerShell cannot.
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -85,6 +93,41 @@ const NODE = ENGINES[ENGINES.length - 1];
 if (!TAR) console.log('  No tar that reads ZIP (bsdtar) was found: the tar checks are skipped.');
 
 const BASE = fs.mkdtempSync(path.join(process.env.PROJECTOS_TEST_TMP || os.tmpdir(), 'projectos-backup-tests-'));
+
+// The fake projects are removed however the run ends (2026-10-01). A child
+// still holding a file open inside them is stopped first, since Windows
+// refuses to delete a file another program holds, and the removal retries for
+// a moment while that program lets go. The result is kept, so the closing
+// lines can report a folder that would not go.
+const children = new Set();
+let baseRemoved = null;
+function removeBase() {
+  if (baseRemoved !== null) return baseRemoved;
+  for (const child of children) {
+    try { child.kill(); } catch { /* already gone */ }
+  }
+  try {
+    fs.rmSync(BASE, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    baseRemoved = true;
+  } catch (e) {
+    baseRemoved = false;
+    console.error(`The fake projects could not be removed, delete this folder by hand: ${BASE} (${e.message})`);
+  }
+  return baseRemoved;
+}
+process.on('exit', removeBase);
+// Ctrl+C and its kin end a Node process without the exit event, so each one
+// that this system knows is caught, cleaned up after, and passed on as the
+// usual exit code for that signal.
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK']) {
+  const number = os.constants.signals[sig];
+  if (number === undefined) continue;
+  process.on(sig, () => {
+    removeBase();
+    process.exit(128 + number);
+  });
+}
+
 let checks = 0;
 let failures = 0;
 function check(label, ok, detail = '') {
@@ -307,6 +350,10 @@ function caseWhatGoesIn(engine) {
     'src/.claude/notes.md': 'a .claude folder deeper down travels',
     '.env': 'SECRET=1', '.env.local': 'SECRET=2', '.env.example': 'SECRET=',
     '.dev.vars': 'KEY=1', '.dev.vars.example': 'KEY=',
+    // An env template travels whatever its word, at any depth; a real env
+    // file deeper down stays out like the root one (2026-10-01).
+    '.env.sample': 'SECRET=', '.env.template': 'SECRET=', '.dev.vars.sample': 'KEY=',
+    'src/deep/.env.production.example': 'SECRET=', 'src/deep/.env.production': 'SECRET=3',
     // Common key files stay out by name (2026-10-01); templates and a
     // Keynote deck (.key) travel, and so does an SSH public key.
     'certs/server.pem': 'KEY', 'certs/app.P12': 'KEY', 'certs/app.pfx': 'KEY', 'android/release.keystore': 'KEY',
@@ -314,6 +361,12 @@ function caseWhatGoesIn(engine) {
     'credentials.json': '{}', 'config/gcp-credentials-prod.json': '{}', 'client_secret_123.json': '{}',
     'my-service-account.json': '{}', 'service_account_key.json': '{}',
     'credentials.example.json': '{}', 'certs/server.sample.pem': 'template', 'deck.key': 'a Keynote deck',
+    // The template word counts only as a whole part at the end of the name:
+    // these two are real certificates, and stay out named.
+    'certs/www.example.com.pem': 'KEY', 'certs/tls.sample-site.pem': 'KEY',
+    // An SSH key with a suffix stays out; its public key travels.
+    'ssh/id_rsa_work': 'KEY', 'ssh/id_ed25519_github': 'KEY', 'ssh/id_ecdsa_old': 'KEY', 'ssh/id_dsa_x': 'KEY',
+    'ssh/id_rsa_work.pub': 'public', 'ssh/id_ed25519_github.pub': 'public',
     'x.tmp': 'atomic-write leftover', 'y.tmp.1': 'atomic-write leftover',
     '.git/HEAD': 'ref: refs/heads/main\n',
     'bin/big.bin': BIG,
@@ -337,6 +390,8 @@ function caseWhatGoesIn(engine) {
   const expected = ['.claude/commands/go.md', '.claude/settings.json', '.dev.vars.example', '.env.example', '.git/HEAD', 'README.md',
     'bin/big.bin', 'bin/empty.txt', 'build/out.js', `project-os/${engine.file}`, 'src/.claude/notes.md', 'src/.tmp/keep.txt', 'src/a.txt',
     'ssh/id_rsa.pub', 'credentials.example.json', 'certs/server.sample.pem', 'deck.key',
+    '.env.sample', '.env.template', '.dev.vars.sample', 'src/deep/.env.production.example',
+    'ssh/id_rsa_work.pub', 'ssh/id_ed25519_github.pub',
     UNICODE_NAME, 'src/features/backups/b.txt', 'src/target/keep.txt'].sort();
   check(`${label}: exactly the right files are in the ZIP`, z.names.join('|') === expected.join('|'),
     `got ${z.names.join(', ')}`);
@@ -355,7 +410,8 @@ function caseWhatGoesIn(engine) {
   }
   const keys = ((/^Left out as key files \(bring them back by hand on a restore\): (.+?)\r?$/m.exec(r.stdout) || [])[1] || '').split(', ');
   const wantKeys = ['android/release.keystore', 'android/upload.jks', 'certs/app.P12', 'certs/app.pfx', 'certs/server.pem', 'client_secret_123.json',
-    'config/gcp-credentials-prod.json', 'credentials.json', 'my-service-account.json', 'service_account_key.json', 'ssh/id_ed25519', 'ssh/id_rsa'];
+    'config/gcp-credentials-prod.json', 'credentials.json', 'my-service-account.json', 'service_account_key.json', 'ssh/id_ed25519', 'ssh/id_rsa',
+    'certs/www.example.com.pem', 'certs/tls.sample-site.pem', 'ssh/id_rsa_work', 'ssh/id_ed25519_github', 'ssh/id_ecdsa_old', 'ssh/id_dsa_x'];
   check(`${label}: every key file left out is named on its own line`, [...keys].sort().join('|') === [...wantKeys].sort().join('|'), `got: ${keys.join(', ')}`);
   if (engine === NODE) {
     check(`${label}: every name is marked UTF-8 and uses forward slashes`, [...z.entries].every(([n, e]) => (e.flags & 0x0800) && !n.includes('\\')));
@@ -437,6 +493,10 @@ async function caseRenameBlocked(engine) {
   const locker = spawn(PS, ['-NoProfile', '-Command',
     `$h = @(); foreach ($p in @(${quoted})) { $h += [System.IO.File]::Open($p, 'Open', 'Read', 'Read') }; [Console]::Out.WriteLine('LOCKED'); [Console]::Out.Flush(); Start-Sleep -Seconds 120`],
   { stdio: ['ignore', 'pipe', 'pipe'] });
+  // Known to the cleanup, so a run stopped while it holds the files can
+  // still remove the folder they sit in.
+  children.add(locker);
+  locker.on('exit', () => children.delete(locker));
   const exited = new Promise((res) => locker.on('exit', res));
   try {
     await new Promise((res, rej) => {
@@ -498,21 +558,50 @@ function caseSameExcludeList() {
   check(label, !onlyPs.length && !onlyJs.length, `only in the .ps1: ${onlyPs.join(', ') || 'none'}; only in the .mjs: ${onlyJs.join(', ') || 'none'}`);
 }
 
-// Both twins name the key files they leave out in a fixed list outside the
-// setup block; a name in one list and not the other lets a key into one
-// twin's ZIP only (2026-10-01).
+// Both twins name the key files they leave out, the public keys that travel
+// and the words that mark a template in fixed lists outside the setup block;
+// a name in one list and not the other lets a key into one twin's ZIP only
+// (2026-10-01).
 function caseSameKeyFiles() {
   const read = (file) => fs.readFileSync(path.join(KIT_OS, file), 'utf8').replace(/\r\n/g, '\n');
   const names = (text, re) => { const m = re.exec(text); return m ? [...m[1].matchAll(/'([^']*)'/g)].map((x) => x[1].toLowerCase()).sort() : null; };
   const ps = read('Backup-whole-project.ps1');
   const js = read('Backup-whole-project.mjs');
   for (const [what, psRe, jsRe] of [
-    ['key files', /^\$KeyFilePatterns = @\(([^)]*)\)/m, /^const KEY_FILE_PATTERNS = \[([^\]]*)\]/m],
-    ['key file templates', /^\$KeyFileTemplates = @\(([^)]*)\)/m, /^const KEY_FILE_TEMPLATES = \[([^\]]*)\]/m],
+    ['key files stay out', /^\$KeyFilePatterns = @\(([^)]*)\)/m, /^const KEY_FILE_PATTERNS = \[([^\]]*)\]/m],
+    ['public keys travel', /^\$PublicKeyPatterns = @\(([^)]*)\)/m, /^const PUBLIC_KEY_PATTERNS = \[([^\]]*)\]/m],
+    ['words mark a template', /^\$TemplateWords = @\(([^)]*)\)/m, /^const TEMPLATE_WORDS = \[([^\]]*)\]/m],
   ]) {
     const a = names(ps, psRe);
     const b = names(js, jsRe);
-    check(`twins: the same ${what} stay out`, !!a && !!b && a.length > 0 && a.join('|') === b.join('|'), `.ps1: ${a && a.join(', ')}; .mjs: ${b && b.join(', ')}`);
+    check(`twins: the same ${what}`, !!a && !!b && a.length > 0 && a.join('|') === b.join('|'), `.ps1: ${a && a.join(', ')}; .mjs: ${b && b.join(', ')}`);
+  }
+}
+
+// Both twins print the key-file line in one fixed order, byte for byte
+// (2026-10-01): ASCII letters compared without case, every other character by
+// its UTF-16 code unit, the exact name breaking a tie. PowerShell's Sort-Object
+// followed the machine's culture and Node's localeCompare its own collation,
+// so the same files printed in two orders. The names mix case, digits, spaces
+// and punctuation, where a collation and a code-unit order part ways, and the
+// order below is written out by hand so it shares no code with either twin.
+// No two differ only by case, so the set fits a Windows folder.
+const KEY_LINE_ORDER = ['keys.d/y.pem', 'keys/10.pem', 'keys/9.pem', 'keys/a b.pem', 'keys/a-c.pem', 'keys/a.pem', 'keys/ab.pem',
+  'keys/A_d.pem', 'keys/B.pem', "keys/it's.pem", 'keys/z[1].pem', 'keys/~t.pem', 'Keys2/x.pem', 'ssh/ID_ed25519', 'ssh/id_RSA_Work'];
+function caseKeyLineOrder() {
+  const lines = [];
+  for (const engine of ENGINES) {
+    const label = `${engine.id} key-file line`;
+    const root = project(engine, 'key-order', Object.fromEntries(KEY_LINE_ORDER.map((n) => [n, 'KEY'])));
+    const r = run(engine, root);
+    check(`${label}: exits 0`, r.status === 0, r.stderr);
+    const line = (/^Left out as key files .*$/m.exec(r.stdout) || [])[0] || '';
+    check(`${label}: names every key file in the fixed order`,
+      line === `Left out as key files (bring them back by hand on a restore): ${KEY_LINE_ORDER.join(', ')}`, `got: ${line}`);
+    lines.push(line);
+  }
+  if (lines.length === 2) {
+    check('twins: the key-file line is the same, byte for byte', lines[0] === lines[1], `${ENGINES[0].id}: ${lines[0]}; node: ${lines[1]}`);
   }
 }
 
@@ -525,16 +614,20 @@ try {
     caseSameMinuteReplaced(engine);
     await caseRenameBlocked(engine);
   }
+  caseKeyLineOrder();
   caseZip64();
 } catch (e) {
   failures++;
   console.error(`FAIL the suite itself threw: ${e.stack || e.message}`);
+} finally {
+  // Removed here, before the count, so a folder that would not go is counted
+  // as a failure; the exit and signal handlers above cover every other end.
+  check('the fake projects are removed', removeBase(), BASE);
 }
 
 const ran = `${ENGINES.map((e) => e.id).join(' + ')}${TAR ? `; tar: ${path.basename(TAR)}` : ''}`;
 if (failures > 0) {
-  console.error(`Backup-script-tests.mjs: ${failures} of ${checks} checks FAILED (${ran}). Fake projects kept for a look: ${BASE}`);
+  console.error(`Backup-script-tests.mjs: ${failures} of ${checks} checks FAILED (${ran})`);
   process.exit(1);
 }
-fs.rmSync(BASE, { recursive: true, force: true });
 console.log(`Backup-script-tests.mjs: all ${checks} checks passed (${ran})`);

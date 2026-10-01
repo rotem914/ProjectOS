@@ -16,7 +16,10 @@
 // from 1 GB, MB from 1 MB and KB below, the threshold line too. Every size used
 // to print in GB, so with --min 200mb a 300 MB file read as "0.29 GB". Also:
 // what is listed at each threshold, the kind beside each path, the default
-// 1 GB threshold, and that nothing is deleted.
+// 1 GB threshold, and that nothing is deleted. And (2026-10-01) the unit is
+// chosen from the size as printed, rounded: 1048575 bytes is "1.00 MB", never
+// "1024.00 KB", while 1048570 bytes stays "1023.99 KB". The threshold line
+// shows the rounding without a big file, so --min in bytes pins the edges.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -88,6 +91,27 @@ try {
   // A threshold over 1 GB keeps GB, with two decimals.
   r = heavy(['--min', '1.5gb']);
   t('--min 1.5gb: the threshold line reads 1.50 GB', r.out.includes('everything over 1.50 GB'), r.out);
+
+  // The unit follows the rounded number: a size that rounds up to 1024 of one
+  // unit is printed as 1.00 of the next.
+  r = heavy(['--min', '1048575b']);
+  t('--min 1048575b: the threshold line reads 1.00 MB, not 1024.00 KB', r.out.includes('everything over 1.00 MB') && !r.out.includes('1024.00'), r.out);
+  r = heavy(['--min', '1048570b']);
+  t('--min 1048570b: a size that rounds below 1024 KB stays in KB', r.out.includes('everything over 1023.99 KB'), r.out);
+  r = heavy(['--min', '1073741823b']);
+  t('--min 1073741823b: one byte under 1 GB reads 1.00 GB, not 1024.00 MB', r.out.includes('everything over 1.00 GB') && !r.out.includes('1024.00'), r.out);
+  r = heavy(['--min', '1048576b']);
+  t('--min 1048576b: exactly 1 MB reads 1.00 MB', r.out.includes('everything over 1.00 MB'), r.out);
+  // A listed file one byte under 1 MB prints as 1.00 MB too.
+  const almost = path.join(TMP, 'edge', 'almost-a-megabyte.bin');
+  fs.mkdirSync(path.dirname(almost), { recursive: true });
+  fs.writeFileSync(almost, Buffer.alloc(1048575, 'x'));
+  r = heavy(['--min', '1mb']);
+  t('a file of 1048575 bytes is under --min 1mb, so not listed', !lineFor(r.out, 'edge/almost-a-megabyte.bin'), r.out);
+  r = heavy(['--min', '1000kb']);
+  t('a file of 1048575 bytes is listed as 1.00 MB', /^\s+1\.00 MB\s+leftover\s+edge\/almost-a-megabyte\.bin$/m.test(r.out) && !r.out.includes('1024.00'), lineFor(r.out, 'edge/almost-a-megabyte.bin') || r.out);
+  fs.rmSync(almost);
+  fs.rmdirSync(path.dirname(almost));
 
   // It deletes nothing, ever.
   t('every file is still there, at its size', Object.entries(FILES).every(([rel, size]) => {

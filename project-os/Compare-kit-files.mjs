@@ -28,28 +28,38 @@
 //   machinery   current | kit updated (HERE equals BASE, the kit changed it: safe
 //               to copy) | changed here only (keep) | changed on both sides
 //               (conflict: reported, never overwritten) | new in the kit (in
-//               the kit and not here, nor at BASE: safe to copy) | gone from
-//               the kit (reported, never deleted). With no BASE known, a file
-//               in the kit and not here is still "new in the kit", since there
-//               is nothing of the project's to overwrite; any other file that
-//               differs is "cannot tell who changed it" and is never copied.
+//               the kit and not here, nor at BASE: safe to copy) | removed
+//               here (at BASE and deleted in this project: reported, never
+//               copied back) | gone from the kit (reported, never deleted).
+//               With no BASE known, a file in the kit and not here is still
+//               "new in the kit", since there is nothing of the project's to
+//               overwrite; any other file that differs is "cannot tell who
+//               changed it" and is never copied.
 //   calibrated  adapted at install, so never copied: the report says how many
 //               lines the kit changed between BASE and KIT, and where, for the
 //               assistant to carry over by hand like the install's merge step.
+//               One that is new in the kit and missing here is reported as
+//               "new in the kit: copy it by hand and fill its setup block".
 //   record      a living record of this project: never compared, never touched.
+//               The kit's own template of it is read, though: the report says
+//               how many of its lines changed between BASE and KIT, so an
+//               instruction change can be carried over by hand (2026-10-01).
 // Without --apply or --record it writes nothing.
 // With --apply it copies only "kit updated" and "new in the kit" machinery.
 // It then writes project-os/Kit-version.json with the clone's short HEAD and
-// today's date, but only when no machinery file is left "changed on both
-// sides" or "cannot tell who changed it". While one is left it writes no
-// version and names those files, to be carried over by hand and then recorded
-// with --record. Recording the base sooner would hide the kit's changes to
-// them for good: the next compare would read each one as changed here only
-// (2026-10-01).
+// today's date, but only when nothing is left to carry over by hand: no
+// machinery file "changed on both sides" or "cannot tell who changed it", and
+// no calibrated file the kit changed or added that this copy does not match
+// yet. While one is left it writes no version and names those files, to be
+// carried over by hand and then recorded with --record. Recording the base
+// sooner would hide the kit's changes to them for good: the next compare
+// would read each machinery file as changed here only and each calibrated
+// one as unchanged in the kit (2026-10-01). A machinery file removed here
+// never holds the version back, since the project chose to be without it.
 // With --record it writes the same two fields once those files are carried
-// over, and first prints every machinery file that still differs from the
-// kit, so recording a base is a step taken knowingly. It takes no --base, is
-// never combined with --apply, and copies nothing.
+// over, and first prints every machinery and calibrated file that still
+// differs from the kit, so recording a base is a step taken knowingly. It
+// takes no --base, is never combined with --apply, and copies nothing.
 // Exit 0 on success; 1 on a usage error, a kit folder that is missing, a copy
 // that failed, or a version that could not be written.
 import { spawnSync } from 'node:child_process';
@@ -242,20 +252,28 @@ function machineryStatus(rel) {
     // Who changed a file both sides hold cannot be told without a base. A file
     // only the kit has is another matter: copying it overwrites nothing of the
     // project's, so it is new in the kit with or without a base (2026-10-01).
-    return h === null ? 'new in the kit' : 'cannot tell who changed it';
+    // Installation.md is the exception: every install places it, so a project
+    // without it is one whose owner deleted it, and it is never brought back.
+    if (h === null) return rel === 'Installation.md' ? 'removed here' : 'new in the kit';
+    return 'cannot tell who changed it';
   }
   if (b === null) {
     if (k === null) return 'changed here only'; // the project's own file under a kit name
     return h === null ? 'new in the kit' : 'changed on both sides';
   }
+  // At the base and gone from here: the project deleted it, and a deleted file
+  // is never brought back. The README and Installation.md let the owner delete
+  // Installation.md after the install, and before this status it read as
+  // changed on both sides at every kit change to it, for good (2026-10-01).
+  if (h === null) return 'removed here';
   if (k === null) return 'gone from the kit';
   if (h === b) return 'kit updated';
   if (k === b) return 'changed here only';
   return 'changed on both sides';
 }
 
-// The kit's own changes to a calibrated file, as the line ranges git reports
-// between BASE and the clone's working tree.
+// The kit's own changes to a calibrated file or a record's template, as the
+// line ranges git reports between BASE and the clone's working tree.
 function kitChanges(rel) {
   const r = git(['diff', '--no-color', '--no-ext-diff', '--no-textconv', '--unified=0', BASE, '--', rel], { encoding: 'utf8' });
   if (r.status !== 0) return null;
@@ -276,28 +294,69 @@ function kitChanges(rel) {
   }
   return { added, removed, places };
 }
+// The kit's changes to one file between BASE and KIT, said in one phrase.
+function changesText(c) {
+  const shown = c.places.slice(0, 8).join(', ') + (c.places.length > 8 ? `, and ${c.places.length - 8} more` : '');
+  const n = c.added + c.removed;
+  return `${n} line${n === 1 ? '' : 's'} (+${c.added} -${c.removed}) in ${c.places.length} place${c.places.length === 1 ? '' : 's'}: ${shown}`;
+}
+const diffCommand = (rel) => `git -C "${KIT}" diff ${BASE.slice(0, 7)} -- ${rel}`;
+
+// Each calibrated file gets a line of text, and `open` when the kit's side of
+// it still has to be carried over by hand. An open file holds back the version
+// --apply writes, exactly as a conflict does: once the base moves to the kit's
+// HEAD, the next compare reads it as unchanged in the kit and the change is
+// never shown again (2026-10-01). A copy that already matches the kit word for
+// word has nothing left to carry, and one the project removed has nowhere to
+// carry it, so neither is open.
 function calibratedReport(rel) {
   const b = baseText(rel);
   const k = norm(readBuf(KIT, rel));
   const h = norm(readBuf(ROOT, rel));
   if (k === null && h === null && !b) return null;
+  const matches = k !== null && h === k;
   if (b === undefined) {
     if (k === null) return { text: 'not in the kit now; report only' };
-    if (h === null) return { text: 'in the kit, not here (removed at install, or new in the kit); bring it over by hand if this project needs it', changed: true };
-    return { text: k === h ? 'same as the kit' : 'no base, so the kit\'s own changes cannot be told from this project\'s calibration; compare by hand', changed: k !== h };
+    if (h === null) return { text: 'in the kit, not here (removed at install, or new in the kit); bring it over by hand if this project needs it', open: true, why: 'in the kit, not here, and no base to tell why' };
+    return matches ? { text: 'same as the kit' } : { text: 'no base, so the kit\'s own changes cannot be told from this project\'s calibration; compare by hand', open: true, why: 'no base to tell the kit\'s changes from this project\'s' };
   }
   if (k === null) return { text: b === null ? 'not in the kit; report only' : 'gone from the kit; report only, nothing deleted' };
-  if (b === null) return { text: h === null ? 'new in the kit, not here yet: bring it over by hand and fill its setup like the install does' : 'new in the kit, and this project has its own: compare by hand', changed: true };
+  if (b === null) {
+    // Never copied, since its setup block is this project's to fill, and shown
+    // on every compare until it exists here (2026-10-01).
+    if (h === null) return { text: 'new in the kit: copy it by hand and fill its setup block', open: true, why: 'new in the kit: copy it by hand and fill its setup block' };
+    return matches ? { text: 'new in the kit, and this project already has the same file' } : { text: 'new in the kit, and this project has its own: compare by hand', open: true, why: 'new in the kit, and this project has its own' };
+  }
   if (b === k) return { text: `unchanged in the kit${h === null ? '; not here (removed at install?)' : ''}` };
   const c = kitChanges(rel);
-  if (!c) return { text: 'changed in the kit; git could not list the lines, compare by hand', changed: true };
-  const shown = c.places.slice(0, 8).join(', ') + (c.places.length > 8 ? `, and ${c.places.length - 8} more` : '');
-  const n = c.added + c.removed;
+  if (!c) return { text: 'changed in the kit; git could not list the lines, compare by hand', open: h !== null && !matches, why: 'changed in the kit' };
+  const tail = h === null ? '; not here (removed here, so nothing to carry over)' : matches ? '; this copy already matches the kit' : '';
   return {
-    text: `the kit changed ${n} line${n === 1 ? '' : 's'} (+${c.added} -${c.removed}) in ${c.places.length} place${c.places.length === 1 ? '' : 's'}: ${shown}${h === null ? '; not here (removed at install?)' : ''}`,
-    changed: true,
-    diff: `git -C "${KIT}" diff ${BASE.slice(0, 7)} -- ${rel}`,
+    text: `the kit changed ${changesText(c)}${tail}`,
+    open: h !== null && !matches,
+    why: `changed in the kit, ${c.added + c.removed} line${c.added + c.removed === 1 ? '' : 's'}`,
+    diff: diffCommand(rel),
   };
+}
+
+// The kit's own template of a living record: what changed in it between BASE
+// and KIT, never copied. A record is this project's history, but its template
+// carries the rules for writing it (the History row shape, the Decisions
+// entry), and a change there reaches the project only by hand (2026-10-01).
+function recordTemplateReport(rel) {
+  const b = baseText(rel);
+  if (b === undefined) return null; // no base: said once, for all of them
+  const k = norm(readBuf(KIT, rel));
+  if (k === null && b === null) return null; // not a kit template, like an archive
+  if (b === k) return null;
+  if (b === null) {
+    const n = k.split('\n').length - (k.endsWith('\n') ? 1 : 0);
+    return { text: `new in the kit's templates, ${n} line${n === 1 ? '' : 's'}: read it and carry over what applies` };
+  }
+  if (k === null) return { text: 'gone from the kit\'s templates; report only, nothing deleted' };
+  const c = kitChanges(rel);
+  if (!c) return { text: 'the kit changed its template; git could not list the lines, compare by hand' };
+  return { text: `the kit's template changed ${changesText(c)}`, diff: diffCommand(rel) };
 }
 
 // Kit files no entry above names: reported, never copied. Only what an install
@@ -319,12 +378,13 @@ function kitPaths() {
   return out;
 }
 
-const STATUS_ORDER = ['changed on both sides', 'cannot tell who changed it', 'kit updated', 'new in the kit', 'changed here only', 'gone from the kit', 'current'];
+const STATUS_ORDER = ['changed on both sides', 'cannot tell who changed it', 'kit updated', 'new in the kit', 'changed here only', 'removed here', 'gone from the kit', 'current'];
 const NOTE = {
   'current': '',
   'kit updated': 'safe to copy',
   'new in the kit': 'safe to copy',
   'changed here only': 'keep',
+  'removed here': 'deleted in this project: never copied back',
   'changed on both sides': 'conflict: merge by hand, never overwritten',
   'gone from the kit': 'report only, nothing deleted',
   'cannot tell who changed it': 'no base: never copied, compare by hand',
@@ -344,6 +404,11 @@ for (const f of KIT_FILES.filter((x) => x.kind === 'calibrated')) {
 const listed = new Set(KIT_FILES.map((f) => f.path));
 const unlisted = kitPaths().filter((p) => !listed.has(p)).sort();
 const recordsHere = KIT_FILES.filter((f) => f.kind === 'record' && readBuf(ROOT, f.path) !== null).length;
+const templates = [];
+for (const f of KIT_FILES.filter((x) => x.kind === 'record')) {
+  const r = recordTemplateReport(f.path);
+  if (r) templates.push({ path: f.path, ...r });
+}
 
 // ---- writing ---------------------------------------------------------------------
 // Each copy goes to a temporary name beside the file and is then renamed over
@@ -387,9 +452,12 @@ if (fs.existsSync(KIT_SELF) && !same(path.resolve(KIT_SELF), path.resolve(SELF))
 
 // ---- record --------------------------------------------------------------------
 // The step after the files --apply named are carried over by hand. Every
-// machinery file that still differs from the kit is printed before the base
-// is written, since from then on each one reads as changed here only and the
-// kit's side of it is no longer shown (2026-10-01).
+// machinery and calibrated file that still differs from the kit is printed
+// before the base is written, since from then on the kit's side of each one is
+// no longer shown: a machinery file reads as this project's own, and a
+// calibrated one as unchanged in the kit. A calibrated file is listed too, so
+// one the kit added and nobody copied over is seen before it drops out of the
+// report (2026-10-01).
 if (RECORD) {
   out.push('');
   if (!kitHead) {
@@ -397,18 +465,31 @@ if (RECORD) {
     console.log(out.join('\n'));
     process.exit(1);
   }
-  const differ = [];
-  for (const f of KIT_FILES.filter((x) => x.kind === 'machinery')) {
-    const k = norm(readBuf(KIT, f.path));
-    const h = norm(readBuf(ROOT, f.path));
-    if (k === h) continue; // the same, or on neither side
-    differ.push({ path: f.path, how: k === null ? 'not in the kit' : h === null ? 'not here' : 'differs' });
-  }
+  const differing = (kind) => {
+    const list = [];
+    for (const f of KIT_FILES.filter((x) => x.kind === kind)) {
+      const k = norm(readBuf(KIT, f.path));
+      const h = norm(readBuf(ROOT, f.path));
+      if (k === h) continue; // the same, or on neither side
+      list.push({ path: f.path, how: k === null ? 'not in the kit' : h === null ? 'not here' : 'differs' });
+    }
+    return list;
+  };
+  const listOut = (list) => {
+    const w = Math.max(...list.map((d) => d.how.length));
+    for (const d of list) out.push(`  ${d.how.padEnd(w)}  ${d.path}`);
+  };
+  const differ = differing('machinery');
+  const calDiffer = differing('calibrated');
   if (!differ.length) out.push('Every machinery file matches the kit.');
   else {
     out.push(`Machinery that still differs from the kit (${differ.length}), recorded as this project's own from now on:`);
-    const w = Math.max(...differ.map((d) => d.how.length));
-    for (const d of differ) out.push(`  ${d.how.padEnd(w)}  ${d.path}`);
+    listOut(differ);
+  }
+  if (!calDiffer.length) out.push('Every calibrated file matches the kit.');
+  else {
+    out.push(`Calibrated files that still differ from the kit (${calDiffer.length}), their calibration or a kit change not carried over:`);
+    listOut(calDiffer);
   }
   try { writeVersion(); } catch (e) {
     out.push(`Could not write ${VERSION_FILE}: ${e.message}`);
@@ -416,7 +497,13 @@ if (RECORD) {
     process.exit(1);
   }
   out.push(`Wrote ${VERSION_FILE}: commit ${kitHead}, ${today}.`);
-  if (differ.length) out.push(`From here on the kit at ${kitHead} is the base, so the next compare reads ${differ.length === 1 ? 'that file' : `those ${differ.length} files`} as changed here only.`);
+  if (differ.length) {
+    const removed = differ.filter((d) => d.how === 'not here').length;
+    const kept = differ.length - removed;
+    const said = [kept ? `${kept} as changed here only` : '', removed ? `${removed} as removed here` : ''].filter(Boolean).join(' and ');
+    out.push(`From here on the kit at ${kitHead} is the base, so the next compare reads ${differ.length === 1 ? 'that machinery file' : `those ${differ.length} machinery files`} as this project's own: ${said}.`);
+  }
+  if (calDiffer.length) out.push(`For ${calDiffer.length === 1 ? 'that calibrated file' : `those ${calDiffer.length} calibrated files`}, the next compare shows only what the kit changes after ${kitHead}.`);
   console.log(out.join('\n'));
   process.exit(0);
 }
@@ -437,6 +524,14 @@ for (const c of calibrated) {
 
 out.push('');
 out.push(`Living records: never touched (${recordsHere} here).`);
+// Their templates are read, never copied: an instruction change in one is
+// carried over by hand (see recordTemplateReport).
+if (!BASE) out.push('  no base, so the kit\'s changes to their templates cannot be told');
+else if (!templates.length) out.push('  the kit\'s templates for them are unchanged since the base');
+for (const r of templates) {
+  out.push(`  ${r.path}: ${r.text}. Nothing copied; carry an instruction change over by hand.`);
+  if (r.diff) out.push(`    full diff: ${r.diff}`);
+}
 if (unlisted.length) {
   out.push('');
   out.push('In the kit but not in this script\'s list (nothing done):');
@@ -446,18 +541,21 @@ if (unlisted.length) {
 const count = (s) => machinery.filter((m) => m.status === s).length;
 const safe = machinery.filter((m) => m.status === 'kit updated' || m.status === 'new in the kit');
 // The files that keep the base from being recorded: the kit's side of each
-// still has to be carried over by hand (see the header).
-const blockers = machinery.filter((m) => m.status === 'changed on both sides' || m.status === 'cannot tell who changed it');
-const calOpen = calibrated.filter((c) => c.changed).map((c) => c.path);
-const calChanged = calOpen.length;
+// still has to be carried over by hand (see the header). Machinery first, by
+// status, then the calibrated files the kit changed or added (2026-10-01).
+const blockers = [
+  ...machinery.filter((m) => m.status === 'changed on both sides' || m.status === 'cannot tell who changed it').map((m) => ({ path: m.path, why: m.status })),
+  ...calibrated.filter((c) => c.open).map((c) => ({ path: c.path, why: `calibrated, ${c.why}` })),
+];
+const calOpen = calibrated.filter((c) => c.open).length;
 const files = (n) => `${n} file${n === 1 ? '' : 's'}`;
 out.push('');
-out.push(`Summary: ${count('kit updated')} kit updated, ${count('new in the kit')} new in the kit, ${count('changed on both sides')} conflict${count('changed on both sides') === 1 ? '' : 's'}, ${count('cannot tell who changed it')} cannot tell, ${count('changed here only')} changed here only, ${count('gone from the kit')} gone from the kit, ${calChanged} calibrated file${calChanged === 1 ? '' : 's'} to carry over.`);
+out.push(`Summary: ${count('kit updated')} kit updated, ${count('new in the kit')} new in the kit, ${count('changed on both sides')} conflict${count('changed on both sides') === 1 ? '' : 's'}, ${count('cannot tell who changed it')} cannot tell, ${count('changed here only')} changed here only, ${count('removed here')} removed here, ${count('gone from the kit')} gone from the kit, ${calOpen} calibrated file${calOpen === 1 ? '' : 's'} to carry over, ${templates.length} record template${templates.length === 1 ? '' : 's'} changed.`);
 
 if (!APPLY) {
   const copies = safe.length ? ` --apply copies the ${safe.length} safe file${safe.length === 1 ? '' : 's'}${blockers.length ? '' : ' and records the kit commit'}.` : '';
   const one = blockers.length === 1;
-  const held = blockers.length ? ` --apply writes no ${VERSION_FILE} while ${files(blockers.length)} ${one ? 'is' : 'are'} left changed on both sides or with no telling who changed ${one ? 'it' : 'them'}: carry ${one ? 'it' : 'them'} over by hand, then record the kit commit with --record.` : '';
+  const held = blockers.length ? ` --apply writes no ${VERSION_FILE} while ${files(blockers.length)} ${one ? 'is' : 'are'} left to carry over by hand (a conflict, no telling who changed it, or a calibrated file the kit changed or added): carry ${one ? 'it' : 'them'} over by hand, then record the kit commit with --record.` : '';
   out.push(`Report only: nothing was written.${copies}${held}`);
   console.log(out.join('\n'));
   process.exit(0);
@@ -478,13 +576,14 @@ if (failed) {
 }
 if (blockers.length) {
   // No version while one is left: with the kit's HEAD as the base, the next
-  // compare would read each of these as changed here only, and the kit's
-  // changes to them would never be shown again (2026-10-01).
+  // compare would read each machinery file here as changed here only and each
+  // calibrated one as unchanged in the kit, and the kit's changes to them
+  // would never be shown again (2026-10-01).
   const one = blockers.length === 1;
   out.push(`${VERSION_FILE} was not written: ${files(blockers.length)} ${one ? 'is' : 'are'} still left to carry over by hand:`);
-  for (const m of blockers) out.push(`  ${m.path}: ${m.status}`);
-  out.push(`Carry ${one ? 'it' : 'them'} over from the kit by hand${calOpen.length ? `, with the kit's changes to ${calOpen.join(', ')}` : ''}, then record the kit commit: ${recordCommand}`);
-  out.push(`Recording before that would hide the kit's changes to ${one ? 'it' : 'them'} for good: the next compare would read ${one ? 'it' : 'them'} as changed here only.`);
+  for (const m of blockers) out.push(`  ${m.path}: ${m.why}`);
+  out.push(`Carry ${one ? 'it' : 'them'} over from the kit by hand, then record the kit commit: ${recordCommand}`);
+  out.push(`Recording before that would hide the kit's changes to ${one ? 'it' : 'them'} for good: the next compare would measure from the kit as it is now, and read a machinery file as changed here only and a calibrated one as unchanged in the kit.`);
   if (!kitHead) out.push('The kit folder is not a git clone, so --record cannot name its commit either: fetch the kit with git, full history.');
 } else if (!kitHead) {
   out.push(`${VERSION_FILE} was not written: the kit folder is not a git clone, so its commit is unknown.`);
@@ -495,9 +594,10 @@ if (blockers.length) {
     process.exit(1);
   }
   out.push(`Wrote ${VERSION_FILE}: commit ${kitHead}, ${today}.`);
-  // From here on the kit at kitHead is the base, so a kit change to a
-  // calibrated file will not show in the next compare against the same kit.
-  if (calOpen.length) out.push(`Carry these over now, by hand: ${calOpen.join(', ')}. The next compare against kit ${kitHead} will no longer show what the kit changed in them.`);
+  // A record's template never holds the version back, since a record is never
+  // copied; but from here on the kit at kitHead is the base, so a change to a
+  // template will not show again. Name each one while it still can be seen.
+  if (templates.length) out.push(`The kit also changed the template of ${templates.map((r) => r.path).join(', ')}. Carry any instruction change in ${templates.length === 1 ? 'it' : 'them'} over by hand now: the next compare against kit ${kitHead} will no longer show it.`);
 }
 console.log(out.join('\n'));
 process.exit(0);

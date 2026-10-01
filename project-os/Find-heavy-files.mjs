@@ -92,11 +92,18 @@ for (const e of rootEntries) {
 
 // Each size in the unit that fits it: GB from 1 GB, MB from 1 MB, KB below.
 // Every size used to print in GB, so with --min 200mb a 300 MB file read as
-// "0.29 GB" (2026-10-01).
+// "0.29 GB" (2026-10-01). The unit is chosen from the number as it will be
+// printed, rounded to two places, and not from the raw size: chosen from the
+// raw size, 1048575 bytes stayed in KB and printed as "1024.00 KB"
+// (2026-10-01).
+const UNITS = [['KB', 1024], ['MB', 1024 ** 2], ['GB', 1024 ** 3]];
 function human(n) {
-  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(2)} GB`;
-  if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(2)} MB`;
-  return `${(n / 1024).toFixed(2)} KB`;
+  for (let i = 0; i < UNITS.length; i++) {
+    const [unit, size] = UNITS[i];
+    const shown = (n / size).toFixed(2);
+    if (Number(shown) < 1024 || i === UNITS.length - 1) return `${shown} ${unit}`;
+  }
+  return '';
 }
 const rows = [];
 for (const [name, size] of topSizes) {

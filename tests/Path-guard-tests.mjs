@@ -24,8 +24,9 @@
 //
 // A case marked [R] is one a review round found open ([R10]: the kit review of
 // 2026-09-28; [R11]: the one of 2026-10-01; [R12]: the second one that day,
-// on scripts that write by other spellings). Only cases that pass
-// today are seeded here; a known hole joins the file when it is fixed.
+// on scripts that write by other spellings; [R13]: the final one that day,
+// on one-line scripts that write while naming a path outside). Only cases
+// that pass today are seeded here; a known hole joins the file when it is fixed.
 import fs from 'node:fs';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -312,24 +313,39 @@ t("[R5] Image.open reads a picture", bash("python -c \"\nfrom PIL import Image\n
 // [R11] Review 2026-10-01: a ONE-LINE script that only read a file outside the
 // project was refused as a write, because every absolute path in it was
 // checked, while the same script over two lines was allowed. One-line scripts
-// are now judged like multi-line ones, by where they write, and every write
-// that scan used to catch is still refused.
-console.log('path-guard: one-line scripts are judged by where they write');
+// were then judged like multi-line ones, by where they write, until the final
+// review that day ([R13] below) found one-line writes that reading let
+// through. A one-line script is now refused for every absolute path in it
+// again, unless it is provably a read: each such path is the path of a plain
+// read call, and nothing else in the script could write. So the one-line
+// scripts here that also write or copy into the project, unpack an archive,
+// or name an absolute-looking path in a web route, a pattern or a string they
+// edit are refused, as they were before 2026-10-01. Their two-line forms keep
+// the reading of writes covered: a route, a pattern and a string's replace()
+// are still not writes to it.
+console.log('path-guard: one-line scripts name a path outside only to read it');
 t('[R11] node -e that only reads /etc/hostname', bash(`node -e "console.log(require('fs').readFileSync('/etc/hostname','utf8'))"`), false);
 t('[R11] node -e that only reads a settings file in the home folder', bash(`node -e "console.log(require('fs').readFileSync('${HOME}/.claude/settings.json','utf8').length)"`), false);
 t('[R11] node -e that lists a folder outside', bash(`node -e "console.log(require('fs').readdirSync('${OUT}'))"`), false);
 t('[R11] node -e that checks a file outside exists', bash("node -e \"console.log(require('fs').existsSync('C:/Program Files/nodejs/node.exe'))\""), false);
-t('[R11] node -e that reads outside and writes inside', bash(`node -e "const fs=require('fs'); fs.writeFileSync('.tmp/a.txt', fs.readFileSync('${OUT}/a.txt'))"`), false);
-t('[R11] node -e that copies from outside into the project', bash(`node -e "require('fs').copyFileSync('${OUT}/a.png','public/media/a.png')"`), false);
-t('[R11] node -e with web routes in it', bash("node -e \"console.log(['/projects/','/about/'].map(r => r.length))\""), false);
+t('[R11] node -e that reads outside and writes inside', bash(`node -e "const fs=require('fs'); fs.writeFileSync('.tmp/a.txt', fs.readFileSync('${OUT}/a.txt'))"`), true);
+t('[R11] node -e that copies from outside into the project', bash(`node -e "require('fs').copyFileSync('${OUT}/a.png','public/media/a.png')"`), true);
+t('[R11] node -e with web routes in it', bash("node -e \"console.log(['/projects/','/about/'].map(r => r.length))\""), true);
 t('[R11] node -e reading outside, from PowerShell', ps("node -e \"console.log(require('fs').readFileSync('C:\\\\Users\\\\User\\\\a.txt','utf8'))\""), false);
 t('[R11] python3 -c that only reads /etc/hostname', bash(`python3 -c "print(open('/etc/hostname').read())"`), false);
 t('[R11] python3 -c that opens a file outside for reading', bash(`python3 -c "print(open('${OUT}/a.txt','r').read())"`), false);
 t('[R11] python3 -c that lists a folder outside', bash(`python3 -c "import os; print(os.listdir('${OUT}'))"`), false);
-t('[R11] python3 -c that copies from outside into the project', bash(`python3 -c "import shutil; shutil.copy('${OUT}/a.txt','.tmp/a.txt')"`), false);
-t('[R11] python3 -c that unpacks an archive from outside into .tmp', bash(`python3 -c "import zipfile; zipfile.ZipFile('${OUT}/x.zip').extractall('.tmp/x')"`), false);
-t('[R11] a pandas pattern that looks like a route is not a folder', bash("python3 -c \"import pandas as pd; print(pd.Series(['/projects/a']).str.extractall(r'/projects/(\\w+)'))\""), false);
-t("[R11] a string's replace is not a move", bash("python3 -c \"print('C:/Users/User/a.txt'.replace('/', '-'))\""), false);
+t('[R11] python3 -c that copies from outside into the project', bash(`python3 -c "import shutil; shutil.copy('${OUT}/a.txt','.tmp/a.txt')"`), true);
+t('[R11] python3 -c that unpacks an archive from outside into .tmp', bash(`python3 -c "import zipfile; zipfile.ZipFile('${OUT}/x.zip').extractall('.tmp/x')"`), true);
+t('[R11] a pandas pattern that looks like a route is not a folder', bash("python3 -c \"import pandas as pd; print(pd.Series(['/projects/a']).str.extractall(r'/projects/(\\w+)'))\""), true);
+t("[R11] a string's replace is not a move", bash("python3 -c \"print('C:/Users/User/a.txt'.replace('/', '-'))\""), true);
+// The same scripts over two lines, read by their writes alone.
+t('[R13] two lines: node -e that copies from outside into the project', bash(`node -e "\nrequire('fs').copyFileSync('${OUT}/a.png','public/media/a.png')\n"`), false);
+t('[R13] two lines: node -e with web routes in it', bash("node -e \"\nconsole.log(['/projects/','/about/'].map(r => r.length))\n\""), false);
+t('[R13] two lines: python3 -c that copies from outside into the project', bash(`python3 -c "\nimport shutil; shutil.copy('${OUT}/a.txt','.tmp/a.txt')\n"`), false);
+t('[R13] two lines: python3 -c that unpacks an archive from outside into .tmp', bash(`python3 -c "\nimport zipfile; zipfile.ZipFile('${OUT}/x.zip').extractall('.tmp/x')\n"`), false);
+t('[R13] two lines: a pandas pattern that looks like a route is not a folder', bash("python3 -c \"\nimport pandas as pd; print(pd.Series(['/projects/a']).str.extractall(r'/projects/(\\w+)'))\n\""), false);
+t("[R13] two lines: a string's replace is not a move", bash("python3 -c \"\nprint('C:/Users/User/a.txt'.replace('/', '-'))\n\""), false);
 t('[R11] perl -e that only reads outside', bash("perl -e \"open(my \\$f, '<', 'C:/Users/User/a.txt'); print <\\$f>\""), false);
 t('[R11] ruby -e that only reads outside', bash("ruby -e \"puts File.read('C:/Users/User/a.txt')\""), false);
 t('[R11] node -e writing inside through a join with +', bash("node -e \"const n='a'; require('fs').writeFileSync('.tmp/' + n + '.txt','x')\""), false);
@@ -365,15 +381,16 @@ t('[R11] perl -e open without parentheses, inside', bash("perl -e \"open my \\$f
 t('[R11] deno eval writeTextFileSync outside', bash(`deno eval "Deno.writeTextFileSync('${OUT}/x.txt','a')"`), true);
 t('[R11] ruby -e File.delete outside', bash(`ruby -e "File.delete('${OUT}/x.txt')"`), true);
 
-// The same script on one line and on two lines gets the same verdict.
-for (const [name, line, block] of [
-  ['a read of /etc/hostname', "console.log(require('fs').readFileSync('/etc/hostname','utf8'))", false],
-  ['a read outside and a write inside', `const fs=require('fs'); fs.writeFileSync('.tmp/a.txt', fs.readFileSync('${OUT}/a.txt'))`, false],
-  ['a write outside', `require('fs').writeFileSync('${OUT}/x.txt','a')`, true],
-  ['a write to each path of a literal list', `['${OUT}/x.txt'].forEach(p => require('fs').writeFileSync(p,'a'))`, true],
+// The same script on one line and on two lines. The verdicts differ only
+// where the one-line script names a path outside and is not provably a read.
+for (const [name, line, oneLine, twoLines] of [
+  ['a read of /etc/hostname', "console.log(require('fs').readFileSync('/etc/hostname','utf8'))", false, false],
+  ['a read outside and a write inside', `const fs=require('fs'); fs.writeFileSync('.tmp/a.txt', fs.readFileSync('${OUT}/a.txt'))`, true, false],
+  ['a write outside', `require('fs').writeFileSync('${OUT}/x.txt','a')`, true, true],
+  ['a write to each path of a literal list', `['${OUT}/x.txt'].forEach(p => require('fs').writeFileSync(p,'a'))`, true, true],
 ]) {
-  t(`[R11] one line: ${name}`, bash(`node -e "${line}"`), block);
-  t(`[R11] two lines: ${name}`, bash(`node -e "\n${line}\n"`), block);
+  t(`[R11] one line: ${name}`, bash(`node -e "${line}"`), oneLine);
+  t(`[R11] two lines: ${name}`, bash(`node -e "\n${line}\n"`), twoLines);
 }
 t('[R11] POSIX: node -e that only reads /etc/hostname', { ...bash("node -e \"console.log(require('fs').readFileSync('/etc/hostname','utf8'))\""), cwd: '/home/u/app' }, false);
 t('[R11] POSIX: node -e that writes into /etc', { ...bash("node -e \"require('fs').writeFileSync('/etc/x.conf','a')\""), cwd: '/home/u/app' }, true);
@@ -381,13 +398,23 @@ t('[R11] POSIX: node -e that writes into /etc', { ...bash("node -e \"require('fs
 // [R12] The second review of 2026-10-01: once one-line scripts stopped being
 // refused for every absolute path in them, these writes went through, and
 // their two-line forms already had before. Each is checked on one line and on
-// two, so the two readings can never drift apart again. `quote` is the
+// two, so the two readings can never drift apart unnoticed. `quote` is the
 // shell's quote around the script, and `after` the words that follow it.
 console.log('path-guard: what a script writes, however it spells it');
 const U = 'C:/Users/User';
 function both(name, head, quote, script, block, after = '') {
   t(`[R12] one line: ${name}`, bash(`${head} ${quote}${script}${quote}${after}`), block);
   t(`[R12] two lines: ${name}`, bash(`${head} ${quote}\n${script}\n${quote}${after}`), block);
+}
+// [R13] The scripts whose two readings differ on purpose: on one line each
+// names a path outside the project without being provably a read (it moves
+// its folder there, runs code, starts a program, loads a module this guard
+// does not know, or names the path outside a plain read call), so it is
+// refused as it was before 2026-10-01. Over two lines it is read by its
+// writes alone, and those land inside or nowhere.
+function apart(name, head, quote, script, oneLine, twoLines, after = '') {
+  t(`[R12] one line: ${name}`, bash(`${head} ${quote}${script}${quote}${after}`), oneLine);
+  t(`[R12] two lines: ${name}`, bash(`${head} ${quote}\n${script}\n${quote}${after}`), twoLines);
 }
 // The review's own payloads.
 both('node changes its folder, then writes a relative file', 'node -e', '"', `process.chdir('${U}'); require('fs').writeFileSync('x.txt','a')`, true);
@@ -514,8 +541,10 @@ t('[R12] padding with string keys does not wear the reading out', bash(`node -e 
 t('[R12] padding with bare calls does not wear the reading out', bash(`perl -e '${Array.from({ length: 300 }, () => 'unlink ".tmp/a"').join('; ')}; unlink "${U}/x.txt"'`), true);
 tWhy('[R12] the refusal after a chdir names the folder the script moved to', bash(`node -e "process.chdir('${U}'); require('fs').writeFileSync('x.txt','a')"`), 'moved its working folder to "c:/users/user"');
 
-// Reads stay allowed, one-line and multi-line alike, and so do writes that
-// land inside, however they are spelled.
+// Reads stay allowed, and so do writes that land inside, however they are
+// spelled. A one-line script that names a path outside is allowed only when
+// it is provably a read; the apart() cases are not, and are refused on one
+// line only ([R13]).
 both('a read with readFileSync', 'node -e', '"', `console.log(require('fs').readFileSync('${U}/a.txt','utf8'))`, false);
 both('a check with existsSync', 'node -e', '"', `console.log(require('fs').existsSync('${U}/a.txt'))`, false);
 both('a stat with statSync', 'node -e', '"', `console.log(require('fs').statSync('${U}/a.txt').size)`, false);
@@ -528,27 +557,27 @@ both('os.listdir', 'python -c', '"', `import os; print(os.listdir('${U}'))`, fal
 both("perl open with '<'", 'perl -e', "'", `open(my $f, "<", "${U}/a.txt"); print <$f>`, false);
 both("perl open with '<' and no parentheses", 'perl -e', "'", `open my $f, "<", "${U}/a.txt" or die; print <$f>`, false);
 both('ruby File.read', 'ruby -e', "'", `puts File.read("${U}/a.txt")`, false);
-both('a chdir outside that only reads', 'node -e', '"', `process.chdir('${U}'); console.log(require('fs').readdirSync('.'))`, false);
-both('a python chdir outside that only reads', 'python -c', '"', `import os; os.chdir('${U}'); print(os.listdir('.'))`, false);
-both('a ruby chdir outside that only reads', 'ruby -e', "'", `Dir.chdir("${U}"); puts Dir.glob("*")`, false);
-both('an eval that only reads', 'node -e', '"', String.raw`eval(\"console.log(require('fs').readFileSync('C:/Users/User/a.txt','utf8'))\")`, false);
-both('a python exec that only reads', 'python -c', '"', String.raw`exec(\"print(open('C:/Users/User/a.txt').read())\")`, false);
+apart('a chdir outside that only reads', 'node -e', '"', `process.chdir('${U}'); console.log(require('fs').readdirSync('.'))`, true, false);
+apart('a python chdir outside that only reads', 'python -c', '"', `import os; os.chdir('${U}'); print(os.listdir('.'))`, true, false);
+apart('a ruby chdir outside that only reads', 'ruby -e', "'", `Dir.chdir("${U}"); puts Dir.glob("*")`, true, false);
+apart('an eval that only reads', 'node -e', '"', String.raw`eval(\"console.log(require('fs').readFileSync('C:/Users/User/a.txt','utf8'))\")`, true, false);
+apart('a python exec that only reads', 'python -c', '"', String.raw`exec(\"print(open('C:/Users/User/a.txt').read())\")`, true, false);
 both('a read named by a string key', 'node -e', '"', `console.log(require('node:fs')['readFileSync']('${U}/a.txt','utf8'))`, false);
-both('cat of a file outside through an argument list', 'python -c', '"', `import subprocess; print(subprocess.run(['cat','${U}/a.txt'], capture_output=True).stdout)`, false);
-both('git -C outside through an argument list', 'node -e', '"', `console.log(require('child_process').execFileSync('git',['-C','${U}/repo','status']).toString())`, false);
+apart('cat of a file outside through an argument list', 'python -c', '"', `import subprocess; print(subprocess.run(['cat','${U}/a.txt'], capture_output=True).stdout)`, true, false);
+apart('git -C outside through an argument list', 'node -e', '"', `console.log(require('child_process').execFileSync('git',['-C','${U}/repo','status']).toString())`, true, false);
 both('sqlite3 in memory', 'python -c', '"', "import sqlite3; print(sqlite3.connect(':memory:'))", false);
 both('sqlite3 read-only URI', 'python -c', '"', `import sqlite3; print(sqlite3.connect('file:${U}/x.db?mode=ro', uri=True))`, false);
 both('sqlite3 inside', 'python -c', '"', "import sqlite3; sqlite3.connect('.tmp/x.db')", false);
 both('tempfile with dir inside', 'python -c', '"', "import tempfile; print(tempfile.mkstemp(dir='.tmp'))", false);
-both('Deno.openSync for reading', 'deno eval', '"', `console.log(Deno.openSync('${U}/a.txt', { read: true }))`, false);
+apart('Deno.openSync for reading', 'deno eval', '"', `console.log(Deno.openSync('${U}/a.txt', { read: true }))`, true, false);
 both("pickle with 'rb'", 'python -c', '"', `import pickle; print(pickle.load(open('${U}/a.pkl','rb')))`, false);
-both("a model's eval() is not code", 'python -c', '"', `import torch; m = torch.load('${U}/m.pt'); m.eval(); print(m)`, false);
+apart("a model's eval() is not code", 'python -c', '"', `import torch; m = torch.load('${U}/m.pt'); m.eval(); print(m)`, true, false);
 both('re.compile is not code', 'python -c', '"', `import re; p = re.compile(r'x'); print(p.findall(open('${U}/a.txt').read()))`, false);
 both('ast.literal_eval is not code', 'python -c', '"', `import ast; print(ast.literal_eval(open('${U}/a.txt').read()))`, false);
-both("pandas' DataFrame.eval is not code", 'python -c', '"', `import pandas as pd; df = pd.read_csv('${U}/a.csv'); print(df.eval('a + b'))`, false);
+apart("pandas' DataFrame.eval is not code", 'python -c', '"', `import pandas as pd; df = pd.read_csv('${U}/a.csv'); print(df.eval('a + b'))`, true, false);
 both('an eval of code from the command line in a script that writes nothing', 'node -e', '"', 'console.log(eval(process.argv[1]))', false, " '1+2'");
 both('an exec of a project script', 'python -c', '"', "exec(open('scripts/x.py').read())", false);
-both('a perl eval block', 'perl -e', "'", `eval { open(my $f, "<", "${U}/a.txt") or die; print <$f> }; print $@`, false);
+apart('a perl eval block', 'perl -e', "'", `eval { open(my $f, "<", "${U}/a.txt") or die; print <$f> }; print $@`, true, false);
 both('a key named eval', 'node -e', '"', 'const x = {eval: 1}; console.log(x.eval)', false);
 both("a class's constructor", 'node -e', '"', 'class A { constructor(x) { this.x = x } }; console.log(new A(1))', false);
 both('perl unlink inside', 'perl -e', "'", 'unlink ".tmp/x.txt"', false);
@@ -560,10 +589,239 @@ both('a command started with cwd inside', 'python -c', '"', "import subprocess; 
 both('a command started with cwd=os.getcwd()', 'python -c', '"', "import os, subprocess; subprocess.run(['git','status'], cwd=os.getcwd())", false);
 both('a command started with cwd=None', 'python -c', '"', "import subprocess; subprocess.run(['git','status'], cwd=None)", false);
 both('mkdir through an argument list, of a joined path inside', 'python -c', '"', "import os, subprocess; d = os.path.join('.tmp', 'x'); subprocess.run(['mkdir', '-p', d])", false);
-both('cp from outside into the project through an argument list', 'python -c', '"', `import subprocess; subprocess.run(['cp', '${U}/Downloads/a.png', 'public/media/a.png'])`, false);
-both('perl chmod of a project file in a script that reads outside', 'perl -e', "'", `chmod 0755, "scripts/x.sh"; open(my $f, "<", "${U}/a.txt")`, false);
+apart('cp from outside into the project through an argument list', 'python -c', '"', `import subprocess; subprocess.run(['cp', '${U}/Downloads/a.png', 'public/media/a.png'])`, true, false);
+apart('perl chmod of a project file in a script that reads outside', 'perl -e', "'", `chmod 0755, "scripts/x.sh"; open(my $f, "<", "${U}/a.txt")`, true, false);
 t('[R12] PowerShell: a read outside', ps(`node -e "console.log(require('fs').readFileSync('${U}/a.txt','utf8'))"`), false);
 t('[R12] a heredoc python script that changes its folder and only reads', bash(`python3 - <<'EOF'\nimport os\nos.chdir('${U}')\nprint(os.listdir('.'))\nEOF`), false);
+
+// [R13] The final review of 2026-10-01: with the one-line scan gone, these
+// one-line writes went through, each spelled in a way the reading of writes
+// does not know, and the scan before 2026-10-01 refused every one of them. A
+// one-line script that names a path outside the project is refused again
+// unless it is provably a read. Each write is checked in the Bash tool and in
+// the PowerShell tool, with the quote the review's probe used.
+console.log('path-guard: a one-line script names a path outside only to read it');
+{
+  const quote = (script) => (script.includes('"') ? "'" : '"');
+  for (const [name, head, script] of [
+    ['writeFileSync', 'node -e', `require('fs').writeFileSync('${U}/w1.txt','a')`],
+    ['writeFileSync.call', 'node -e', `require('fs').writeFileSync.call(null,'${U}/w2.txt','a')`],
+    ['Reflect.apply of writeFileSync', 'node -e', `Reflect.apply(require('fs').writeFileSync,null,['${U}/w3.txt','a'])`],
+    ['forEach(unlinkSync)', 'node -e', `['${U}/w4.txt'].forEach(require('fs').unlinkSync)`],
+    ['an optional call ?.(', 'node -e', `require('fs').writeFileSync?.('${U}/w5.txt','a')`],
+    ['a comma call (0, fn)()', 'node -e', `(0,require('fs').writeFileSync)('${U}/w6.txt','a')`],
+    ['bind', 'node -e', `require('fs').writeFileSync.bind(null,'${U}/w7.txt')('a')`],
+    ['openSync with numeric flags and writeSync', 'node -e', `const f=require('fs'); f.writeSync(f.openSync('${U}/w8.txt',769),'a')`],
+    ['openSync w under another name and writeSync', 'node -e', `const f=require('fs'); f.writeSync(f.openSync('${U}/w9.txt','w'),'a')`],
+    ['openSync with a mode in a variable', 'node -e', `const fs=require('fs'); const m='w'; fs.writeSync(fs.openSync('${U}/w10.txt',m),'a')`],
+    ['a climb out of __dirname', 'node -e', "require('fs').writeFileSync(__dirname+'/../../w11.txt','a')"],
+    ['a climb out of process.cwd()', 'node -e', "require('fs').writeFileSync(process.cwd()+'/../w12.txt','a')"],
+    ['process.env.OneDrive', 'node -e', "require('fs').writeFileSync(process.env.OneDrive+'/w16.txt','a')"],
+    ['HOMEDRIVE and HOMEPATH', 'node -e', "require('fs').writeFileSync(process.env.HOMEDRIVE+process.env.HOMEPATH+'/w17.txt','a')"],
+    ['fs.promises.writeFile', 'node -e', `require('fs').promises.writeFile('${U}/w18.txt','a')`],
+    ['new WriteStream', 'node -e', `new (require('fs').WriteStream)('${U}/w19.txt').end('a')`],
+    ['a comment before the parenthesis', 'node -e', `require('fs').writeFileSync /*x*/ ('${U}/w20.txt','a')`],
+    ['execSync with a redirection', 'node -e', `require('child_process').execSync('echo a > ${U}/w21.txt')`],
+    ['a link made to point outside', 'node -e', `require('fs').symlinkSync('${U}','.tmp/door')`],
+    ['import shutil as s; s.rmtree', 'python -c', `import shutil as s; s.rmtree('${U}/w23')`],
+    ['from shutil import rmtree', 'python -c', `from shutil import rmtree; rmtree('${U}/w24')`],
+    ['from shutil import copy', 'python -c', `from shutil import copy; copy('a.txt','${U}/w25.txt')`],
+    ['import os as o; o.remove', 'python -c', `import os as o; o.remove('${U}/w26.txt')`],
+    ["__import__('os').remove", 'python -c', `__import__('os').remove('${U}/w27.txt')`],
+    ['from os import remove', 'python -c', `from os import remove; remove('${U}/w28.txt')`],
+    ['open with a mode in a variable', 'python -c', `m='w'; open('${U}/w29.txt',m).write('a')`],
+    ['os.open with numeric flags', 'python -c', `import os; os.write(os.open('${U}/w30.txt',0x101),b'a')`],
+    ['io.FileIO', 'python -c', `import io; io.FileIO('${U}/w31.txt','w').write(b'a')`],
+    ['os.link pointing outside', 'python -c', `import os as o; o.link('${U}/secret.txt','.tmp/door.txt')`],
+    ['s.move', 'python -c', `import shutil as s; s.move('a.txt','${U}/w35.txt')`],
+    ["wave.open with 'wb'", 'python -c', `import wave; w=wave.open('${U}/w37.wav','wb')`],
+    ['pathlib under another name', 'python -c', `from pathlib import Path as P; P('${U}/w39.txt').write_text('a')`],
+    ['np.save to an absolute path', 'python -c', `import numpy as np; np.save('${U}/w40.npy', [1])`],
+    ['perl unlink without parentheses', 'perl -e', `unlink '${U}/w41.txt'`],
+    ['perl qx with a redirection', 'perl -e', `qx(echo a > "${U}/w42.txt")`],
+    ['perl backticks with a redirection', 'perl -e', '`echo a > "' + U + '/w43.txt"`'],
+    ['perl rename without parentheses', 'perl -e', `rename 'a.txt', '${U}/w44.txt'`],
+    ['ruby %x with a redirection', 'ruby -e', `%x(echo a > "${U}/w45.txt")`],
+    ['ruby File.write', 'ruby -e', `File.write('${U}/w46.txt','a')`],
+    ['ruby FileUtils kept in a constant', 'ruby -e', `require 'fileutils'; F=FileUtils; F.rm_rf('${U}/w47')`],
+    ['a key built from two strings', 'node -e', `const fs=require('fs'); fs['write'+'FileSync']('${U}/s4.txt','a')`],
+    ['a chdir out, then a relative write', 'node -e', `process.chdir('${U}'); require('fs').writeFileSync('s3.txt','a')`],
+    ['os.chmod', 'python -c', `import os; os.chmod('${U}/s8.txt', 0o777)`],
+    ['execSync with a cwd outside', 'node -e', "require('child_process').execSync('git diff --stat > .tmp/d.txt', {cwd:'C:/code/repo'})"],
+  ]) {
+    const q = quote(script);
+    t(`[R13] one-line write refused: ${name}`, bash(`${head} ${q}${script}${q}`), true);
+    t(`[R13] one-line write refused, PowerShell: ${name}`, ps(`${head} ${q}${script}${q}`), true);
+  }
+  t('[R13] one-line write refused: a path outside after the script', bash(`node -e "require('fs').writeFileSync(process.argv[1],'a')" ${U}/c4.txt`), true);
+  t('[R13] one-line write refused: a node script inside bash -c', bash(`bash -c "node -e \\"require('fs').writeFileSync('${U}/c6.txt','a')\\""`), true);
+
+  // Reads stay allowed: one read call of each family, in every language.
+  const A = `${U}/a.txt`;
+  for (const [name, payload] of [
+    ['node readFileSync', bash(`node -e "console.log(require('fs').readFileSync('${A}','utf8'))"`)],
+    ['node readFile with a callback', bash(`node -e "require('fs').readFile('${A}', 'utf8', (e, d) => console.log(d))"`)],
+    ['node fs.promises.readFile', bash(`node -e "require('fs').promises.readFile('${A}','utf8').then(console.log)"`)],
+    ['node existsSync', bash(`node -e "console.log(require('fs').existsSync('${A}'))"`)],
+    ['node statSync', bash(`node -e "console.log(require('fs').statSync('${A}').size)"`)],
+    ['node lstatSync', bash(`node -e "console.log(require('fs').lstatSync('${A}').isFile())"`)],
+    ['node readdirSync', bash(`node -e "console.log(require('fs').readdirSync('${U}'))"`)],
+    ['node accessSync', bash(`node -e "require('fs').accessSync('${A}', require('fs').constants.R_OK)"`)],
+    ['node createReadStream', bash(`node -e "require('fs').createReadStream('${A}').pipe(process.stdout)"`)],
+    ["node readFileSync with { flag: 'r' }", bash(`node -e "console.log(require('fs').readFileSync('${A}',{encoding:'utf8',flag:'r'}))"`)],
+    ['deno Deno.readTextFileSync', bash(`deno eval "console.log(Deno.readTextFileSync('${A}'))"`)],
+    ['deno Deno.readFileSync', bash(`deno eval "console.log(Deno.readFileSync('${A}').length)"`)],
+    ['deno Deno.statSync', bash(`deno eval "console.log(Deno.statSync('${A}').size)"`)],
+    ['deno Deno.readDirSync', bash(`deno eval "console.log([...Deno.readDirSync('${U}')].length)"`)],
+    ['python open', bash(`python -c "print(open('${A}').read())"`)],
+    ["python open with 'rb'", bash(`python -c "print(open('${A}', 'rb').read())"`)],
+    ["python open with 'rt' and an encoding", bash(`python -c "print(open('${A}', 'rt', encoding='utf-8').read())"`)],
+    ["python open with mode='r'", bash(`python -c "print(open('${A}', mode='r', encoding='utf8').read())"`)],
+    ['python os.listdir', bash(`python -c "import os; print(os.listdir('${U}'))"`)],
+    ['python os.path.exists', bash(`python -c "import os; print(os.path.exists('${A}'))"`)],
+    ['python os.path.isfile', bash(`python -c "import os; print(os.path.isfile('${A}'))"`)],
+    ['python os.path.isdir', bash(`python -c "import os; print(os.path.isdir('${U}'))"`)],
+    ['python os.path.getsize', bash(`python -c "import os; print(os.path.getsize('${A}'))"`)],
+    ['python glob.glob', bash(`python -c "import glob; print(glob.glob('${U}/*.txt', recursive=True))"`)],
+    ['python Path.read_text', bash(`python -c "from pathlib import Path; print(Path('${A}').read_text())"`)],
+    ['python Path.read_bytes', bash(`python -c "from pathlib import Path; print(Path('${A}').read_bytes())"`)],
+    ['python Path.exists', bash(`python -c "from pathlib import Path; print(Path('${A}').exists())"`)],
+    ['python Path.is_file', bash(`python -c "from pathlib import Path; print(Path('${A}').is_file())"`)],
+    ['python Path.is_dir', bash(`python -c "from pathlib import Path; print(Path('${U}').is_dir())"`)],
+    ['python Path.iterdir', bash(`python -c "from pathlib import Path; print(list(Path('${U}').iterdir()))"`)],
+    ['python Path.stat', bash(`python -c "from pathlib import Path; print(Path('${A}').stat().st_size)"`)],
+    ['python csv over open with newline', bash(`python -c "import csv; print(list(csv.reader(open('${U}/a.csv', newline=''))))"`)],
+    ['python hashlib over open rb', bash(`python -c "import hashlib; print(hashlib.sha256(open('${U}/a.bin','rb').read()).hexdigest())"`)],
+    ["perl open with '<'", bash(`perl -e 'open(my $f, "<", "${A}") or die; print <$f>'`)],
+    ["perl open with '<' and a layer", bash(`perl -e 'open(my $f, "<:encoding(UTF-8)", "${A}") or die; print <$f>'`)],
+    ["perl open with '<' in the path", bash(`perl -e 'open(F, "<${A}") or die; print <F>'`)],
+    ['ruby File.read', bash(`ruby -e 'puts File.read("${A}")'`)],
+    ['ruby File.read without parentheses', bash(`ruby -e 'puts File.read "${A}"'`)],
+    ['ruby File.readlines', bash(`ruby -e 'puts File.readlines("${A}").size'`)],
+    ['ruby File.exist?', bash(`ruby -e 'puts File.exist?("${A}")'`)],
+    ['ruby File.file?', bash(`ruby -e 'puts File.file?("${A}")'`)],
+    ['ruby File.directory?', bash(`ruby -e 'puts File.directory?("${U}")'`)],
+    ['ruby IO.readlines', bash(`ruby -e 'puts IO.readlines("${A}").size'`)],
+    ['ruby Dir.glob', bash(`ruby -e 'puts Dir.glob("${U}/*")'`)],
+    ['ruby Dir.entries', bash(`ruby -e 'puts Dir.entries("${U}")'`)],
+    ['ruby Dir.children', bash(`ruby -e 'puts Dir.children("${U}")'`)],
+    ['PowerShell Get-Content', bash(`powershell -Command "Get-Content '${A}'"`)],
+    ['PowerShell Test-Path', bash(`powershell -Command "Test-Path '${A}'"`)],
+    ['PowerShell Get-ChildItem', bash(`powershell -Command "Get-ChildItem '${U}'"`)],
+    ['PowerShell Get-Item', bash(`powershell -Command "Get-Item '${A}'"`)],
+    ['PowerShell Get-Content, in the PowerShell tool', ps(`powershell -Command "Get-Content '${A}'"`)],
+    ['node readFileSync, in the PowerShell tool', ps(`node -e "console.log(require('fs').readFileSync('${A}','utf8'))"`)],
+    ['python os.listdir, in the PowerShell tool', ps(`python -c "import os; print(os.listdir('${U}'))"`)],
+    ['POSIX: python open of /etc/hostname', { ...bash(`python3 -c "print(open('/etc/hostname').read())"`), cwd: '/home/u/app' }],
+  ]) t(`[R13] one-line read allowed: ${name}`, payload, false);
+
+  // A one-line read that also writes inside the project is refused, as it was
+  // before 2026-10-01; over two lines it is read by its writes, which land inside.
+  for (const [name, head, script] of [
+    ['node', 'node -e', `const fs=require('fs'); fs.writeFileSync('.tmp/a.txt', fs.readFileSync('${A}'))`],
+    ['python', 'python -c', `open('.tmp/a.txt','w').write(open('${A}').read())`],
+    ['perl', 'perl -e', `open(my $f, "<", "${A}"); open(my $g, ">", ".tmp/a.txt"); print $g <$f>`],
+    ['ruby', 'ruby -e', `File.write(".tmp/a.txt", File.read("${A}"))`],
+    ['deno', 'deno eval', `Deno.writeTextFileSync('.tmp/a.txt', Deno.readTextFileSync('${A}'))`],
+  ]) {
+    const q = quote(script);
+    t(`[R13] one line: a ${name} read outside that also writes inside`, bash(`${head} ${q}${script}${q}`), true);
+    t(`[R13] two lines: a ${name} read outside that also writes inside`, bash(`${head} ${q}\n${script}\n${q}`), false);
+  }
+  t('[R13] POSIX: a one-line read outside that also writes inside', { ...bash(`node -e "const fs=require('fs'); fs.writeFileSync('.tmp/a', fs.readFileSync('/etc/hostname'))"`), cwd: '/home/u/app' }, true);
+
+  // A read call beside a write the reading of writes may not know, or a read
+  // call given another meaning: the script is not provably a read.
+  const N = `require('fs').readFileSync('${A}')`;
+  const Y = `open('${A}').read()`;
+  for (const [name, command] of [
+    ['openSync w of a home path', `node -e "${N}; require('fs').openSync(process.env.USERPROFILE+'/x','w')"`],
+    ['openSync with a mode in a variable', `node -e "${N}; const m='w'; require('fs').openSync(require('os').homedir()+'/x', m)"`],
+    ['a key built from two strings', `node -e "${N}; require('fs')['r'+'mSync'](process.env.USERPROFILE+'/x')"`],
+    ['fs.rm of a read stream path', `node -e "const s=require('fs').createReadStream('${A}'); require('fs').rm(s.path,()=>{})"`],
+    ['a read call that is openSync under its name', `node -e "const o={readFileSync: require('fs').openSync}; o.readFileSync('${A}','w')"`],
+    ['openSync renamed readFileSync', `node -e "const {openSync: readFileSync} = require('fs'); readFileSync('${A}', 'w')"`],
+    ["readFileSync with { flag: 'w' }", `node -e "require('fs').readFileSync('${A}', {flag:'w'})"`],
+    ['readFileSync with a flag in a variable', `node -e "require('fs').readFileSync('${A}', {flag: f})"`],
+    ['readFileSync with a flag by shorthand', `node -e "const flag='w'; require('fs').readFileSync('${A}', {flag})"`],
+    ['readFileSync with spread options', `node -e "const o={flag:'w'}; require('fs').readFileSync('${A}', {...o})"`],
+    ['readFileSync with a computed key', `node -e "require('fs').readFileSync('${A}', {['fl'+'ag']: 'w'})"`],
+    ["createReadStream with { flags: 'w+' }", `node -e "require('fs').createReadStream('${A}', {flags:'w+'})"`],
+    ["readFileSync with 'w' as its second argument", `node -e "require('fs').readFileSync('${A}', 'w')"`],
+    ['a module this guard does not know', `node -e "${N}; require('fs-extra').emptyDirSync(process.env.USERPROFILE)"`],
+    ['require of a value', `node -e "${N}; require(process.argv[1]).x()" fs-extra`],
+    ['a dynamic import', `node -e "${N}; import('fs').then(f=>f.rmSync('x'))"`],
+    ['fs.cpSync', `node -e "${N}; require('fs').cpSync('a', process.env.USERPROFILE+'/x')"`],
+    ['fs.mkdtempSync', `node -e "${N}; require('fs').mkdtempSync(process.env.TEMP+'/x')"`],
+    ['openSync under another name', `node -e "${N}; const o=require('fs').openSync; o(process.env.USERPROFILE+'/x', 'w')"`],
+    ['readFileSync given another meaning by defineProperty', `node -e "Object.defineProperty(require('fs'),'readFileSync',{value:require('fs').rmSync}); ${N}"`],
+    ['Deno.Command', `deno eval "Deno.readTextFileSync('${A}'); new Deno.Command('cmd').outputSync()"`],
+    ['Deno.create of a home path', `deno eval "Deno.readTextFileSync('${A}'); Deno.create(Deno.env.get('HOME')+'/x')"`],
+    ['Deno.run', `deno eval "Deno.readTextFileSync('${A}'); Deno.run({cmd: ['x']})"`],
+    ["python open of a home path with 'w'", `python -c "print(${Y}); import os; open(os.path.expanduser('~/x'),'w')"`],
+    ['python open with a mode in a variable', `python -c "print(open('${A}', m).read())"`],
+    ["python open with 'r+'", `python -c "print(open('${A}', 'r+').read())"`],
+    ["python open with 'a'", `python -c "print(open('${A}', 'a').read())"`],
+    ['python open with an opener', `python -c "print(open('${A}', opener=o).read())"`],
+    ['python open with an opener by position', `python -c "print(open('${A}', 'r', -1, None, None, None, True, op).read())"`],
+    ['python open under another name', `python -c "from io import open as o; print(${Y}); o(os.path.expanduser('~/x'), 'w')"`],
+    ['python open given another meaning', `python -c "open = lambda p: None; print(${Y})"`],
+    ['pathlib replace() on a variable', `python -c "from pathlib import Path; print(${Y}); p=Path('.tmp/a'); p.replace(Path.home()/'x')"`],
+    ['replace imported from os', `python -c "from os import replace; print(${Y}); replace('.tmp/a', 'x')"`],
+    ['os under another name', `python -c "import os as o; print(${Y}); o.replace('.tmp/a', 'x')"`],
+    ['Path.touch', `python -c "from pathlib import Path; print(${Y}); Path.home().joinpath('x').touch()"`],
+    ['numpy', `python -c "import numpy as np; print(${Y}); np.save(os.path.expanduser('~/x'), [1])"`],
+    ['ZipFile with a mode in a variable', `python -c "import zipfile; print(${Y}); zipfile.ZipFile(os.path.expanduser('~/x.zip'), m)"`],
+    ['shelve.open', `python -c "import shelve; print(${Y}); shelve.open(os.path.expanduser('~/x'))"`],
+    ['globals()', `python -c "print(${Y}); globals()['__builtins__'].open('x','w')"`],
+    ['vars()', `python -c "print(${Y}); vars(os)['remove']('x')"`],
+    ['ctypes', `python -c "import ctypes; print(${Y})"`],
+    ['os.listdir with a second argument', `python -c "import os; print(os.listdir('${U}', 'x'))"`],
+    ['Path.touch of a path outside', `python -c "from pathlib import Path; print(Path('${A}').touch())"`],
+    ['a Path kept in a variable', `python -c "from pathlib import Path; p=Path('${A}'); print(p.read_text())"`],
+    ['perl open of a path from the command line', `perl -e 'open(my $f, "<", "${A}"); open(my $g, $ARGV[0]); print $g 1' '>x'`],
+    ['perl open through a pipe', `perl -e 'open(my $f, "<", "${A}"); open(G, "| cmd")'`],
+    ['perl code reference', `perl -e 'open(my $f, "<", "${A}"); my $c = \\&CORE::unlink; $c->("x")'`],
+    ['perl require of a file', `perl -e 'open(my $f, "<", "${A}"); require "x.pl"'`],
+    ['perl File::Temp', `perl -e 'open(my $f, "<", "${A}"); use File::Temp; tempdir()'`],
+    ["perl open with '+<'", `perl -e 'open(my $f, "+<", "${A}")'`],
+    ['perl open with a fourth argument', `perl -e 'open(my $f, "<", "${A}", "x")'`],
+    ['perl open under another name', `perl -e 'open(my $f, "<", "${A}"); *o = *CORE::open; o(G, ">x")'`],
+    ['perl tie to a database file', `perl -e 'open(my $f, "<", "${A}"); tie my %h, "SDBM_File", "x", 1, 0666'`],
+    ["ruby File.open of a home path with 'w'", `ruby -e 'File.read("${A}"); File.open(Dir.home+"/x", "w")'`],
+    ['ruby File.open with a mode in a variable', `ruby -e 'File.read("${A}"); File.open(Dir.home+"/x", mode)'`],
+    ['ruby open of a path from the command line', `ruby -e 'File.read("${A}"); open(ARGV[0])' '|cmd'`],
+    ["ruby File.read with mode: 'w'", `ruby -e 'File.read("${A}", mode: "w")'`],
+    ['ruby Pathname#delete', `ruby -e 'File.read("${A}"); Pathname.new(Dir.home).delete'`],
+    ['ruby FileUtils.mv', `ruby -e 'File.read("${A}"); FileUtils.mv("a", Dir.home)'`],
+    ['ruby $stdout.reopen', `ruby -e 'File.read("${A}"); $stdout.reopen(Dir.home+"/x", "w")'`],
+    ['ruby File.read given another meaning', `ruby -e 'def File.read(p) = 1; File.read("${A}")'`],
+    ['ruby File.method(:open)', `ruby -e 'File.read("${A}"); m = File.method(:open); m.(Dir.home+"/x", "w")'`],
+    ['code in a template literal', 'node -e "' + N + '; `${require(\'fs\')[\'r\'+\'mSync\'](process.env.USERPROFILE)}`"'],
+    ['code in a python f-string', `python -c "print(${Y}); f'{open(os.path.expanduser(\\'~/x\\'),\\'w\\')}'"`],
+    ['code in a ruby string', `ruby -e 'File.read("${A}"); "#{File.open(Dir.home+"/x","w")}"'`],
+    ['code in a perl string', `perl -e 'open(my $f, "<", "${A}"); print "@{[ open(my $g, ">", glob("~/x")) ]}"'`],
+    ['Object.values of a module', `node -e "${N}; Object.values(require('fs')).find(f=>f.name==='r'+'mSync')(process.env.USERPROFILE)"`],
+    ['a double-underscore name in node', `node -e "${N}; require('fs').__proto__"`],
+    ['operator.methodcaller', `python -c "import operator; print(${Y}); operator.methodcaller('re'+'mo'+'ve', 'x')(os)"`],
+    ['a double-underscore name in python', `python -c "print(${Y}); print(os.__class__)"`],
+    ['ruby method(...) called with .()', `ruby -e 'File.read("${A}"); m = File.method(:size); m.("x")'`],
+    ['perl can', `perl -e 'open(my $f, "<", "${A}"); my $c = main->can("un"."li"."nk"); $c->("x")'`],
+    ['perl s///ee', `perl -e 'open(my $f, "<", "${A}"); $_="x"; s/x/"un"."li"."nk(q{x})"/ee'`],
+    ['perl s{}{}ee', `perl -e 'open(my $f, "<", "${A}"); $_="x"; s{x}{"un"."li"."nk(q(x))"}ee'`],
+    ['perl code in a pattern', `perl -e 'open(my $f, "<", "${A}"); "x" =~ /(?{ print 1 })/'`],
+  ]) t(`[R13] a one-line read beside a hidden write is refused: ${name}`, bash(command), true);
+  for (const [name, command] of [
+    ['a string split', `node -e "console.log(require('fs').readFileSync('${A}', 'utf8').split(',').length)"`],
+    ['a string replace with two arguments', `python -c "print(${Y}.replace('a', 'b'))"`],
+    ['a perl substitution without /e', `perl -e 'open(my $f, "<", "${A}"); while (<$f>) { s/a/b/g; print }'`],
+    ['a ruby method chain', `ruby -e 'puts File.read("${A}").lines.size'`],
+  ]) t(`[R13] a one-line read that only reads is allowed: ${name}`, bash(command), false);
+
+  tWhy('[R13] the refusal names the path outside', bash(`python -c "import shutil; print(open('${A}').read())"`), `names "${A}", which is outside the project folder`);
+  tWhy('[R13] and what kept the script from passing as a read', bash(`python -c "import shutil; print(open('${A}').read())"`), 'it also holds `shutil`');
+  tWhy('[R13] a path outside a read call is named as such', bash(`node -e "console.log('${A}'.length)"`), 'that path is not the path of a plain read call');
+}
 
 console.log('path-guard: writing programs (bash)');
 t('cp into the project', bash('cp a.png public/media/a.png'), false);
@@ -1153,6 +1411,8 @@ hook('[R11] a one-line node -e that only reads /etc/hostname exits 0', payload(b
 hook('[R11] a one-line node -e that writes outside exits 2', payload(bash(`node -e "require('fs').writeFileSync('${OUT}/x.txt','a')"`)), 2, 'outside the project folder');
 hook('[R12] a one-line node -e that moves its folder out, then writes, exits 2', payload(bash("node -e \"process.chdir('C:/Users/User'); require('fs').writeFileSync('x.txt','a')\"")), 2, 'moved its working folder');
 hook('[R12] a one-line perl -e unlink without parentheses exits 2', payload(bash("perl -e 'unlink \"C:/Users/User/x.txt\"'")), 2, 'outside the project folder');
+hook('[R13] a one-line python -c that only reads with open() exits 0', payload(bash("python -c \"print(open('C:/Users/User/a.txt').read())\"")), 0);
+hook('[R13] a one-line writeFileSync.call outside exits 2', payload(bash("node -e \"require('fs').writeFileSync.call(null,'C:/Users/User/x.txt','a')\"")), 2, 'outside the project folder');
 
 // [R9] With CLAUDE_PROJECT_DIR set, as Claude Code always sets it, the payload's
 // cwd is only where a relative path starts. The project stays the one place a

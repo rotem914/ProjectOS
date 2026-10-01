@@ -468,6 +468,7 @@ Never lift a line from this file, and never read past sessions for one.
 Close with ONE emoji, LONG-ESTABLISHED: a newer one renders as a white square.
 Rule 12 does not apply here: there is no command to fence.
 In a cloud session you have already pushed the session's own branch (CLAUDE.md rule 22), so the line opens `Merge to live,` instead.
+A cloud session with no remote to push to gets no such line: Next says the commit is unpushed and goes when the session's machine does.
 
 ~~~
 ----

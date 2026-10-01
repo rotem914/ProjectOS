@@ -24,6 +24,8 @@
 // is the table's; an example block below a table is left alone; line endings
 // survive; a fresh install's templates move nothing and write nothing; a bad
 // option or a date that is not a day stops the run before anything is written;
+// a decimal value is rounded half to even by both twins, as PowerShell's [int]
+// does, and a value that is not a number is refused by both (2026-10-01);
 // a byte order mark, a UTF-16 file and broken UTF-8 are read the way .NET reads
 // them. Where PowerShell is present, the twins also run side by side on one
 // awkward project and must leave every file byte-identical (2026-10-01).
@@ -349,6 +351,50 @@ function caseStops(engine) {
   check(`${label}: and nothing is written`, read(hist) === histBefore && read(live) === original && read(pos(root, 'History-archive.md')) === null);
 }
 
+// --- A decimal value, read the way PowerShell's [int] reads it ----------------
+// 2026-10-01: the .ps1 ran -MaxKeepRows 3.7 as 4 while the Node twin refused
+// it. Both now read the value as a double and round it half to even, and both
+// still refuse what is not a number, or what rounds past the Int32 range.
+const DECIMALS = [['3.7', 4], ['2.5', 2], ['3.5', 4], ['35e-1', 4]];
+const NOT_NUMBERS = ['3.7abc', '1e2.5', '2147483647.5'];
+function decimalHistory(live) {
+  const deep = [];
+  for (let k = 1; k <= 10; k++) deep.push(`| ${day(k)} | Task ${k} | Changed ${k}. | Checked. | Pass | low | none yet | Undo ${k} by hand. |`);
+  write(live, ['# Fake - History', '', '## Appendix - deep rows', '',
+    '| Date | Task | What changed | What was checked | Result | Risk | Commit before | Rollback |', '|---|---|---|---|---|---|---|---|', ...deep]);
+}
+function caseDecimalValue(engine) {
+  const label = `${engine.id} decimal value`;
+  for (const [value, kept] of DECIMALS) {
+    const root = project(engine, `decimal ${value}`);
+    const live = pos(root, 'History.md');
+    decimalHistory(live);
+    const r = run(engine, root, { 'max-keep-rows': value });
+    check(`${label} ${value}: exits 0`, r.status === 0, r.out);
+    check(`${label} ${value}: is read as ${kept}`, r.out.includes(`keep newest ${kept} rows`), summary(r.out));
+    const left = ((read(live) || '').match(/\| Task \d+ \|/g) || []).length;
+    check(`${label} ${value}: the live file keeps ${kept} deep rows`, left === kept, `kept ${left}`);
+  }
+  for (const value of NOT_NUMBERS) {
+    const root = project(engine, `not a number ${value}`);
+    const live = pos(root, 'History.md');
+    decimalHistory(live);
+    const before = read(live);
+    const r = run(engine, root, { 'max-keep-rows': value });
+    check(`${label} ${value}: is refused with exit 1`, r.status === 1, r.out);
+    check(`${label} ${value}: and nothing is written`, read(live) === before && read(pos(root, 'History-archive.md')) === null);
+  }
+}
+// Side by side, the two twins read every value above the same way.
+function caseDecimalTwinsAgree() {
+  if (ENGINES.length < 2) return;
+  for (const value of [...DECIMALS.map(([v]) => v), ...NOT_NUMBERS]) {
+    const runs = ENGINES.map((e) => run(e, project(e, `decimal twins ${value}`), { 'dry-run': true, 'max-keep-rows': value }));
+    const read1 = runs.map((x) => (x.status === 0 ? (/keep newest (-?\d+) rows/.exec(x.out) || [])[1] : 'refused'));
+    check(`twins agree on --max-keep-rows ${value}`, runs[0].status === runs[1].status && read1[0] === read1[1], `${ENGINES[0].id}: ${read1[0]}, ${ENGINES[1].id}: ${read1[1]}`);
+  }
+}
+
 // --- Text the way .NET reads it ----------------------------------------------
 function caseEncodings(engine) {
   const label = `${engine.id} encodings`;
@@ -444,6 +490,7 @@ for (const engine of ENGINES) {
     caseHistory(engine);
     caseFreshTemplates(engine);
     caseStops(engine);
+    caseDecimalValue(engine);
     caseEncodings(engine);
   } catch (e) {
     failures++;
@@ -452,6 +499,7 @@ for (const engine of ENGINES) {
 }
 try {
   caseTwinsAgree();
+  caseDecimalTwinsAgree();
 } catch (e) {
   failures++;
   console.error(`FAIL the twins case threw: ${e.stack || e.message}`);

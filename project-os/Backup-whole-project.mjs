@@ -36,13 +36,13 @@
 // (.claude/settings.local.json and its .backup copy, which can hold keys and
 // this machine's paths), its worktree copies (.claude/worktrees, whole copies
 // of the repository), the .codex folder at any depth, atomic-write leftovers
-// (*.tmp, *.tmp.*), and the env files (.env*, .dev.vars*; the .env.example and
-// .dev.vars.example templates are kept), so a restore recreates them by hand
-// from the templates. The rest of .claude travels: the committed
-// settings.json, which can carry the team's guard wiring, and the project's
-// own commands, agents and skills. Common key files stay out too, by name
-// (KEY_FILE_PATTERNS below). A secret saved under any other name travels in
-// the ZIP, so keep those outside the project. Names compare without regard
+// (*.tmp, *.tmp.*), and the env files (.env*, .dev.vars*; a template such as
+// .env.example, .env.sample or .dev.vars.template is kept), so a restore
+// recreates them by hand from the templates. The rest of .claude travels: the
+// committed settings.json, which can carry the team's guard wiring, and the
+// project's own commands, agents and skills. Common key files stay out too, by
+// name (KEY_FILE_PATTERNS below). A secret saved under any other name travels
+// in the ZIP, so keep those outside the project. Names compare without regard
 // to case, as PowerShell's -contains and -like do in the twin.
 //
 // A git worktree or submodule is refused: its .git is a file pointing at
@@ -121,21 +121,43 @@ const CLAUDE_LOCAL_FILES = ['settings.local.json', 'settings.local.json.backup',
 const CLAUDE_LOCAL_DIRS = ['worktrees'];
 // Common key files stay on this machine too, by name (owner, 2026-10-01):
 // a certificate or private key store (.pem, .p12, .pfx, .jks, .keystore), an
-// SSH private key (id_rsa, id_dsa, id_ecdsa, id_ed25519) and a cloud
-// credentials file (credentials, client secret and service account JSON). A
-// name holding .example, .sample or .template is a template and travels, like
-// .env.example. Forced like the lists above, so editing the setup block cannot
-// widen it. A run names every key file it left out, since a restore has to
-// bring them back by hand. A secret saved under any other name still travels.
+// SSH private key (id_rsa, id_dsa, id_ecdsa, id_ed25519, and the same with a
+// suffix such as id_rsa_work, since ssh-keygen users name one key per host)
+// and a cloud credentials file (credentials, client secret and service
+// account JSON). An SSH public key (.pub) is not a secret and travels.
+// Forced like the lists above, so editing the setup block cannot widen it. A
+// run names every key file it left out, since a restore has to bring them
+// back by hand. A secret saved under any other name still travels.
 // A Keynote deck ends in .key, so that ending is deliberately not listed.
-const KEY_FILE_PATTERNS = ['*.pem', '*.p12', '*.pfx', '*.jks', '*.keystore', 'id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519', '*credentials*.json', 'client_secret*.json', '*service-account*.json', '*service_account*.json'];
-const KEY_FILE_TEMPLATES = ['*.example*', '*.sample*', '*.template*'];
+const KEY_FILE_PATTERNS = ['*.pem', '*.p12', '*.pfx', '*.jks', '*.keystore', 'id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519', 'id_rsa_*', 'id_dsa_*', 'id_ecdsa_*', 'id_ed25519_*', '*credentials*.json', 'client_secret*.json', '*service-account*.json', '*service_account*.json'];
+const PUBLIC_KEY_PATTERNS = ['*.pub'];
+// A template travels, key file and env file alike (2026-10-01): a name whose
+// last dot-separated part, or the part just before its ending, is one of
+// these words, so .env.sample, .env.production.example and
+// credentials.example.json all go in. The word has to be a whole part at the
+// end of the name. A test for the word anywhere let a real certificate such
+// as www.example.com.pem or tls.sample-site.pem into the ZIP unnamed.
+// Compared after lowering the name, exactly, as the twin does.
+const TEMPLATE_WORDS = ['example', 'sample', 'template'];
+const isTemplate = (name) => name.toLowerCase().split('.').slice(-2).some((part) => TEMPLATE_WORDS.includes(part));
 // The same wildcards PowerShell's -like reads: * is any run of characters,
 // everything else is itself, and case is ignored.
 const like = (pattern) => new RegExp('^' + pattern.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$', 'i');
 const KEY_FILE_RES = KEY_FILE_PATTERNS.map(like);
-const KEY_FILE_TEMPLATE_RES = KEY_FILE_TEMPLATES.map(like);
-const isKeyFile = (name) => !KEY_FILE_TEMPLATE_RES.some((re) => re.test(name)) && KEY_FILE_RES.some((re) => re.test(name));
+const PUBLIC_KEY_RES = PUBLIC_KEY_PATTERNS.map(like);
+const isKeyFile = (name) => !isTemplate(name) && !PUBLIC_KEY_RES.some((re) => re.test(name)) && KEY_FILE_RES.some((re) => re.test(name));
+
+// The key-file line prints in one order on every machine and in both twins:
+// ASCII letters compared without case, every other character by its UTF-16
+// code unit, and the exact name breaking a tie. localeCompare sorted by its
+// own collation and the twin's Sort-Object by the machine's culture, so the
+// same key files printed in two orders (2026-10-01). The sort key is the
+// folded name, a NUL that no file name holds, then the name itself, compared
+// by code unit as JavaScript's < does.
+const nameSortKey = (s) => `${s.replace(/[a-z]/g, (c) => c.toUpperCase())}\u0000${s}`;
+const sortNames = (list) => list.map((s) => [nameSortKey(s), s])
+  .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+  .map(([, s]) => s);
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const now = new Date();
@@ -542,8 +564,7 @@ function walk(dir) {
     if (lower.endsWith('.tmp') || lower.includes('.tmp.')) continue;
     // Env files and the common key files stay on this machine; the
     // templates travel. A secret under any other name still goes in.
-    if (lower.startsWith('.env') && lower !== '.env.example') continue;
-    if (lower.startsWith('.dev.vars') && lower !== '.dev.vars.example') continue;
+    if ((lower.startsWith('.env') || lower.startsWith('.dev.vars')) && !isTemplate(entry.name)) continue;
     if (isKeyFile(entry.name)) { keyFiles.push(relOf(entry.full)); continue; }
     files.push({ full: entry.full, rel: relOf(entry.full) });
   }
@@ -662,10 +683,10 @@ async function main() {
   console.log(`OK: ${zipPath}`);
   console.log(`Added ${added} file(s), all ${actual.size} verified present in the archive by name.`);
   if (pruned.length > 0) {
-    console.log(`Left out by name: ${[...pruned].sort((a, b) => a.localeCompare(b)).join(', ')}`);
+    console.log(`Left out by name: ${sortNames(pruned).join(', ')}`);
   }
   if (keyFiles.length > 0) {
-    console.log(`Left out as key files (bring them back by hand on a restore): ${[...keyFiles].sort((a, b) => a.localeCompare(b)).join(', ')}`);
+    console.log(`Left out as key files (bring them back by hand on a restore): ${sortNames(keyFiles).join(', ')}`);
   }
 }
 

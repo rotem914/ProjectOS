@@ -30,9 +30,13 @@
 //   --max-keep-backlog 40     (-MaxKeepBacklog)
 //   --max-keep-mistakes 30    (-MaxKeepMistakes)
 //   --max-keep-atlas 30       (-MaxKeepAtlas)
-// A value is a whole number, written "--name 5" or "--name=5". Any other
-// option, or a value that is not a whole number, stops the run with exit code 1
-// before anything is read, the way PowerShell refuses a bad parameter.
+// A value is a number, written "--name 5" or "--name=5". A decimal one is
+// turned into a whole number the way the .ps1's [int] parameters turn it:
+// read as a double, then rounded half to even, so 3.7 is 4, 2.5 is 2 and 3.5
+// is 4 (2026-10-01; until then this twin refused 3.7 while the .ps1 ran with
+// 4). Any other option, or a value that is not a number, stops the run with
+// exit code 1 before anything is read, the way PowerShell refuses a bad
+// parameter.
 //
 // What "the same bytes" takes, since the .ps1 reads and writes through .NET:
 //   - Files are read the way .NET's StreamReader reads them: a byte order mark
@@ -74,6 +78,25 @@ const PARAMS = {
 
 class RunError extends Error {}
 
+// A value as the .ps1's [int] parameters read it, or NaN when they refuse it.
+// PowerShell reads the text as a double (sign, digits, an optional fraction
+// and an optional exponent), then .NET's Convert.ToInt32 rounds it half to
+// even and refuses a result outside the Int32 range. Measured on Windows
+// PowerShell 5.1 through -File: 3.7 is 4, 2.5 is 2, 3.5 is 4, -2.5 is -2,
+// 1e2 is 100, .5 is 0, 2147483647.5 is refused, -2147483648.5 is
+// -2147483648, and 1e400, "3.7abc" and "1e2.5" are refused (2026-10-01).
+function toInt32(text) {
+  const t = String(text).trim();
+  if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return NaN;
+  const x = Number(t);
+  if (!Number.isFinite(x)) return NaN;
+  // Round half to even. x - floor(x) is exact for every finite double.
+  const f = Math.floor(x);
+  const d = x - f;
+  const n = (d > 0.5 || (d === 0.5 && f % 2 !== 0) ? f + 1 : f) + 0; // + 0 turns -0 into 0
+  return n < -2147483648 || n > 2147483647 ? NaN : n;
+}
+
 function parseArgs(argv) {
   const opts = { ...PARAMS, 'dry-run': false };
   for (let i = 0; i < argv.length; i++) {
@@ -88,11 +111,10 @@ function parseArgs(argv) {
       if (i + 1 >= argv.length) throw new RunError(`Missing an argument for parameter '--${m[1]}'. Specify a whole number and try again.`);
       value = argv[++i];
     }
-    // The .ps1 parameters are [int], so the same range applies.
-    const t = String(value).trim();
-    const n = /^[+-]?\d+$/.test(t) ? Number(t) : NaN;
-    if (!Number.isSafeInteger(n) || n < -2147483648 || n > 2147483647) {
-      throw new RunError(`Cannot process argument transformation on parameter '--${m[1]}'. Cannot convert value "${value}" to a whole number between -2147483648 and 2147483647.`);
+    // The .ps1 parameters are [int], so the same conversion and range apply.
+    const n = toInt32(value);
+    if (Number.isNaN(n)) {
+      throw new RunError(`Cannot process argument transformation on parameter '--${m[1]}'. Cannot convert value "${value}" to a number that rounds to a whole number between -2147483648 and 2147483647.`);
     }
     opts[m[1]] = n;
   }

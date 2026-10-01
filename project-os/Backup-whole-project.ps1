@@ -29,15 +29,15 @@
 # (.claude/settings.local.json and its .backup copy, which can hold keys and
 # this machine's paths), its worktree copies (.claude/worktrees, whole copies
 # of the repository), the .codex folder at any depth, atomic-write leftovers
-# (*.tmp, *.tmp.*), and the env files (.env*, .dev.vars*; the .env.example and
-# .dev.vars.example templates are kept), so a restore recreates them by hand
-# from the templates. The rest of .claude travels: the committed
-# settings.json, which can carry the team's guard wiring, and the project's
-# own commands, agents and skills (review 2026-09-28: leaving the whole folder
-# out restored a project with no guards, and the next commit could record the
-# team's settings file as deleted). Common key files stay out too, by name
-# ($KeyFilePatterns below). A secret saved under any other name travels in
-# the ZIP, so keep those outside the project.
+# (*.tmp, *.tmp.*), and the env files (.env*, .dev.vars*; a template such as
+# .env.example, .env.sample or .dev.vars.template is kept), so a restore
+# recreates them by hand from the templates. The rest of .claude travels: the
+# committed settings.json, which can carry the team's guard wiring, and the
+# project's own commands, agents and skills (review 2026-09-28: leaving the
+# whole folder out restored a project with no guards, and the next commit
+# could record the team's settings file as deleted). Common key files stay out
+# too, by name ($KeyFilePatterns below). A secret saved under any other name
+# travels in the ZIP, so keep those outside the project.
 #
 # A git worktree or submodule is refused: its .git is a file pointing at
 # history kept in another folder, so the ZIP would hold no history. Commit
@@ -91,19 +91,62 @@ $ClaudeLocalFiles = @('settings.local.json', 'settings.local.json.backup', 'sett
 $ClaudeLocalDirs  = @('worktrees')
 # Common key files stay on this machine too, by name (owner, 2026-10-01):
 # a certificate or private key store (.pem, .p12, .pfx, .jks, .keystore), an
-# SSH private key (id_rsa, id_dsa, id_ecdsa, id_ed25519) and a cloud
-# credentials file (credentials, client secret and service account JSON). A
-# name holding .example, .sample or .template is a template and travels, like
-# .env.example. Forced like the lists above, so editing the setup block cannot
-# widen it. A run names every key file it left out, since a restore has to
-# bring them back by hand. A secret saved under any other name still travels.
+# SSH private key (id_rsa, id_dsa, id_ecdsa, id_ed25519, and the same with a
+# suffix such as id_rsa_work, since ssh-keygen users name one key per host)
+# and a cloud credentials file (credentials, client secret and service
+# account JSON). An SSH public key (.pub) is not a secret and travels.
+# Forced like the lists above, so editing the setup block cannot widen it. A
+# run names every key file it left out, since a restore has to bring them
+# back by hand. A secret saved under any other name still travels.
 # A Keynote deck ends in .key, so that ending is deliberately not listed.
-$KeyFilePatterns = @('*.pem', '*.p12', '*.pfx', '*.jks', '*.keystore', 'id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519', '*credentials*.json', 'client_secret*.json', '*service-account*.json', '*service_account*.json')
-$KeyFileTemplates = @('*.example*', '*.sample*', '*.template*')
-function Test-KeyFile($name) {
-    foreach ($t in $KeyFileTemplates) { if ($name -like $t) { return $false } }
-    foreach ($p in $KeyFilePatterns)  { if ($name -like $p) { return $true } }
+$KeyFilePatterns = @('*.pem', '*.p12', '*.pfx', '*.jks', '*.keystore', 'id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519', 'id_rsa_*', 'id_dsa_*', 'id_ecdsa_*', 'id_ed25519_*', '*credentials*.json', 'client_secret*.json', '*service-account*.json', '*service_account*.json')
+$PublicKeyPatterns = @('*.pub')
+# A template travels, key file and env file alike (2026-10-01): a name whose
+# last dot-separated part, or the part just before its ending, is one of
+# these words, so .env.sample, .env.production.example and
+# credentials.example.json all go in. The word has to be a whole part at the
+# end of the name. A test for the word anywhere let a real certificate such
+# as www.example.com.pem or tls.sample-site.pem into the ZIP unnamed.
+# Compared after lowering the name, ordinally, so nothing about this
+# machine's culture can make the twins disagree.
+$TemplateWords = @('example', 'sample', 'template')
+function Test-Template([string]$name) {
+    $parts = $name.ToLowerInvariant().Split('.')
+    $last  = $parts.Count - 1
+    foreach ($i in @($last, ($last - 1))) {
+        if ($i -lt 0) { continue }
+        foreach ($w in $TemplateWords) {
+            if ([string]::Equals($parts[$i], $w, [StringComparison]::Ordinal)) { return $true }
+        }
+    }
     return $false
+}
+function Test-KeyFile([string]$name) {
+    if (Test-Template $name) { return $false }
+    foreach ($p in $PublicKeyPatterns) { if ($name -like $p) { return $false } }
+    foreach ($p in $KeyFilePatterns)   { if ($name -like $p) { return $true } }
+    return $false
+}
+
+# The key-file line prints in one order on every machine and in both twins:
+# ASCII letters compared without case, every other character by its UTF-16
+# code unit, and the exact name breaking a tie. Sort-Object sorted by this
+# machine's culture and the Node twin by its own collation, so the same key
+# files printed in two orders (2026-10-01). The sort key is the folded name, a
+# NUL that no file name holds, then the name itself, compared ordinally.
+function Get-NameSortKey([string]$s) {
+    $chars = $s.ToCharArray()
+    for ($i = 0; $i -lt $chars.Length; $i++) {
+        $c = [int]$chars[$i]
+        if ($c -ge 97 -and $c -le 122) { $chars[$i] = [char]($c - 32) }
+    }
+    (-join $chars) + [char]0 + $s
+}
+function Sort-Names([string[]]$names) {
+    $items = [string[]]@($names)
+    $keys  = [string[]]@($items | ForEach-Object { Get-NameSortKey $_ })
+    [Array]::Sort($keys, $items, [StringComparer]::Ordinal)
+    $items
 }
 
 $stamp   = Get-Date -Format 'yyyy-MM-dd_HH-mm'
@@ -148,8 +191,7 @@ function Get-BackupFiles($dir) {
         if ($entry.Name -like '*.tmp' -or $entry.Name -like '*.tmp.*') { continue }
         # Env files and the common key files stay on this machine; the
         # templates travel. A secret under any other name still goes in.
-        if ($entry.Name -like '.env*' -and $entry.Name -ne '.env.example') { continue }
-        if ($entry.Name -like '.dev.vars*' -and $entry.Name -ne '.dev.vars.example') { continue }
+        if ((($entry.Name -like '.env*') -or ($entry.Name -like '.dev.vars*')) -and -not (Test-Template $entry.Name)) { continue }
         if (Test-KeyFile $entry.Name) {
             $script:keyFiles += $entry.FullName.Substring($root.Length + 1).Replace('\', '/')
             continue
@@ -278,8 +320,8 @@ if (-not $moved -or -not (Test-Path -LiteralPath $zipPath)) {
 Write-Host "OK: $zipPath"
 Write-Host "Added $added file(s), all $($actual.Count) verified present in the archive by name."
 if ($script:pruned.Count -gt 0) {
-    Write-Host ("Left out by name: " + ((@($script:pruned) | Sort-Object) -join ', '))
+    Write-Host ("Left out by name: " + ((Sort-Names $script:pruned) -join ', '))
 }
 if ($script:keyFiles.Count -gt 0) {
-    Write-Host ("Left out as key files (bring them back by hand on a restore): " + ((@($script:keyFiles) | Sort-Object) -join ', '))
+    Write-Host ("Left out as key files (bring them back by hand on a restore): " + ((Sort-Names $script:keyFiles) -join ', '))
 }

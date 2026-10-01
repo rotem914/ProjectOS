@@ -21,9 +21,20 @@
 //      project-os/History.md: `Go commit` often lands the day after the work,
 //      carrying rows dated the day before.
 //   b. rows rated medium or high in project-os/History.md whose cells, past
-//      the date and the task, never mention a review result.
-//   c. placeholders like {{THIS}} left in CLAUDE.md and project-os/, except
-//      inside ``` fences and inside the setup tables the tool files under
+//      the date and the task, never name a review result: one sentence that
+//      mentions the review (or its findings) together with a result word,
+//      such as found, fixed, clean, none, no findings, passed, pre-existing,
+//      or a count of findings. "Review: not run" mentions the review and
+//      names no result, and a sentence saying the review was not run or was
+//      skipped makes the row a gap whatever else it says (2026-10-01).
+//   c. placeholders left in CLAUDE.md and project-os/: a name in capital
+//      letters between two opening and two closing curly braces, the shape
+//      the install's step 5 replaces. This comment describes it in words on
+//      purpose: step 5 says no such token may survive in any file under
+//      project-os/, so a token written here would have an install edit this
+//      machinery file, and `Go update kit` would stop updating it
+//      (2026-10-01). Not counted: one inside ``` fences, and one inside the
+//      setup tables the tool files under
 //      project-os/mcp/ keep on purpose until their server is wired (the
 //      "Setup facts" section, or a "Setup step" note and the table below it).
 //      A ~~~ fence is looked into: the kit's example replies sit in those, and
@@ -36,7 +47,9 @@
 //      BugAtlas, Mistakes and every archive) are left out: they describe the
 //      past and are never rewritten, so a stale name there is not a gap. Names
 //      the kit mentions before they exist (an archive, Plan.md, .mcp.json and
-//      the rest of MADE_LATER below) are left out too.
+//      the rest of MADE_LATER below) are left out too, and so is the root
+//      Installation.md, which the README lets the owner delete once the
+//      install is done (MAY_BE_DELETED below, 2026-10-01).
 //   e. long dashes (the em dash, the en dash, and in prose files a double
 //      hyphen standing between words) in lines added within the window and
 //      still in the file today. A line fixed since is not listed. In a prose
@@ -364,6 +377,25 @@ function checkA(log) {
 }
 
 // ---- b. medium or high rows with no review result ----------------------------
+// A review result is a sentence that mentions the review, or the findings it
+// reports, together with a result word. Read per sentence, so "Skipped the
+// slow test. Review: clean." is a result and "Review ran" in one cell beside
+// "fixed" in the rollback cell is not. Until 2026-10-01 any row holding the
+// word review passed, so "Review: not run" did too. "none yet" is how the
+// template says a commit is not made yet, so it is no result. A sentence that
+// says the review was not run or was skipped makes the row a gap, even beside
+// a result, since only a review that ran has one.
+const REVIEW_MENTION = /\breview|\bfindings?\b/i;
+const REVIEW_RESULT = /\b(found|fixed|clean|passed|pre-existing)\b|\bnone\b(?!\s+yet\b)|\bno\s+findings?\b|\b(\d+|zero)\s+findings?\b/i;
+const REVIEW_NOT_RUN = /\bnot\s+(yet\s+)?(been\s+)?run\b|\bnever\s+run\b|\b(did\s+not|didn't|wasn't)\s+run\b|\bskip(s|ped|ping)?\b/i;
+// The sentences of a cell: split after . ; ! or ? where a space or the end
+// follows, so a version number such as 1.2 stays whole.
+const sentencesOf = (cell) => cell.split(/[.;!?](?:\s+|$)/).filter((s) => s.trim());
+function namesReviewResult(cells) {
+  const said = cells.flatMap(sentencesOf).filter((s) => REVIEW_MENTION.test(s));
+  if (said.some((s) => REVIEW_NOT_RUN.test(s))) return false;
+  return said.some((s) => REVIEW_RESULT.test(s));
+}
 function checkB() {
   const rel = 'project-os/History.md';
   const lines = readLines(rel);
@@ -379,8 +411,7 @@ function checkB() {
       const cells = cellsOf(lines[j]);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(cells[0] || '')) continue;
       if (!/\b(medium|high)\b/i.test(cells[riskAt] || '')) continue;
-      const rest = cells.slice(2).join(' | ');
-      if (/\breview/i.test(rest) || /\bfindings?\b/i.test(rest)) continue;
+      if (namesReviewResult(cells.slice(2))) continue;
       gaps.push({ rel, line: j + 1, date: cells[0], task: cells[1] || '', risk: (cells[riskAt].match(/medium|high/i) || [''])[0].toLowerCase() });
     }
     i = j - 1;
@@ -465,6 +496,13 @@ const MADE_LATER = [
   /(^|\/)README\.md$/, // the human overview, when the project keeps one
   /(^|\/)(\.venv|venv|node_modules|backups|\.tmp|notes)(\/|$)/, // made on first use
 ];
+// Names the owner may delete on purpose, so their absence is not a gap either.
+// The README and Installation.md itself let the owner delete the install law
+// once the install is done, while CLAUDE.md and the rules keep naming it as
+// where a step came from; only the root file is meant, so a path such as
+// `project-os/Installation.md`, which never existed, is still a gap
+// (2026-10-01).
+const MAY_BE_DELETED = new Set(['Installation.md']);
 function refsIn(span) {
   const out = [];
   const tokens = span.trim().split(/\s+/);
@@ -513,7 +551,7 @@ function checkD() {
       if (fences[i]) return;
       for (const m of l.matchAll(/`([^`]+)`/g)) {
         for (const { ref, bare } of refsIn(m[1])) {
-          if (MADE_LATER.some((re) => re.test(ref))) continue;
+          if (MADE_LATER.some((re) => re.test(ref)) || MAY_BE_DELETED.has(ref)) continue;
           const wantDir = ref.endsWith('/');
           let found;
           if (bare) found = existsExact(ref) || (docDir && existsExact(`${docDir}/${ref}`)) || (names ??= allNames()).has(ref);

@@ -118,6 +118,20 @@ function history(scanDates) {
     `| ${D(10)} | Payment flow | card form | Test card paid. Review: 0 findings. | Pass | high | none yet | remove the flow |`,
     `| ${D(10)} | Copy fix | words | read it | Pass | low | none yet | put the words back |`,
     `| ${D(10)} | Code review doc update | the doc | read it | Pass | medium | none yet | revert the doc |`,
+    // 2026-10-01: a review named with no result, or said not to have run, is a gap.
+    `| ${D(10)} | Add a search box | box added | Typed a word, results shown. Review: not run. | Pass | medium | none yet | remove the box |`,
+    `| ${D(10)} | Export to CSV | export added | Exported a file, it opened. Review skipped in fast mode. | Pass | high | none yet | remove the export |`,
+    `| ${D(10)} | Settings page | page added | Opened it. Code review ran. | Pass | medium | none yet | remove the page |`,
+    `| ${D(10)} | Header fix | header | Looked at it. Review ran. | Pass | medium | none yet | put back the fixed header |`,
+    `| ${D(10)} | Footer links | links | Clicked each. Review: none yet. | Pass | medium | none yet | remove the links |`,
+    `| ${D(10)} | Search filters | filters | Filtered twice. Review: 1 found, 1 fixed. Review skipped for the second pass. | Pass | medium | none yet | remove the filters |`,
+    // A review result in the template's own words, and the other result words.
+    `| ${D(10)} | Show a failed-login error | the error line | Wrong password: message shown. Review: 2 found, 2 fixed, 1 pre-existing flagged. | Pass | medium | none yet | remove the error line |`,
+    `| ${D(10)} | Profile photo | upload | Uploaded one. Review: clean. | Pass | medium | none yet | remove the upload |`,
+    `| ${D(10)} | Dark mode | theme | Skipped the print view. Review: none. | Pass | medium | none yet | remove the theme |`,
+    `| ${D(10)} | Refunds | refund button | Refunded a test card. Code review passed. | Pass | high | none yet | remove the button |`,
+    `| ${D(10)} | Tooltip | tooltip | Hovered it. Review: no findings. | Pass | medium | none yet | remove the tooltip |`,
+    `| ${D(10)} | Tidy a label | label | Read it. Review: not run. | Pass | low | none yet | put the label back |`,
     `| ${D(10)} | Rename a doc | \`project-os/Old-name.md\` became Workflow, the {{TOKEN}} kept | read it | Pass | low | none yet | rename it back |`,
     '',
   ].join('\n');
@@ -285,8 +299,18 @@ try {
   t('b: a medium row with no review result is listed', b.includes('Add the login form'), b);
   t('b: "review" in the task name alone is not a review result', b.includes('Code review doc update'), b);
   t('b: a high row naming its review result is not listed', !b.includes('Payment flow'), b);
-  t('b: a low row is not listed', !b.includes('Copy fix') && !b.includes('Rename a doc'), b);
-  t('b: the count is 2, with file and line', countOf(b) === 2 && /project-os\/History\.md:\d+/.test(b), b);
+  t('b: a low row is not listed', !b.includes('Copy fix') && !b.includes('Rename a doc') && !b.includes('Tidy a label'), b);
+  // 2026-10-01: the word review alone used to pass a row.
+  t('b: "Review: not run" is a gap', b.includes('Add a search box'), b);
+  t('b: a review said to be skipped is a gap, on a high row too', b.includes('high  Export to CSV'), b);
+  t('b: a review mentioned with no result is a gap', b.includes('Settings page'), b);
+  t('b: a result word in another cell does not count', b.includes('Header fix'), b);
+  t('b: "none yet" is no result', b.includes('Footer links'), b);
+  t('b: a sentence saying the review was skipped makes the row a gap, even beside a result', b.includes('Search filters'), b);
+  t('b: the template\'s own wording is a result', !b.includes('Show a failed-login error'), b);
+  t('b: clean, none, passed and no findings are results', !b.includes('Profile photo') && !b.includes('Dark mode') && !b.includes('Refunds') && !b.includes('Tooltip'), b);
+  t('b: "skipped" in a sentence that does not mention the review does not count', !b.includes('Dark mode'), b);
+  t('b: the count is 8, with file and line', countOf(b) === 8 && /project-os\/History\.md:\d+/.test(b), b);
 
   // c. placeholders left
   const c = section(r.out, 'c');
@@ -383,6 +407,28 @@ try {
   r = audit(E);
   t('no commit yet: exits 0 with nothing found by a and e', r.code === 0 && countOf(section(r.out, 'a')) === 0 && countOf(section(r.out, 'e')) === 0, r.out);
 
+  // ---- project F: Installation.md deleted after the install --------------------
+  // 2026-10-01: the README lets the owner delete Installation.md once the
+  // install is done, while CLAUDE.md keeps naming it. Only the root file is
+  // meant: a path to it under project-os/ never existed, and is still a gap.
+  const F = project('project f', {
+    'CLAUDE.md': [
+      '# F',
+      '',
+      'The install law was `Installation.md`, deleted after the install.',
+      'The setup notes are in `Setup-notes.md`.',
+      'A wrong home for it: `project-os/Installation.md`.',
+      '',
+    ].join('\n'),
+    'project-os/Workflow.md': '# Workflow\n\nSee `./Installation.md` step 5.\n',
+  });
+  r = audit(F);
+  const df = section(r.out, 'd');
+  t('d: Installation.md, deleted after the install, is not listed', !df.split('\n').some((l) => / (\.\/)?Installation\.md$/.test(l)), df);
+  t('d: another missing root file is still listed', df.includes('CLAUDE.md:4  Setup-notes.md'), df);
+  t('d: Installation.md under project-os/ is still listed', df.includes('CLAUDE.md:5  project-os/Installation.md'), df);
+  t('d: the count is 2', countOf(df) === 2, df);
+
   // ---- arguments ------------------------------------------------------------------
   r = audit(B, ['--days', 'abc', '--weird']);
   t('a bad --days and an unknown argument are noted, and it still exits 0', r.code === 0 && r.out.includes('--days takes a whole number') && r.out.includes('unknown argument "--weird"') && r.out.includes('Window: the last 30 days'), r.out);
@@ -398,6 +444,28 @@ try {
   const before = git(A, ['status', '--porcelain', '--ignored']);
   audit(A);
   t('a run leaves the working tree exactly as it was', git(A, ['status', '--porcelain', '--ignored']) === before, before);
+
+  // ---- no install placeholder in the kit's own machinery ---------------------------
+  // Installation.md step 5 replaces every value in double curly braces in every
+  // file under project-os/. One left in a script, even in a comment, has the
+  // install edit that machinery file, and `Go update kit` then reads it as
+  // changed here and stops updating it. This script's header held one until
+  // 2026-10-01. Every file under project-os/ that is not a markdown template is
+  // read, and so are the two machinery docs copied as they are.
+  const TOKEN = /\{\{\s*[A-Za-z][\w-]*\s*\}\}/;
+  const machineryFiles = [];
+  const walkKit = (rel) => {
+    for (const e of fs.readdirSync(path.join(KIT, ...rel.split('/')), { withFileTypes: true })) {
+      const p = `${rel}/${e.name}`;
+      if (e.isDirectory()) walkKit(p);
+      else if (!/\.md$/i.test(e.name) || ['project-os/Hooks.md', 'project-os/Rule-reasons.md'].includes(p)) machineryFiles.push(p);
+    }
+  };
+  walkKit('project-os');
+  t('placeholders: the audit script and Compare-kit-files.mjs are among the files read', machineryFiles.includes('project-os/Audit-project-records.mjs') && machineryFiles.includes('project-os/Compare-kit-files.mjs'), machineryFiles.join('\n'));
+  const carrying = machineryFiles.filter((p) => TOKEN.test(fs.readFileSync(path.join(KIT, ...p.split('/')), 'utf8')));
+  t('placeholders: no machinery file under project-os/ carries a double-curly token', carrying.length === 0, carrying.join('\n'));
+  t('placeholders: the pattern would catch one', TOKEN.test(`// c. placeholders like {{THIS}} left`) && !TOKEN.test("if (m === '{{') return '{';"));
 } finally {
   fs.rmSync(TMP, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
