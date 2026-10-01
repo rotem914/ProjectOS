@@ -182,9 +182,10 @@ once-per-computer step and `Go update kit` also need `git`, to fetch the kit.
 thing, for anyone who prefers PowerShell. A machine without it loses nothing.
 
 **What the backup carries.** The `Go backup` ZIP holds the whole project, git
-history included. It leaves out the standard settings files that hold
-passwords and keys, but any other key file saved inside the project goes
-along, so keep those outside it.
+history included. It leaves out the env files and the common key files
+(certificates, SSH private keys, cloud credential files), and names each
+key file it left out. A secret saved under any other name goes along, so
+keep those outside the project.
 
 ## Which assistants this fits
 

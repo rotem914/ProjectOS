@@ -307,6 +307,13 @@ function caseWhatGoesIn(engine) {
     'src/.claude/notes.md': 'a .claude folder deeper down travels',
     '.env': 'SECRET=1', '.env.local': 'SECRET=2', '.env.example': 'SECRET=',
     '.dev.vars': 'KEY=1', '.dev.vars.example': 'KEY=',
+    // Common key files stay out by name (2026-10-01); templates and a
+    // Keynote deck (.key) travel, and so does an SSH public key.
+    'certs/server.pem': 'KEY', 'certs/app.P12': 'KEY', 'certs/app.pfx': 'KEY', 'android/release.keystore': 'KEY',
+    'android/upload.jks': 'KEY', 'ssh/id_rsa': 'KEY', 'ssh/id_ed25519': 'KEY', 'ssh/id_rsa.pub': 'public',
+    'credentials.json': '{}', 'config/gcp-credentials-prod.json': '{}', 'client_secret_123.json': '{}',
+    'my-service-account.json': '{}', 'service_account_key.json': '{}',
+    'credentials.example.json': '{}', 'certs/server.sample.pem': 'template', 'deck.key': 'a Keynote deck',
     'x.tmp': 'atomic-write leftover', 'y.tmp.1': 'atomic-write leftover',
     '.git/HEAD': 'ref: refs/heads/main\n',
     'bin/big.bin': BIG,
@@ -329,6 +336,7 @@ function caseWhatGoesIn(engine) {
   // settings file, its backup copy and the worktree copies stay behind.
   const expected = ['.claude/commands/go.md', '.claude/settings.json', '.dev.vars.example', '.env.example', '.git/HEAD', 'README.md',
     'bin/big.bin', 'bin/empty.txt', 'build/out.js', `project-os/${engine.file}`, 'src/.claude/notes.md', 'src/.tmp/keep.txt', 'src/a.txt',
+    'ssh/id_rsa.pub', 'credentials.example.json', 'certs/server.sample.pem', 'deck.key',
     UNICODE_NAME, 'src/features/backups/b.txt', 'src/target/keep.txt'].sort();
   check(`${label}: exactly the right files are in the ZIP`, z.names.join('|') === expected.join('|'),
     `got ${z.names.join(', ')}`);
@@ -345,6 +353,10 @@ function caseWhatGoesIn(engine) {
   for (const dir of ['.claude', 'build', 'src/.claude', 'src/.tmp', 'src/features/backups', 'src/target']) {
     check(`${label}: "${dir}" is not reported as left out`, !left.includes(dir), `Left out: ${left.join(', ')}`);
   }
+  const keys = ((/^Left out as key files \(bring them back by hand on a restore\): (.+?)\r?$/m.exec(r.stdout) || [])[1] || '').split(', ');
+  const wantKeys = ['android/release.keystore', 'android/upload.jks', 'certs/app.P12', 'certs/app.pfx', 'certs/server.pem', 'client_secret_123.json',
+    'config/gcp-credentials-prod.json', 'credentials.json', 'my-service-account.json', 'service_account_key.json', 'ssh/id_ed25519', 'ssh/id_rsa'];
+  check(`${label}: every key file left out is named on its own line`, [...keys].sort().join('|') === [...wantKeys].sort().join('|'), `got: ${keys.join(', ')}`);
   if (engine === NODE) {
     check(`${label}: every name is marked UTF-8 and uses forward slashes`, [...z.entries].every(([n, e]) => (e.flags & 0x0800) && !n.includes('\\')));
     check(`${label}: a small archive needs no ZIP64 records`, !z.zip64End && [...z.entries.values()].every((e) => !e.zip64 && !e.localZip64));
@@ -486,8 +498,27 @@ function caseSameExcludeList() {
   check(label, !onlyPs.length && !onlyJs.length, `only in the .ps1: ${onlyPs.join(', ') || 'none'}; only in the .mjs: ${onlyJs.join(', ') || 'none'}`);
 }
 
+// Both twins name the key files they leave out in a fixed list outside the
+// setup block; a name in one list and not the other lets a key into one
+// twin's ZIP only (2026-10-01).
+function caseSameKeyFiles() {
+  const read = (file) => fs.readFileSync(path.join(KIT_OS, file), 'utf8').replace(/\r\n/g, '\n');
+  const names = (text, re) => { const m = re.exec(text); return m ? [...m[1].matchAll(/'([^']*)'/g)].map((x) => x[1].toLowerCase()).sort() : null; };
+  const ps = read('Backup-whole-project.ps1');
+  const js = read('Backup-whole-project.mjs');
+  for (const [what, psRe, jsRe] of [
+    ['key files', /^\$KeyFilePatterns = @\(([^)]*)\)/m, /^const KEY_FILE_PATTERNS = \[([^\]]*)\]/m],
+    ['key file templates', /^\$KeyFileTemplates = @\(([^)]*)\)/m, /^const KEY_FILE_TEMPLATES = \[([^\]]*)\]/m],
+  ]) {
+    const a = names(ps, psRe);
+    const b = names(js, jsRe);
+    check(`twins: the same ${what} stay out`, !!a && !!b && a.length > 0 && a.join('|') === b.join('|'), `.ps1: ${a && a.join(', ')}; .mjs: ${b && b.join(', ')}`);
+  }
+}
+
 try {
   caseSameExcludeList();
+  caseSameKeyFiles();
   for (const engine of ENGINES) {
     caseWhatGoesIn(engine);
     caseWorktree(engine);

@@ -40,9 +40,10 @@
 // .dev.vars.example templates are kept), so a restore recreates them by hand
 // from the templates. The rest of .claude travels: the committed
 // settings.json, which can carry the team's guard wiring, and the project's
-// own commands, agents and skills. Any other key file inside the project
-// travels in the ZIP, so keep keys outside the project. Names compare without
-// regard to case, as PowerShell's -contains and -like do in the twin.
+// own commands, agents and skills. Common key files stay out too, by name
+// (KEY_FILE_PATTERNS below). A secret saved under any other name travels in
+// the ZIP, so keep those outside the project. Names compare without regard
+// to case, as PowerShell's -contains and -like do in the twin.
 //
 // A git worktree or submodule is refused: its .git is a file pointing at
 // history kept in another folder, so the ZIP would hold no history. Commit
@@ -118,6 +119,23 @@ const ROOT_ONLY_DIRS = ['backups', '.tmp'];
 // stay on this machine, and the worktrees folder is left out.
 const CLAUDE_LOCAL_FILES = ['settings.local.json', 'settings.local.json.backup', 'settings.json.backup'];
 const CLAUDE_LOCAL_DIRS = ['worktrees'];
+// Common key files stay on this machine too, by name (owner, 2026-10-01):
+// a certificate or private key store (.pem, .p12, .pfx, .jks, .keystore), an
+// SSH private key (id_rsa, id_dsa, id_ecdsa, id_ed25519) and a cloud
+// credentials file (credentials, client secret and service account JSON). A
+// name holding .example, .sample or .template is a template and travels, like
+// .env.example. Forced like the lists above, so editing the setup block cannot
+// widen it. A run names every key file it left out, since a restore has to
+// bring them back by hand. A secret saved under any other name still travels.
+// A Keynote deck ends in .key, so that ending is deliberately not listed.
+const KEY_FILE_PATTERNS = ['*.pem', '*.p12', '*.pfx', '*.jks', '*.keystore', 'id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519', '*credentials*.json', 'client_secret*.json', '*service-account*.json', '*service_account*.json'];
+const KEY_FILE_TEMPLATES = ['*.example*', '*.sample*', '*.template*'];
+// The same wildcards PowerShell's -like reads: * is any run of characters,
+// everything else is itself, and case is ignored.
+const like = (pattern) => new RegExp('^' + pattern.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$', 'i');
+const KEY_FILE_RES = KEY_FILE_PATTERNS.map(like);
+const KEY_FILE_TEMPLATE_RES = KEY_FILE_TEMPLATES.map(like);
+const isKeyFile = (name) => !KEY_FILE_TEMPLATE_RES.some((re) => re.test(name)) && KEY_FILE_RES.some((re) => re.test(name));
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const now = new Date();
@@ -474,6 +492,7 @@ function archiveNames(file) {
 
 const enumErrors = [];
 const pruned = [];
+const keyFiles = [];
 const files = [];
 const relOf = (full) => path.relative(root, full).split(path.sep).join('/');
 
@@ -521,9 +540,11 @@ function walk(dir) {
     if (inClaude && listHas(CLAUDE_LOCAL_FILES, entry.name)) continue;
     // Atomic-write leftovers.
     if (lower.endsWith('.tmp') || lower.includes('.tmp.')) continue;
-    // Real secret files stay on this machine; the templates travel.
+    // Env files and the common key files stay on this machine; the
+    // templates travel. A secret under any other name still goes in.
     if (lower.startsWith('.env') && lower !== '.env.example') continue;
     if (lower.startsWith('.dev.vars') && lower !== '.dev.vars.example') continue;
+    if (isKeyFile(entry.name)) { keyFiles.push(relOf(entry.full)); continue; }
     files.push({ full: entry.full, rel: relOf(entry.full) });
   }
 }
@@ -642,6 +663,9 @@ async function main() {
   console.log(`Added ${added} file(s), all ${actual.size} verified present in the archive by name.`);
   if (pruned.length > 0) {
     console.log(`Left out by name: ${[...pruned].sort((a, b) => a.localeCompare(b)).join(', ')}`);
+  }
+  if (keyFiles.length > 0) {
+    console.log(`Left out as key files (bring them back by hand on a restore): ${[...keyFiles].sort((a, b) => a.localeCompare(b)).join(', ')}`);
   }
 }
 

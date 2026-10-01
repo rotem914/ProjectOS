@@ -35,8 +35,9 @@
 # settings.json, which can carry the team's guard wiring, and the project's
 # own commands, agents and skills (review 2026-09-28: leaving the whole folder
 # out restored a project with no guards, and the next commit could record the
-# team's settings file as deleted). Any other key file inside the project
-# travels in the ZIP, so keep keys outside the project.
+# team's settings file as deleted). Common key files stay out too, by name
+# ($KeyFilePatterns below). A secret saved under any other name travels in
+# the ZIP, so keep those outside the project.
 #
 # A git worktree or submodule is refused: its .git is a file pointing at
 # history kept in another folder, so the ZIP would hold no history. Commit
@@ -88,6 +89,22 @@ $RootOnlyDirs = @('backups', '.tmp')
 # stay on this machine, and the worktrees folder is left out.
 $ClaudeLocalFiles = @('settings.local.json', 'settings.local.json.backup', 'settings.json.backup')
 $ClaudeLocalDirs  = @('worktrees')
+# Common key files stay on this machine too, by name (owner, 2026-10-01):
+# a certificate or private key store (.pem, .p12, .pfx, .jks, .keystore), an
+# SSH private key (id_rsa, id_dsa, id_ecdsa, id_ed25519) and a cloud
+# credentials file (credentials, client secret and service account JSON). A
+# name holding .example, .sample or .template is a template and travels, like
+# .env.example. Forced like the lists above, so editing the setup block cannot
+# widen it. A run names every key file it left out, since a restore has to
+# bring them back by hand. A secret saved under any other name still travels.
+# A Keynote deck ends in .key, so that ending is deliberately not listed.
+$KeyFilePatterns = @('*.pem', '*.p12', '*.pfx', '*.jks', '*.keystore', 'id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519', '*credentials*.json', 'client_secret*.json', '*service-account*.json', '*service_account*.json')
+$KeyFileTemplates = @('*.example*', '*.sample*', '*.template*')
+function Test-KeyFile($name) {
+    foreach ($t in $KeyFileTemplates) { if ($name -like $t) { return $false } }
+    foreach ($p in $KeyFilePatterns)  { if ($name -like $p) { return $true } }
+    return $false
+}
 
 $stamp   = Get-Date -Format 'yyyy-MM-dd_HH-mm'
 $backups = Join-Path $root 'backups'
@@ -97,6 +114,7 @@ New-Item -ItemType Directory -Force -Path $backups | Out-Null
 
 $script:enumErrors = @()
 $script:pruned     = @()
+$script:keyFiles   = @()
 
 function Get-BackupFiles($dir) {
     # Enumeration failure is FATAL, never silent. With -ErrorAction
@@ -128,9 +146,14 @@ function Get-BackupFiles($dir) {
         if ($inClaude -and ($ClaudeLocalFiles -contains $entry.Name)) { continue }
         # Atomic-write leftovers.
         if ($entry.Name -like '*.tmp' -or $entry.Name -like '*.tmp.*') { continue }
-        # Real secret files stay on this machine; the templates travel.
+        # Env files and the common key files stay on this machine; the
+        # templates travel. A secret under any other name still goes in.
         if ($entry.Name -like '.env*' -and $entry.Name -ne '.env.example') { continue }
         if ($entry.Name -like '.dev.vars*' -and $entry.Name -ne '.dev.vars.example') { continue }
+        if (Test-KeyFile $entry.Name) {
+            $script:keyFiles += $entry.FullName.Substring($root.Length + 1).Replace('\', '/')
+            continue
+        }
         $entry
     }
 }
@@ -256,4 +279,7 @@ Write-Host "OK: $zipPath"
 Write-Host "Added $added file(s), all $($actual.Count) verified present in the archive by name."
 if ($script:pruned.Count -gt 0) {
     Write-Host ("Left out by name: " + ((@($script:pruned) | Sort-Object) -join ', '))
+}
+if ($script:keyFiles.Count -gt 0) {
+    Write-Host ("Left out as key files (bring them back by hand on a restore): " + ((@($script:keyFiles) | Sort-Object) -join ', '))
 }

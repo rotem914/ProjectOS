@@ -739,8 +739,10 @@ disaster recovery that depends on no git host and no sync folder. Flow:
    (`.claude/settings.local.json` and its `.backup` copy) and worktree copies,
    the `.tmp/` scratch folder and the env files (`.env*`, `.dev.vars*`; the
    `.env.example` and `.dev.vars.example` templates travel). The committed
-   `.claude/settings.json` and the project's own commands travel. Any other key
-   file inside the project travels in the ZIP, so keep keys outside the project.
+   `.claude/settings.json` and the project's own commands travel. Common key
+   files stay out too, by name (certificates, SSH private keys, cloud
+   credential files), and the run names each one it left out. A secret saved
+   under any other name travels in the ZIP, so keep those outside the project.
    Every file name is checked in the finished archive (names, not content).
    The run either passes that check or fails and leaves no ZIP at all; there
    is no "mostly worked".
@@ -749,14 +751,17 @@ disaster recovery that depends on no git host and no sync folder. Flow:
 4. Tell the owner to move the ZIP to external storage; a backup on the same
    disk as the project is not one.
 
-**Env files never travel.** They are excluded on purpose, so a full restore
-recreates them by hand from the templates. Say so when reporting a restore,
-never as a surprise during one. The script recognises env files only: a key
-file kept anywhere else in the project goes into the ZIP with everything else.
+**Env files and common key files never travel.** They are excluded on
+purpose, so a full restore recreates the env files from their templates and
+brings back by hand the key files the backup run named. Say so when
+reporting a restore, never as a surprise during one. The script recognises
+them by name only: a secret saved under any other name goes into the ZIP
+with everything else.
 
 **Restore.** Unzip the chosen `backups/*.zip` into a NEW folder, never over the
 live tree; reinstall dependencies; recreate the env files from their
-templates; then switch the guards back on, since the personal settings file
+templates and bring back the key files the backup run named; then switch
+the guards back on, since the personal settings file
 never travels: run `node project-os/Install-project-hooks.mjs` in the restored
 folder (with `--shared` too if the project used it), or confirm the plugin's
 start line names the new folder, and run the two guard probes from
