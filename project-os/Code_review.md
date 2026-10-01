@@ -4,11 +4,6 @@ This file is the calibration for reviewing code in {{PROJECT_NAME}}: how severe 
 defect is *here*, which mistakes this project keeps making, and how findings get
 handed back. Load it before a review starts, not after it ends.
 
-The review itself reads the change and asks whether the code is correct, and that
-part is the same everywhere. The bar is not. A generic checklist finds generic
-bugs; the bugs that actually ship are the ones this project has shipped before,
-and this file is the only place that remembers them.
-
 ## When a review runs
 
 Every medium- or high-risk change gets one; `project-os/Workflow.md` carries the
@@ -16,7 +11,7 @@ risk scale and the trigger. A change to something shared gets the blast-radius
 trace below at any risk level, even when the rest of the review does not run.
 {{OWNER_NAME}} can also ask for a wider pass at any time.
 
-## Scope — pin it, never guess
+## Scope: pin it, never guess
 
 **Two different passes load this file, and their scopes are opposites.** Say
 which one you are running, before you run it.
@@ -29,22 +24,20 @@ result can be trusted.
 
 **The `Go code review` trigger: the WHOLE REPOSITORY, every time.** The entire
 codebase as it stands, including code that shipped long ago and code nobody has
-opened in months. Never a diff. Review tools default to reviewing a diff, and
-that default is wrong here: drive the review across the whole tree, in batches
-by area if the repository is large, and say which areas were covered.
+opened in months. Never a diff: not the unpushed range, not the working tree,
+not "the files this session touched". Review tools default to reviewing a diff,
+and that default is wrong here: drive the review across the whole tree, in
+batches by area if the repository is large, and say which areas were covered.
+Only a range the owner names in the same message narrows it.
 
-The reason is simple. The automatic pass above already covers every new change,
-so a second review of the same diff finds the same nothing. The owner-driven
-pass exists for everything the automatic ones never look at, which after a few
-months is most of the codebase. Only a range the owner names in the same
-message narrows it.
+**Triage every finding as introduced or pre-existing.** Report pre-existing
+ones, do not fix them, and do not let them block.
 
 ## Blast radius: where else can this change reach?
 
 A review answers two questions, not one. The first is whether the changed code is
 correct where it sits. The second is **where else the change can propagate**, and
-that is the one that gets skipped, because the diff never shows it. The diff shows
-what was edited. It does not show who was depending on it.
+that is the one that gets skipped, because the diff never shows it.
 
 Run this on every medium- or high-risk change, in either pass above.
 
@@ -52,11 +45,9 @@ Run this on every medium- or high-risk change, in either pass above.
 risk level.** Shared means a part shown on more than one screen, or a value the
 whole product reads: a component, a token, a spacing or type value, a schema, a
 helper. Touching one arms this trace even when the edit is one line and the risk
-was called low. The rating measures the size of the edit; this section measures
-its reach, and those are not the same question. When it fires, open the other
-places the thing appears, and report what moved there. On a low-risk task this
-trace runs alone, without the rest of the review, and its impact class goes in
-the History row.
+was called low. When it fires, open the other places the thing appears, and
+report what moved there. On a low-risk task this trace runs alone, without the
+rest of the review, and its impact class goes in the History row.
 
 Trace the consumers of everything the change touched:
 
@@ -87,8 +78,7 @@ there, and report any real side effect.
 
 When the impact is **unknown**: mark it **UNVERIFIED**, say what could not be
 determined, and name the smallest practical check that would settle it. An empty
-finding list is not proof of safety. It is the absence of evidence, and the two
-only look alike from outside.
+finding list is not proof of safety.
 
 **Inspecting a consumer is not fixing it.** Blast radius widens what the review
 reads, never what the change edits (rules 2 and 18). A consumer that turns out to
@@ -98,18 +88,13 @@ it, and it waits for the owner's verdict.
 ## A check that never ran is not a check that passed
 
 The other way a review comes back falsely clean. When a pass is split across
-several checks, some of them fail to run — they time out, they hit a limit, they
+several checks, some of them fail to run: they time out, they hit a limit, they
 die halfway. A finding whose checks all failed comes back with zero confirmations,
 and zero confirmations is not the same as refuted. It means nobody looked.
 
 So read the failure list before the results list. Score a no-vote as
 **unverified** and check it by hand. Say in the report that the pass ran degraded,
 and give the numbers.
-
-Why this one matters more than it sounds: the serious findings are the expensive
-ones to check, so they are exactly the ones that time out. A review that reports
-four findings while twenty-four went unexamined is worse than no review, because
-it sells confidence nobody earned.
 
 ## Severity bar
 
@@ -120,13 +105,12 @@ it sells confidence nobody earned.
 | 🟡 **nit** | Polish, a small accessibility gap on a non-critical control, cosmetic. Non-blocking. |
 
 Rewrite those three rows with defects this project has actually shipped, in place
-of the generic ones. A bar argued from real incidents survives a disagreement
-about a rating. A copied one does not.
+of the generic ones.
 
 ### The worst bug class here
 
 Name, in one sentence, the worst thing this project's code can do. Write it below.
-Then treat that class as **always blocking**, even when the screen looks fine —
+Then treat that class as **always blocking**, even when the screen looks fine:
 that is what calibrates the bar for everything else.
 
 > **Fill this in.** *Example to replace: "The worst thing this app's code can do
@@ -140,76 +124,75 @@ project actually is. For each one, the question to ask:
 - **Change impact / blast radius**: who else consumes what this change touched,
   and does it still hold there? (The section above; run it on medium+ risk, and
   on any change to something shared.)
-- **Data & persistence integrity** — can this change silently lose, corrupt, or
+- **Data & persistence integrity**: can this change silently lose, corrupt, or
   half-write stored data? Are writes atomic, and are reads validated and loud on
   failure?
-- **State & concurrency** — stale or lost updates, races, effects that loop,
+- **State & concurrency**: stale or lost updates, races, effects that loop,
   out-of-order writes.
-- **Contract & schema** — is a schema change backward-compatible? Full versus
+- **Contract & schema**: is a schema change backward-compatible? Full versus
   partial writes, version gates, validation of incoming data.
-- **Reference & identity** — dangling references after a rename or delete, stable
+- **Reference & identity**: dangling references after a rename or delete, stable
   ids versus editable ones, list keys.
-- **Input & values** — trimming, format, uniqueness, empty versus whitespace,
+- **Input & values**: trimming, format, uniqueness, empty versus whitespace,
   numeric edges, untrusted paths, escaping in generated output.
-- **Architecture & extension points** — is the single source of truth honored, or
+- **Architecture & extension points**: is the single source of truth honored, or
   did a second branch of the same logic appear somewhere else?
-- **UI invariants** — tokens over hard-coded values, language and direction,
+- **UI invariants**: tokens over hard-coded values, language and direction,
   theme, focus states, this project's own visual rules.
-- **Accessibility** — labels, roles that match real behavior, keyboard paths.
-- **Security & untrusted input** — injection, path traversal, secrets in the repo,
+- **Accessibility**: labels, roles that match real behavior, keyboard paths.
+- **Security & untrusted input**: injection, path traversal, secrets in the repo,
   authorization.
-- **Performance hot paths** — repeated queries in a loop, work on the keystroke or
+- **Performance hot paths**: repeated queries in a loop, work on the keystroke or
   render path, unbounded growth.
-- **Process & environment** — build and environment hazards, docs that drift out of
+- **Process & environment**: build and environment hazards, docs that drift out of
   sync with the code.
 
-## Always-check list — this project's own
+## Always-check list: this project's own
 
 **Empty on purpose.** This is the section that makes a review worth running, and
 it has to come from {{PROJECT_NAME}}, not from a catalogue. Seed it with the
 bootstrap recipe below, then let the calibration loop grow it.
 
 One row per finding-class: a short title, a severity, something concrete enough to
-search for, and a pointer to where the reasoning lives. Never restate the record —
+search for, and a pointer to where the reasoning lives. Never restate the record:
 point at it, because two copies of the same finding drift apart and then neither
 one is worth trusting. Group the rows under the dimensions above.
 
 ### Data & persistence integrity
 
-> *Example row — delete this one when you write your first real one.*
+> *Example row: delete this one when you write your first real one.*
 >
-> - 🔴 **Every write is atomic** — a save writes to a temporary file and then swaps
+> - 🔴 **Every write is atomic**: a save writes to a temporary file and then swaps
 >   it into place. A direct in-place write can leave a half-written file if the
 >   process dies mid-save. (Source: `project-os/Decisions.md`, the storage entry.)
 
-## Bootstrap recipe — fill the list from this project's own memory
+## Bootstrap recipe: fill the list from this project's own memory
 
 Run this once to seed the list, then re-run it whenever the code has moved enough
 that the rows feel stale. Sweep these five sources and dedupe what they give you
 into rows:
 
-1. **Past review documents** — the finding-classes that keep coming back.
+1. **Past review documents**: the finding-classes that keep coming back.
 2. **`project-os/BugAtlas.md`, then `project-os/History.md`**: the atlas rows
    first, then bugs that recurred or took several attempts to fix. The
    highest-value source by far; these are almost always blocking.
-3. **`project-os/Decisions.md`** — choices that imply a review rule. "All writes
+3. **`project-os/Decisions.md`**: choices that imply a review rule. "All writes
    are atomic", "schema changes are additive only", "one module owns this map".
-4. **The code** — the real save path, the validation boundary, the single-source-of-
+4. **The code**: the real save path, the validation boundary, the single-source-of-
    truth modules, and the sharp edges of whatever this project is built on. Cite
    `file:line`.
-5. **`CLAUDE.md`** — the invariants that are stated as must-not-break.
+5. **`CLAUDE.md`**: the invariants that are stated as must-not-break.
 
-## Output — findings as small, executable tasks
+## Output: findings as small, executable tasks
 
 A review's deliverable is a list someone can run top to bottom, not a wall of prose.
 Two layers:
 
-1. **The reply** — terse: counts by severity, the range reviewed, the headline
+1. **The reply** (terse): counts by severity, the range reviewed, the headline
    findings. `project-os/Conversations.md` has the reply rules. The automatic
-   pass after a task is the exception: its result goes in the History row, and
-   the reply names only the findings that wait for the owner's verdict
+   pass after a task is the exception: its result goes in the History row
    (`project-os/Workflow.md` step 12).
-2. **The task document** — one file per review, one section per severity (🔴
+2. **The task document**: one file per review, one section per severity (🔴
    first), one block per finding:
 
 ```
@@ -222,16 +205,13 @@ Status:  [ ] open · [x] done
 ```
 
 Keep each task small enough to execute on its own; split anything bigger into
-numbered sub-tasks. Write it for a reader with no context — {{OWNER_NAME}}, or a
-fresh assistant tomorrow — who should not have to re-read the change to act on it.
+numbered sub-tasks. Write it for a reader with no context ({{OWNER_NAME}}, or a
+fresh assistant tomorrow) who should not have to re-read the change to act on it.
 
 ## Exceptions: settled until their raise-again condition is met
 
 **Empty on purpose.** When {{OWNER_NAME}} rejects a finding, one line lands here,
 and no later review raises it again unless its raise-again condition comes true.
-Without this section every pass re-litigates the same argument, and the owner pays
-for it every time. Without the condition, a finding stays silenced forever, even
-after the code under it changes enough to make it a real bug.
 
 One row each: what not to flag · the reason in the owner's own words · where it
 was raised · raise again if: the change that would make it a real finding again
@@ -241,7 +221,8 @@ using it).
 ## Calibration loop
 
 After every review, take the verdict and fold it back into this file. The verdict
-vocabulary is **fix / drop / backlog**.
+vocabulary is **fix / drop / backlog**. A `backlog` verdict adds the finding to
+`project-os/Backlog.md`.
 
 - A **rejected** finding becomes an exception row above, with its raise-again
   condition, or the check gets dropped.
@@ -251,7 +232,7 @@ vocabulary is **fix / drop / backlog**.
   19; History keeps the fix row); this file keeps a one-line pointer to that atlas
   row.
 - A **pre-existing** problem the change only sits next to gets flagged and marked
-  pre-existing — never fixed silently, never blocking the change. A `backlog`
+  pre-existing, never fixed silently, never blocking the change. A `backlog`
   verdict sends it to `project-os/Backlog.md`.
 
 Keep this an index of checks, not a bug encyclopedia. The moment a row needs three

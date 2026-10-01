@@ -1,4 +1,4 @@
-# {{PROJECT_NAME}} — Mistakes
+# {{PROJECT_NAME}}: Mistakes
 
 The waiting room for the assistant's own mistakes.
 
@@ -39,7 +39,7 @@ Mistakes in HOW you worked:
   work continues. A mistake recorded later is a mistake recorded never.
 - **Read this file at task pickup.** It stays short on purpose, so there is no
   excuse to skip it.
-- **The two tails rotate, Open never does.** `project-os/Archive-old-rows.ps1` keeps
+- **The two tails rotate, Open never does.** `project-os/Archive-old-rows.mjs` (or its `.ps1` twin) keeps
   the newest 30 rows in Promoted and in Retired at `Go commit`, moving older
   ones verbatim into `Mistakes-archive.md`. That is a ceiling, not permission
   to let this file grow: the rule above still governs.
@@ -72,7 +72,7 @@ Mistakes in HOW you worked:
 ## Promoted
 
 Newest at the bottom: add a row under the table's last row.
-`project-os/Archive-old-rows.ps1` moves rows from the top.
+`project-os/Archive-old-rows.mjs` (or its `.ps1` twin) moves rows from the top.
 
 | Date | The slip | Where its rule now lives |
 |---|---|---|
@@ -80,14 +80,14 @@ Newest at the bottom: add a row under the table's last row.
 ## Retired
 
 Newest at the bottom: add a row under the table's last row.
-`project-os/Archive-old-rows.ps1` moves rows from the top.
+`project-os/Archive-old-rows.mjs` (or its `.ps1` twin) moves rows from the top.
 
 | Date | The slip | Why it left |
 |---|---|---|
 
 ---
 
-### Example rows — delete this block
+### Example rows: delete this block
 
 | Date | What I did | What was wanted | Home if it repeats | Times |
 |---|---|---|---|---|

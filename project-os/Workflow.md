@@ -1,8 +1,6 @@
-# Workflow — the mandatory process from idea to delivery
+# Workflow: the mandatory process from idea to delivery
 
 This file is the path every change in {{PROJECT_NAME}} walks: request, plan, implementation, QA, documentation, delivery.
-
-It exists so the same steps run on every task regardless of size, and so the reasoning behind a change outlives the memory of the person who made it.
 
 ## The universal rule
 
@@ -12,9 +10,7 @@ Task size does not unlock a shortcut. Adjusting one line of padding walks the sa
 
 What changes the steps is the owner: a shortcut they type, such as FAST MODE, or their own words for the task at hand (`CLAUDE.md`, "When two rules pull different ways", which also names the rules that bend to neither). `CLAUDE.md` says what each shortcut changes and for how long. Nothing you decide on your own does.
 
-What scales with size is the *depth of the writing*, not the number of steps. A tiny change gets a one-line plan and a one-line history row — but it still gets both.
-
-Why: the shortcuts are always taken on the small changes, and small changes are what break things quietly. A process you skip when it feels unnecessary is not a process.
+What scales with size is the *depth of the writing*, not the number of steps. A tiny change gets a one-line plan and a one-line history row, but it still gets both.
 
 ## Core flow
 
@@ -41,7 +37,7 @@ Name what kind of change this is: new feature · change to existing behavior · 
 
 The label does not let you skip steps. It tells you which context to read, which checks matter, and which docs will need updating.
 
-**Then state the risk level out loud, at pickup — low, medium, or high.**
+**Then state the risk level out loud, at pickup: low, medium, or high.**
 
 | Risk | What it covers |
 |---|---|
@@ -49,17 +45,17 @@ The label does not let you skip steps. It tells you which context to read, which
 | Medium | UI behavior, new interaction, multi-file change, anything that changes how you yourself work. |
 | High | Data, schema, auth, user records, irreversible actions, security, money. Anything that touches a project invariant (`CLAUDE.md` rule 11). |
 
-This table is the scale's one home — every other file points here.
+This table is the scale's one home: every other file points here.
 
-This is not commentary. Medium or high **arms the automatic review in step 12**, which reads this rating back. So a rating stated too low quietly cancels a review nobody notices is missing. {{OWNER_NAME}} can override your call, and the owner's rating wins.
+This is not commentary. Medium or high **arms the automatic review in step 12**, which reads this rating back. {{OWNER_NAME}} can override your call, and the owner's rating wins.
 
 ## 3. Read the context
 
 Before touching anything, read the files `CLAUDE.md` lists under "Read these before you work", as that list says. That list is the one home of the reading order, so this file does not repeat it.
 
-Read them before you form an opinion. An opinion formed without them is a guess that happens to be typed confidently.
+Read them before you form an opinion.
 
-Some files on that list are read on demand rather than every time, because most tasks never reach them: `project-os/Code_review.md`, for one, only when step 12 arms a review or a blast-radius trace. The list says when each one applies.
+Some files on that list are read on demand rather than every time. The list says when each one applies.
 
 If the task touches an area with its own notes in `project-os/Map.md`, follow that pointer too.
 
@@ -75,9 +71,7 @@ Before planning, settle:
 - what could break,
 - whether this touches UI, data, state, persistence, auth, security, or performance.
 
-If scope is ambiguous, ask before implementing — unless the owner already said to proceed on best effort.
-
-Why: most bad changes are not wrong code. They are correct code applied to the wrong surface.
+If scope is ambiguous, ask before implementing, unless the owner already said to proceed on best effort.
 
 ## 5. Settle a short plan
 
@@ -91,15 +85,16 @@ Before implementing, settle:
 - how this task would be undone by hand,
 - the docs that will need updating,
 - and, when the plan runs to more than one step, the model suggested for each
-  one with three words on why (CLAUDE.md rule 13). The most capable one for
-  design, architecture, anything irreversible and anything touching data; a
-  faster, cheaper one for mechanical rounds. It is a suggestion the owner picks
-  from, and a step with no obvious fit says so. This applies to a plan in chat
-  as much as to a saved `project-os/Plan.md`.
+  one with three words on why. EVERY plan with more than one step,
+  whatever it is for: a new project, a feature, a migration, a fix broken into
+  rounds, a plan written in chat and never saved to a file. The most capable
+  one for design, architecture, anything irreversible and anything touching
+  data; a faster, cheaper one for mechanical rounds, renames, copy and small
+  fixes. It is a suggestion the owner picks from, and a step with no obvious
+  fit says so. This applies to a plan in chat as much as to a saved
+  `project-os/Plan.md`.
 
 Practical and short. A three-line plan is fine. No plan is not.
-
-Why: a plan made before the code is a prediction, so it can turn out wrong and teach you something. A summary written afterwards only ever agrees with what you did.
 
 ### Check every "impossible" before it shapes the plan
 
@@ -130,14 +125,9 @@ tool is not routing around (`CLAUDE.md` rule 6); when a rule or guard forbids
 the act itself, it is forbidden through every tool (rules 12 and 22). In chat,
 run the check silently and give the result with its reason, not the steps.
 
-Why: a limit that is real for one route gets carried as if it held for every
-route. A design once called a line of client code unavoidable because browser
-walls forbade anything else; the walls were real for web pages, and a browser
-extension the project already had went straight through them.
-
 ## 6. Design the QA before you write code
 
-Decide how you will prove this works *before* it exists. Otherwise QA gets invented at the end to match whatever you happened to build, and it only ever confirms your own assumptions.
+Decide how you will prove this works *before* it exists.
 
 Derive the checks from the goal, the user flows, the states, the data, and the risks:
 
@@ -151,22 +141,18 @@ Derive the checks from the goal, the user flows, the states, the data, and the r
 - regression checks on whatever sits next to the change,
 - the done criteria.
 
-Checks only this task needs go in its History row (`CLAUDE.md` rule 7). Add to `project-os/QA.md` only a check that future tasks of the same kind should also run.
+Which checks go to `project-os/QA.md` and which only to this task's History row: that file's opening says.
 
 ## 7. Implement the smallest safe change
 
-Implement the requested change and nothing else.
+Implement the requested change and nothing else (`CLAUDE.md` rules 2 and 18).
 
 - One clear change at a time.
-- No side refactors.
-- No opportunistic cleanup.
 - No unrelated styling.
 - No hidden behavior changes.
 - No new public interfaces unless the task requires them.
 
 If the work reveals a bigger problem, write it down as a follow-up. Do not silently grow the scope to swallow it.
-
-Why: an unrequested change is a defect even when it is an improvement. The owner did not ask for it, does not expect it, and now has to find it.
 
 ## 8. Run self-checks
 
@@ -176,42 +162,27 @@ Record the exact checks and their results. You will need them in step 15.
 
 ## 9. Browser QA for anything visible
 
-Anything a person can see or click gets checked in a running app, not by reading the diff. Code reading proves the code says what you meant. It does not prove the screen does what you meant.
+Anything a person can see or click gets checked in a running app, not by reading the diff (`CLAUDE.md` rule 6).
 
-Drive {{DEV_URL}} with a browser-automation tool and check:
+Drive {{DEV_URL}} with a browser-automation tool and check what `project-os/QA.md` §2 lists.
 
-- the page loads,
-- the change is actually visible,
-- the console is clean, or existing errors are named,
-- the real interaction works,
-- hover, focus, active, disabled, loading, empty, and error states where they exist,
-- nothing nearby moved,
-- narrow and wide widths if the area is responsive,
-- persisted state survives a reload,
-- network responses are what the UI expects.
+### Verification gate: mandatory before "done"
 
-### Verification gate — mandatory before "done"
-
-Before calling any visible change done, complete one of these three paths and record which one, with each check and its result, in the History row. The reply names the path only for Path B or Path C.
+Before calling any visible change done, complete one of these three paths and record which one, with each check and its result, in the History row.
 
 - [ ] **Path A: the check ran.** You opened the app in a browser-automation tool, ran the flow, and inspected console, network, and DOM. List each concrete check and its result in the History row.
-- [ ] **Path B: no tool was available.** You searched the available tooling for a browser automation tool and found none. Follow `CLAUDE.md` rule 6 for what that means here: run Installation.md 6d when `.mcp.json` has no `chrome-devtools` entry, otherwise say why nothing loaded. Then state the search you ran and its empty result, and hand the owner a manual QA list.
+- [ ] **Path B: no tool was available.** You searched the available tooling for a browser automation tool and found none. Follow `CLAUDE.md` rule 6 for what that means here. Then state the search you ran and its empty result, and hand the owner a manual QA list.
 - [ ] **Path C: blocked.** A tool was there, and every route failed: the one you started with and every other browser tool you have. Name each tool you tried and the error it gave, hand the owner the manual QA list, and say in the reply's Known limitation line that the visual check did not run. An app that will not load is not Path C by itself: `CLAUDE.md` rule 16 says who starts the server, and only once that route is spent too is it Path C.
 
 A task claiming none of the three paths is not done.
 
-Two traps to avoid:
-
-- **Assuming the tool is missing.** Tools are often loaded on demand and invisible until you look for them. Search before you declare an absence.
-- **A tool that exists but was blocked.** That is not Path B. Name the blocked tool and try the other routes. Only when all of them fail is it Path C.
-
-Why the gate is written as a checkbox: "I verified it" is the single easiest sentence to write without having done it. Naming the path makes the claim falsifiable.
+The two traps on the way, a tool assumed missing and a blocked tool taken for a missing one, are `CLAUDE.md` rule 6.
 
 ## 10. Run the QA checklist
 
 Go through `project-os/QA.md`.
 
-If a check that future tasks of this kind will need is missing there, add it now. A check only this task needs goes in its History row, not here, so the checklist stays worth reading.
+If a check that future tasks of this kind will need is missing there, add it now.
 
 ## 11. Fix loop
 
@@ -222,33 +193,29 @@ When a check fails:
 3. Re-run the checks around it.
 4. Do not move on to documentation until the relevant checks are green, or the remaining limitation is written down plainly.
 
-Why step 3: a fix is itself a change. It earns the same suspicion as the change that caused the bug.
-
 ## 12. Automatic review on medium or high risk
 
-If step 2 rated this medium or high, the task is not finished. Run the review now — after your own QA is green, before any documentation.
+If step 2 rated this medium or high, the task is not finished. Run the review now, after your own QA is green, before any documentation.
 
 1. Load `project-os/Code_review.md` and review this task's own edits plus whatever they touched.
 2. Fix every finding this change introduced, at every severity. Re-verify each fix. If a fix affects something visible, re-verify it in the browser.
 3. Report pre-existing findings; never auto-fix them. They wait for the owner's verdict.
-4. Name the review result in the History row: found, fixed, pre-existing flagged. The reply names only the findings that wait for the owner's verdict; a clean result stays out of it.
+4. Name the review result in the History row: found, fixed, pre-existing flagged.
 
 A medium-risk task with no review result recorded is unfinished, not sloppily documented.
 
-Low-risk tasks skip this step, with one exception: a change that touches something shared (a component, token, spacing or type value, schema or helper used in more than one place) still loads `project-os/Code_review.md` and runs its blast-radius trace, whatever the rating. The trace only, not the rest of the review, and its impact class goes in the History row.
+Low-risk tasks skip this step, except a change that touches something shared: it still runs the blast-radius trace, as `project-os/Code_review.md` says.
 
 ## 13. Decisions checkpoint
 
 Before writing documentation, ask whether this work created or exposed a decision worth keeping.
 
 - Did you choose one approach over another?
-- Was there a real tradeoff — technical, product, UX, data, or process?
+- Was there a real tradeoff: technical, product, UX, data, or process?
 - Will it constrain future work?
 - Would someone later reasonably ask "why was this done this way?"
 
-If yes, add an entry to `project-os/Decisions.md`.
-
-The split: `project-os/Decisions.md` says *why* a direction was chosen. `project-os/History.md` says *what* changed.
+If yes, add an entry to `project-os/Decisions.md`. The split between the two files is `CLAUDE.md` rule 9.
 
 ## 14. Documentation routing
 
@@ -269,32 +236,19 @@ Update only what needs to change.
 | The hands-on testing method changed | `project-os/Visual_QA.md` |
 | An open item was added or closed | `project-os/Backlog.md` |
 | The owner corrected HOW you worked | `project-os/Mistakes.md`, or its rule's own file on a repeat |
+| Why a rule exists: its backstory, the incident behind it | `project-os/Rule-reasons.md` |
 | Anything was completed | `project-os/History.md` |
 
 Do not write the same rule in two files. If two files need it, one states it and the other points there.
 
-Why: two copies drift apart, and once they disagree neither one is worth trusting.
-
 ## 15. Add the History row
 
-Every completed change gets two rows in `project-os/History.md`: one in the scan table, one in the appendix. No exceptions, including docs-only changes.
+Every completed change gets two rows in `project-os/History.md`: one in the scan table, one in the appendix. No exceptions, including docs-only changes. That file shows the shape.
 
-The scan row names the behavior that changed, for a reader who was not there. The appendix row carries the date, the task, what changed and where, what was checked and its result, the risk level, how to undo this one task by hand, and, for medium or high risk, the review result.
+The scan row names the behavior that changed, for a reader who was not there. The appendix row carries the date, the task, what changed and where, what was checked and its result, the risk level, how to undo this one task by hand, and, for medium or high risk, the review result. The undo names which files, and what to put back.
 
-Keep it to an index entry, not an essay. Someone reading it later needs to know what happened and where to look, not to relive it.
+Keep it to an index entry, not an essay. The full story is in the commit diff.
 
 ## 16. Delivery summary
 
-Close with a short summary:
-
-- what changed,
-- a check only when it failed or could not run, the Path B or Path C outcome
-  from step 9, and review findings waiting for the owner's verdict. A passed
-  check and a clean review stay out of the reply; the History row holds the
-  full list,
-- what is still risky,
-- the next step. When the task left uncommitted work, the next step says so
-  and names the phrase: `Go commit`, whenever the owner wants. You never commit
-  before that phrase, and the push after it is theirs alone (CLAUDE.md rule 22).
-
-Format it per `project-os/Conversations.md`. Leave out implementation noise the owner did not ask for — a summary padded with steps that went fine buries the one line that did not.
+Close with the report-back `project-os/Conversations.md` prescribes; the History row holds the full list of checks. When the task left uncommitted work, the Next line says so, as `CLAUDE.md` rule 22 sets out.

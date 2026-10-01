@@ -90,7 +90,14 @@ for (const e of rootEntries) {
   }
 }
 
-const gb = (n) => `${(n / 1024 ** 3).toFixed(2)} GB`;
+// Each size in the unit that fits it: GB from 1 GB, MB from 1 MB, KB below.
+// Every size used to print in GB, so with --min 200mb a 300 MB file read as
+// "0.29 GB" (2026-10-01).
+function human(n) {
+  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(2)} GB`;
+  if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(2)} MB`;
+  return `${(n / 1024).toFixed(2)} KB`;
+}
 const rows = [];
 for (const [name, size] of topSizes) {
   if (size >= MIN && !bigFiles.some((f) => f.rel === name)) rows.push({ size, kind: kindOf(name), label: `${name}/` });
@@ -98,9 +105,9 @@ for (const [name, size] of topSizes) {
 for (const f of bigFiles) rows.push({ size: f.size, kind: kindOf(f.rel), label: f.rel });
 rows.sort((a, b) => b.size - a.size);
 
-console.log(`Find-heavy-files: ${ROOT}, everything over ${gb(MIN)}`);
+console.log(`Find-heavy-files: ${ROOT}, everything over ${human(MIN)}`);
 if (!rows.length) console.log('  nothing that big here');
-for (const r of rows) console.log(`  ${gb(r.size).padStart(10)}  ${r.kind.padEnd(11)} ${r.label}`);
+for (const r of rows) console.log(`  ${human(r.size).padStart(10)}  ${r.kind.padEnd(11)} ${r.label}`);
 if (unreadable.length) {
   console.log(`  could not read ${unreadable.length} folder(s), so their size is missing:`);
   for (const u of unreadable) console.log(`    ${u}`);

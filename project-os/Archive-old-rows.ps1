@@ -1,4 +1,5 @@
 # Archive-old-rows.ps1
+# Its Node twin is Archive-old-rows.mjs, and the two must always change together.
 # Why this exists: every ProjectOS file that accumulates forever is read at task
 # pickup, so each one needs a ceiling. This script gives all of them the same
 # mechanism: the live file keeps the newest material, everything older MOVES
@@ -57,16 +58,6 @@ $utf8 = [System.Text.UTF8Encoding]::new($false)   # UTF-8, no BOM
 # The kit installs into project-os/ at the repo root, so the root is one level up.
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path.TrimEnd([char]0x5C, [char]0x2F)
 $pos  = Join-Path $root 'project-os'
-
-# Project config: dot-source projectos.config.ps1 if present. A project can add
-# its own growing files through $ExtraHistoryTargets and $ExtraDocTargets
-# without editing this script.
-$ExtraHistoryTargets = @()
-$ExtraDocTargets     = @()
-$configPath = Join-Path $PSScriptRoot 'projectos.config.ps1'
-if (Test-Path -LiteralPath $configPath) { . $configPath }
-if ($null -eq $ExtraHistoryTargets) { $ExtraHistoryTargets = @() }
-if ($null -eq $ExtraDocTargets)     { $ExtraDocTargets     = @() }
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -214,7 +205,6 @@ if (Test-Path -LiteralPath $featuresDir) {
         }
     }
 }
-foreach ($extra in $ExtraHistoryTargets) { if ($null -ne $extra) { $historyTargets.Add($extra) | Out-Null } }
 
 $today  = (Get-Date).Date
 $cutoff = $today.AddMonths(-$MaxMonths)
@@ -534,7 +524,6 @@ if (Test-Path -LiteralPath $featuresDir) {
         }
     }
 }
-foreach ($extra in $ExtraDocTargets) { if ($null -ne $extra) { $docTargets.Add($extra) | Out-Null } }
 
 Write-Host ''
 Write-Host ("DOCS  keep newest: decisions {0} | backlog {1} | mistakes {2} | atlas {3}" -f $MaxKeepDecisions, $MaxKeepBacklog, $MaxKeepMistakes, $MaxKeepAtlas)

@@ -5,16 +5,8 @@ This one is about what the machine adds on top: reminders that repeat the core
 rules on every message, and two guards that block a known set of commands
 whether the assistant follows the rules or not.
 
-**Why it matters more than it looks.** A folder of markdown holds for a while
-and then drifts: the rules sit at the top of a long session, the work moves on,
-and by the fiftieth message they are quietly gone. Nothing announces it. The
-replies just start getting longer, the History row stops being written, and a
-change touches things nobody asked for. Hooks push back against that, because
-they fire on every message and every tool call, forever, at no cost to anyone's
-memory. A reminder makes drift less likely; it does not prove a rule was
-followed. Only the guards block anything, and only the commands they recognise.
-
-A project running the kit with no hooks is running on good intentions.
+A reminder makes drift less likely; it does not prove a rule was followed. Only
+the guards block anything, and only the commands they recognise.
 
 ## Two ways the hooks get wired
 
@@ -36,13 +28,14 @@ present, it prints the reminder text it finds in that file (as data, never
 run) and runs the two guards from the plugin's own copy, with the project root
 set to the project it found. No install step, no settings write, so no
 environment can refuse it. It announces itself once per session with a line
-beginning `[ProjectOS plugin] hooks active for`.
+beginning `[ProjectOS plugin] hooks active for`. In the kit's own repository
+the guards run the same way and only the reminders stay off, that line
+included, since the files there are the templates shipped to projects.
 
 **Per project: the installer.** Where the plugin is not on the machine, the
 assistant installs the hooks into the project's own settings, during the
 install, without being asked. Installing the hooks is a step of the setup, not
-a suggestion at the end of it. A kit whose enforcement layer waits for the
-owner to notice a request is a kit that runs unenforced.
+a suggestion at the end of it.
 
 **Settings wiring wins, when it is proven.** When both exist, the plugin
 stands down for a reminder whenever the project's own settings already carry
@@ -126,7 +119,7 @@ that file has it: the plugin steps aside only for the tools a matcher covers.
 A guard whose command does not lead to its file fails
 open and blocks nothing, so run the checks at the end of this file after wiring.
 
-## Level 1 — works in any project, needs no files
+## Level 1: works in any project, needs no files
 
 Paste this and you are done. It adds nothing to the repository, depends on no
 script, and needs no path edited: every name in it is relative to the project.
@@ -190,9 +183,8 @@ name what it removes.
 
 **Keep it under roughly 10 KB.** Longer output is not inlined; it is written to
 a file with a short preview, and the end of your text never reaches the model.
-A hook that says too much says nothing.
 
-## Level 2 — the guards, and they ship with the kit
+## Level 2: the guards, and they ship with the kit
 
 These are the difference between a rule that is repeated and a rule that is
 enforced before the action runs. They live in `project-os/guards/`, they install with the same
@@ -211,10 +203,8 @@ and `cd` moves, and blocks a write it recognises whose target it cannot prove
 is inside. A delete outside the folder counts as a write, and so does moving a
 file in from outside, since the move deletes it there; copy it in instead. It
 recognises the common ways a command writes; a command it does
-not recognise runs unchecked, so it is a safety net, not a wall. Without it,
-the rule about staying inside the project is a sentence in a document, and
-stray files land in the home folder and in the agent's own configuration. It
-runs on Windows, macOS and Linux; the one exception it allows on its own is the
+not recognise runs unchecked, so it is a safety net, not a wall. It runs on
+Windows, macOS and Linux; the one exception it allows on its own is the
 assistant's memory folder for a project, `~/.claude/projects/<project>/memory/`,
 markdown only. An `EXTRA_ROOTS` list at the top of
 the file, empty by default, is where the owner names any other folder writes
@@ -304,8 +294,9 @@ once rather than assuming.
   fake call breaks in one shell or another: Git Bash strips the quotes when
   the JSON is left bare, and PowerShell can put an invisible mark in front of
   what it pipes. Either way a working guard reads as switched off. Keep the
-  script path outside the quoted part: the folder guard refuses a script whose
-  own text names a path outside the project, the plugin folder included.
+  script path outside the quoted part: the quoted script then names nothing
+  outside the project, so no version of the folder guard, older copies
+  included, can mistake it for a write.
 
 If nothing happens, the usual causes are: the session was not restarted, the
 JSON has a syntax error, or the command form does not survive your shell.

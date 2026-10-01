@@ -1,4 +1,4 @@
-# {{PROJECT_NAME}} — History
+# {{PROJECT_NAME}}: History
 
 The change log. Every completed change lands here, in two layers: a scan table
 you always read, and an appendix you read only when digging.
@@ -17,7 +17,7 @@ did that change do, and how do I undo it".
 - Write the scan row for a reader who was not there. Name the behavior that
   changed, not the files.
 - Keep appendix rows short: about 900 characters at most, since
-  `project-os/Archive-old-rows.ps1` warns above that. The checks cell still lists
+  `project-os/Archive-old-rows.mjs` (or its `.ps1` twin) warns above that. The checks cell still lists
   every check (CLAUDE.md rule 7); it is the story that stays out. The full story is in the
   commit diff; a real decision belongs in `project-os/Decisions.md`.
 - **Commit before** names the last commit when the task started, followed by
@@ -27,7 +27,7 @@ did that change do, and how do I undo it".
 - **Rollback** says how to undo THIS task by hand: which files, and what to
   take out or put back. Never a whole-file checkout, a reset or a `git revert`
   while later rows touch the same files, since that undoes their work too.
-- Never rewrite or delete a past row. Correct a wrong one by adding a new row —
+- Never rewrite or delete a past row. Correct a wrong one by adding a new row:
   an edited log cannot be trusted about anything.
 - A `medium` or `high` risk row names its review result under **What was
   checked**: findings found, findings fixed, pre-existing ones flagged. A
@@ -35,15 +35,15 @@ did that change do, and how do I undo it".
 - Never write "tested" or "QA passed". Those phrases record nothing. Name the
   input, the screen, and what happened.
 - When this file gets long, move the oldest rows into an archive file beside it.
-  `project-os/Archive-old-rows.ps1` does exactly that at `Go commit`, and creates
-  the archive the first time it is needed. Rows move **verbatim** — never
+  `project-os/Archive-old-rows.mjs` (or its `.ps1` twin) does exactly that at `Go commit`, and creates
+  the archive the first time it is needed. Rows move **verbatim**, never
   rewritten, never summarized, never merged, because the detail you drop is the
   one the next reader needed. Never hand-move rows: the script dedups, so it is
   safe to run every time, and a hand-move breaks that guarantee.
 
 ## Risk scale
 
-The scale's one home is `project-os/Workflow.md` step 2 — read it there, so the
+The scale's one home is `project-os/Workflow.md` step 2: read it there, so the
 two files can never disagree. State the level at task pickup; the owner's
 override wins.
 
@@ -54,7 +54,7 @@ Newest at the bottom.
 | Date | Area | What changed |
 |---|---|---|
 
-## Appendix — deep rows
+## Appendix: deep rows
 
 Newest at the bottom, same as the scan log.
 
@@ -63,7 +63,7 @@ Newest at the bottom, same as the scan log.
 
 ---
 
-### Example rows — delete these
+### Example rows: delete these
 
 Scan:
 

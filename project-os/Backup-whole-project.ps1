@@ -1,4 +1,5 @@
 # Backup-whole-project.ps1
+# Its Node twin is Backup-whole-project.mjs, and the two must always change together.
 # Why this exists: one local, self-contained ZIP snapshot of the whole project,
 # for offline disaster recovery that does NOT depend on any git host or sync
 # folder. Code, docs, content and the full git history in one file you can put
@@ -50,14 +51,14 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path.TrimEnd('\')
 # Folders that never belong in a restore snapshot because they are regenerated
 # from what IS in it (dependencies, build output, caches). The walk prunes them
 # as it descends, so it never even enters them. A listed name is skipped at
-# EVERY depth, so a source folder such as src/build is skipped too; the
+# EVERY depth, so a source folder such as src/dist is skipped too; the
 # "Left out by name" line of each run shows what was. Add the stack's own;
 # remove a name only if this project commits that folder on purpose. Add '.git'
 # here for a smaller, working-tree-only ZIP without the history.
+# The install adds build, target or any other output folder only when this project's own tools write output there.
 $ExcludeDirs = @(
     'node_modules'   # npm / pnpm / yarn dependencies
     'dist'           # build output
-    'build'          # build output
     '.next'          # Next.js output and cache
     '.nuxt'          # Nuxt output and cache
     '.astro'         # Astro generated types and cache
@@ -66,7 +67,6 @@ $ExcludeDirs = @(
     'coverage'       # test coverage output
     '.venv'          # Python virtualenvs
     '__pycache__'    # Python bytecode
-    'target'         # Rust / Maven / Gradle output
 )
 # --- End of setup block -------------------------------------------------------
 

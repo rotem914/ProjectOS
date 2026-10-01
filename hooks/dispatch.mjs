@@ -19,8 +19,17 @@
 // there, even after its shell moves into one of them, instead of switching on
 // for whichever project the shell visited last. Only a run with no session
 // folder (a check run by hand) walks up from the payload's cwd, then from the
-// process cwd. No marker: exit 0, print nothing. The kit repository itself is
-// skipped too.
+// process cwd. No marker: exit 0, print nothing.
+//
+// THE KIT REPOSITORY ITSELF. Its project-os/ files are the templates shipped to
+// clients, so its reminders carry placeholders: there the session and prompt
+// hooks print no reminder. The guards run there exactly as in an installed
+// project. Until 2026-10-01 the kit repository was skipped whole, so a session
+// opened in it ran with no guard at all and `rm -rf src` went through. One
+// line still prints there at session start: the notice that the kit's guard
+// files differ from the plugin's copy, with the git pull. A session in the kit
+// runs the plugin folder's guards, which can be older than the ones being
+// edited in it, and without the notice nothing says so (2026-10-01).
 //
 // SETTINGS WIRING WINS. If the project's own .claude/settings.json or
 // .claude/settings.local.json already carries a hook this plugin would add
@@ -327,6 +336,15 @@ function staleGuards(root) {
   return out;
 }
 
+// The session line that names those guards, or null when none differs. One
+// helper, because the kit repository prints it too (see THE KIT REPOSITORY
+// ITSELF above).
+function staleLine(root) {
+  const differ = staleGuards(root);
+  if (!differ.length) return null;
+  return `[ProjectOS plugin] this project's ${differ.join(' and ')} differ from the plugin's copy, and where the plugin runs a guard it runs its own. If the project carries the newer kit, update this computer's copy: git -C "${norm(PLUGIN_ROOT)}" pull`;
+}
+
 function runGuard(name, rawPayload, root) {
   const script = path.join(PLUGIN_ROOT, 'project-os', 'guards', name);
   if (!fs.existsSync(script)) { log(`${name}: missing in plugin, allow`); return 0; }
@@ -357,8 +375,13 @@ try {
   const root = findRoot(payload);
   if (!root) {
     log('no marker, inert');
-  } else if (isKitItself(root)) {
-    log('kit repository itself, inert');
+  } else if ((mode === 'session' || mode === 'prompt') && isKitItself(root)) {
+    // No reminder here, while the guards below still run in the kit and the
+    // stale-guard notice still prints at session start (see THE KIT
+    // REPOSITORY ITSELF above).
+    log('kit repository itself, reminders off');
+    const stale = mode === 'session' ? staleLine(root) : null;
+    if (stale) process.stdout.write(`${stale}\n`);
   } else if (mode === 'session' || mode === 'prompt') {
     const marker = markerIn(root);
     const kit = readJson(marker);
@@ -369,10 +392,13 @@ try {
     if (mode === 'session') {
       const lines = kit ? runReminders(kit, root, 'SessionStart') : [];
       if (kit) lines.push(`[ProjectOS plugin] hooks active for ${norm(root)} from ${norm(PLUGIN_ROOT)} (kit ${pluginVersion()}); nothing to install in this project.`);
-      const differ = staleGuards(root);
-      if (differ.length) lines.push(`[ProjectOS plugin] this project's ${differ.join(' and ')} differ from the plugin's copy, and where the plugin runs a guard it runs its own. If the project carries the newer kit, update this computer's copy: git -C "${norm(PLUGIN_ROOT)}" pull`);
       else if (settingsRemind('SessionStart') || settingsRemind('UserPromptSubmit')) lines.push(`[ProjectOS plugin] ${markerName} is not valid JSON in ${norm(root)}: the reminders come only from this project's settings, in the wording they were installed with. Guards still active.`);
       else lines.push(`[ProjectOS plugin] reminders OFF for ${norm(root)}: ${markerName} is not valid JSON, so the plugin sends none. Guards still active.`);
+      // Its own line, after the others: when it sat in the chain above, a
+      // valid marker fell through to the "not valid JSON" lines, and a broken
+      // marker with a stale guard lost its "OFF" line (fixed 2026-10-01).
+      const stale = staleLine(root);
+      if (stale) lines.push(stale);
       process.stdout.write(lines.join('\n') + '\n');
     } else if (!kit) {
       log('marker is not valid JSON, reminders off');

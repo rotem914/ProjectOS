@@ -1,4 +1,4 @@
-# Installation — the complete install law
+# Installation: the complete install law
 
 This file is the whole procedure for installing ProjectOS into a project.
 The assistant reads it and follows it exactly, every step, in order.
@@ -27,6 +27,10 @@ the reading step.
    `https://github.com/rotem914/ProjectOS/archive/refs/heads/main.zip` into
    `.tmp/`, unpack it into `.tmp/projectos-kit`, copy from the one folder
    inside it, and write the commit as unknown.
+   The install needs only the newest files, so this clone is shallow. The
+   update path is different: `Go update kit` (CLAUDE.md) compares against the
+   kit as it was at the commit a project came from, which needs the kit's full
+   history, so that shortcut clones without `--depth`.
 2. Copy from the fetch to the project root, never over an existing file:
    - When there is no `project-os/` yet: exactly three items, `CLAUDE.md` (as
      `CLAUDE-kit.md` when the project already has a `CLAUDE.md`),
@@ -38,8 +42,8 @@ the reading step.
 
    Never copy the kit's `README.md`, `LICENSE`, `.gitignore`, `.gitattributes`,
    `tests/`, `hooks/` or `.claude-plugin/`. They belong to the kit repository, and the
-   last two together make the plugin take this project for the kit itself and
-   stay silent here.
+   last two together make the plugin take this project for the kit itself:
+   its guards would still run here, but its reminders would stay off.
 3. Run the fetch's fast suite once, from the project root:
 
    ```
@@ -71,16 +75,21 @@ Read CLAUDE.md and every markdown file in project-os/, its mcp/ subfolder
 included, in full, before changing anything. A step below will tell you to
 adapt files; you cannot adapt what you have not read.
 
-Two exceptions, because reading is the biggest bill of the install and these
+Three exceptions, because reading is the biggest bill of the install and these
 files are never adapted by hand:
 
-- **The scripts are read by their header only.** `Archive-old-rows.ps1`, `Backup-whole-project.ps1`,
-  `Find-heavy-files.mjs`, `Install-project-hooks.mjs`, the two files under `project-os/guards/`
+- **The scripts are read by their header only.** `Archive-old-rows.mjs` and
+  `Backup-whole-project.mjs` with their PowerShell twins (`.ps1`),
+  `Find-heavy-files.mjs`, `Audit-project-records.mjs`, `Compare-kit-files.mjs`,
+  `Install-project-hooks.mjs`, the two files under `project-os/guards/`
   and `hooks/dispatch.mjs` at the kit root (part of the plugin, never copied
   into a project) open with a
   comment that says what they do and how they are wired; read that and stop.
   Their internals are not the install's business, and together they are most
   of the folder by size.
+- **`project-os/Rule-reasons.md` is not read.** It holds why the rules exist,
+  and is opened only when a rule is questioned or changed; nothing in it is
+  adapted at install beyond step 5's placeholders.
 - **A tool file is read through its setup section only.** Each rules file
   under `project-os/mcp/` is read now down to the end of its section 0, the
   setup facts; the rest is read before that server's first call, as CLAUDE.md
@@ -93,8 +102,9 @@ If the kit's entry file came in as CLAUDE-kit.md beside an existing CLAUDE.md,
 fold it into the existing file, then delete CLAUDE-kit.md. The one exception
 is a project installed before (step 2b tells): its CLAUDE.md already carries
 the kit's rules, so a CLAUDE-kit.md there is not merged. Leave it beside
-CLAUDE.md and name it in Waiting on you, since folding a newer kit into an
-installed project is the update that is not written yet.
+CLAUDE.md and name it in Waiting on you: folding a newer kit into an installed
+project is the `Go update kit` shortcut (CLAUDE.md), not the install, and that
+shortcut fetches its own copy of the kit, so this one goes on the owner's word.
 
 The merge law:
 
@@ -188,9 +198,10 @@ step still runs, and a step that finds its work done says so and moves on:
 nothing already filled is asked again, except the reply language, which step 4
 always asks with the project's current one offered first; nothing is copied
 over; and the History rows go at the bottom (step 7). Bringing an
-installed project up to a newer kit is not a written step yet. Say so in the
-report in one line, and never improvise it by copying the new kit over the
-old.
+installed project up to a newer kit is not a re-run: it is the
+`Go update kit` shortcut in CLAUDE.md. Say so in the report in one line,
+adding the kit's link when this project's CLAUDE.md does not carry that
+shortcut yet, and never improvise it by copying the new kit over the old.
 
 **What does your own memory already say about this project?** Rule 12 keeps
 rules out of the assistant's private memory, and that folder is invisible to
@@ -211,9 +222,10 @@ On a real install this step produced three separate questions about the
 assistant's own notes, which the owner had no way to judge one by one.
 
 **Is Node available?** Everything that enforces the rules runs through it: the
-hooks themselves and their installer. So does the separate Chrome step 6d
-registers for browser checks, which needs Node 20.19 or newer (22.12 or newer
-on the 22 line), so note the version. Check:
+hooks themselves and their installer. So do the upkeep scripts (the archive
+at `Go commit`, the backup, the audit and the kit update), and the separate
+Chrome step 6d registers for browser checks, which needs Node 20.19 or newer
+(22.12 or newer on the 22 line), so note the version. Check:
 
 ```
 node --version
@@ -221,7 +233,9 @@ node --version
 
 No Node means the enforcement layer cannot run, whatever this project is
 written in. That is a Problems line in the report, and the owner needs to know
-the rules are documents only until it is installed.
+the rules are documents only until it is installed, and that until then the
+growing files are archived and `Go backup` runs only through the PowerShell
+twins, where PowerShell exists.
 
 **Is this folder a git repository yet?** A brand-new project can be a blank
 folder with nothing in it but the kit. Check:
@@ -413,7 +427,9 @@ check command from pile one (every one of them, in a workspace). Pile two asks
 one question about it: commit straight to the current branch, or give each task
 its own branch. The answer fills the bracket in CLAUDE.md's Go commit step 6.
 Rule 22 settles the rest: the assistant commits, only on the owner's
-`Go commit`, and the owner pushes. Never ask which checks gate a commit, or
+`Go commit`, and the owner pushes; in a cloud session the assistant pushes
+the session's own branch, never main, and the owner merges it. Neither is a
+question. Never ask which checks gate a commit, or
 what is never staged. If the
 owner says they prefer to commit themselves, that is a clash for the report,
 not a line written into the flow.
@@ -486,9 +502,15 @@ Do the setup steps the files carry, then clear the scaffolding:
   one thing to fill (step 4): the branch the owner chose. It runs the check
   command step 5 wrote in, and who commits and who pushes are never rewritten
   (rule 22);
-- check the exclusion list at the top of project-os/Backup-whole-project.ps1 against this
-  stack: every regenerable folder (dependencies, build output, caches) is
-  named there, and nothing this project commits on purpose is. Then add
+- check the exclusion list at the top of project-os/Backup-whole-project.mjs
+  against this stack, and make the same change to the list in its PowerShell
+  twin, `Backup-whole-project.ps1`, so the two always make the same ZIP: every
+  dependency folder and cache this stack regenerates is named there, and
+  nothing this project commits on purpose is. Folders named `build` or
+  `target` travel in the ZIP by default, since in some projects they hold
+  source; add one of them, or any other output folder, only when this
+  project's own tools write their output there (its build config or scripts
+  say so). Then add
   `/backups/`, `/.tmp/` and `/.claude/*.backup` to the project's `.gitignore`
   in the same edit, creating the file if there is none and skipping a line
   already there, so neither a snapshot, scratch output nor the hook
@@ -704,36 +726,57 @@ in place, and never leave the hooks uninstalled merely because nobody asked.
 
 ## 6c. Check the archive and backup scripts run here
 
-One script ships in `project-os/` and keeps the growing docs from becoming a
-tax on every task: `Archive-old-rows.ps1`, with three engines inside it (History rows and
-the scan log; Decisions entries; the Backlog Done, Mistakes tail and BugAtlas
-tables). It MOVES old material into a sibling `*-archive.md`, never rewrites
-it, and it is wired into `Go commit`.
+Two scripts in `project-os/` do the upkeep. Each is a Node script, the one
+`Go commit` and `Go backup` run, with a PowerShell twin beside it that does the
+same for anyone who prefers it.
 
-It is PowerShell, so it runs on Windows out of the box and needs PowerShell
-Core (`pwsh`) anywhere else. At install:
+The first, `Archive-old-rows.mjs`, keeps the growing docs from becoming a tax
+on every task, with three engines inside it (History rows and the scan log;
+Decisions entries; the Backlog Done, Mistakes tail and BugAtlas tables). It
+MOVES old material into a sibling `*-archive.md`, never rewrites it, and it is
+wired into `Go commit`. At install:
 
-- Run it once with `-DryRun`. A fresh repo has nothing to move, so the expected
-  output is "nothing to move" per file, and a target named "(missing - skipped)"
-  only for a file this project does not have. That is the proof the paths
-  resolved; a run that moves nothing writes nothing.
-- If PowerShell is not available on this machine, say so in the report's
-  Problems section and tell the owner plainly what it costs: the docs still
-  work, they simply grow forever until someone archives by hand.
+- Run its preview once:
+
+  ```
+  node project-os/Archive-old-rows.mjs --dry-run
+  ```
+
+  A fresh repo has nothing to move, so the expected output says so for every
+  file, and marks a file missing and skipped only when this project does not
+  have it. That is the proof the paths resolved; a run that moves nothing
+  writes nothing.
+- Where PowerShell exists on this machine, run the twin's preview too and
+  confirm it says the same:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File project-os/Archive-old-rows.ps1 -DryRun`
+  on Windows, or `pwsh -NoProfile -File project-os/Archive-old-rows.ps1 -DryRun`
+  on macOS or Linux. Where it does not exist, skip the twin: nothing depends
+  on it, so it is not a Problem, and the install row says so in a word.
+- Without Node the Node script cannot run, and step 2b's Problems line
+  already says so.
 - Never edit an entry to make a file smaller. Shrinking is that script's job,
   and its alone.
 
-The second script, `Backup-whole-project.ps1`, makes the `Go backup` snapshot. Run it once,
-after step 6 has settled its exclusion list and gitignored `backups/`. It
-prints the ZIP path and a count of files whose names were checked in the
+The second, `Backup-whole-project.mjs`, makes the `Go backup` snapshot. Run it
+once, after step 6 has settled its exclusion list and gitignored `backups/`:
+
+```
+node project-os/Backup-whole-project.mjs
+```
+
+It prints the ZIP path and a count of files whose names were checked in the
 archive, or fails and leaves nothing; either is the proof. If it prints a
 "Left out by name" line, read it: a source folder on it means the exclusion
 list names something this project keeps on purpose, so fix the list and run
 again. A ZIP that took minutes or weighs hundreds of megabytes means a
-regenerable folder is missing from the exclusion list: fix the list, delete
-the ZIP, run again. In a git worktree or submodule it refuses by design, since
-a ZIP there would hold no history; say so in the report. The ZIP it leaves is
-the project's first snapshot; tell the owner where it is in the report.
+regenerable folder is missing from the exclusion list: fix the list, on
+step 6's terms for an output folder such as `build` or `target`, delete the
+ZIP, run again. Every fix to the list goes into the twin's list too. In a git
+worktree or submodule it refuses by design, since a ZIP there would hold no
+history; say so in the report. The ZIP it leaves is the project's first
+snapshot; tell the owner where it is in the report. Its twin is not run at
+install, even where PowerShell exists: one snapshot is enough, and step 6
+gave both scripts the same list.
 
 ## 6d. Give the project a browser
 
@@ -846,9 +889,22 @@ the files came from, so a later update can tell which kit this project runs:
 the one step 0 noted, on a re-run the one the earlier install row names, or
 unknown when the files were copied in by hand.
 
+Write the same commit into `project-os/Kit-version.json`, the file
+`Go update kit` (CLAUDE.md) reads to know which kit this project starts from.
+The date is the day the files came in: today, or on a re-run the earlier
+install row's date.
+
+```
+{"commit": "<the short commit>", "date": "YYYY-MM-DD"}
+```
+
+When the commit is unknown, do not write the file, and say so in the report:
+a later `Go update kit` then starts without knowing which kit this project
+came from. On a re-run, a file already there stays as it is.
+
 The row's shape, since the file asks for about 900 characters: the kit
 commit, the files placed, the questions answered in a word each, and every
-check with its result in two or three words (kit tests 47 passed, Node 24,
+check with its result in two or three words (kit tests passed, Node 24,
 hooks proved, reminder read back, Chrome found, check command none yet). The
 report carries the detail. Never send a result to a commit message: the
 install lands on the owner's `Go commit`, often in another session that never
@@ -873,7 +929,8 @@ were read past and left unanswered (review 2026-09-28).
 
 1. **What was set.** Each value, and where it came from: the repo, or the
    owner's answer. The first line is the kit commit the files came from, the
-   same one step 7 writes into History.
+   same one step 7 writes into History and `project-os/Kit-version.json`, or,
+   when it is unknown, that the file was not written and why.
 2. **Problems.** Every place the project does not work the way the kit
    expects: a failing check command, no dev server, a tool that is not wired,
    a block that cannot be filled. One line each, with its practical
@@ -983,6 +1040,12 @@ were read past and left unanswered (review 2026-09-28).
    > **Go commit**
    > I run the checks, commit everything so far, and leave you the push.
    >
+   > **Go audit**
+   > Count the gaps in the project's own records, and tell you what each means.
+   >
+   > **Go update kit**
+   > Bring this project up to the newest kit, after showing you what changes.
+   >
    > **Go backup**
    > Zip the whole project into one file you can put on a drive.
    >
@@ -1003,6 +1066,10 @@ were read past and left unanswered (review 2026-09-28).
    >
    > **Full report**
    > Lift the length limit when you want the long version of an answer.
+
+   In a cloud session, the Go commit line says instead that you push this
+   session's own branch and leave the merge into main to the owner
+   (CLAUDE.md rule 22).
 
    **Then the project's own phrases.** A plan-driven project is driven by its
    own triggers ("go 1.1", "next step", a build phrase the owner already uses),
@@ -1030,11 +1097,11 @@ When the report is delivered, this file has done its job, and it STAYS. Other
 files point at it by name, so deleting it leaves a reader following a pointer
 to nothing. To find them all, search the whole project for `Installation.md`;
 the search is the list, since files change. Today it finds CLAUDE.md rule 6,
-`project-os/QA.md` section 11 and `project-os/Workflow.md` step 9, which all
-send the assistant to step 6d when a browser search comes back empty, and also
-`project-os/Hooks.md`, `project-os/Conversations.md`, the header of
-`project-os/Install-project-hooks.mjs` and
-`project-os/mcp/Google_analytics/Google_Analytics_MCP_Rules.md`. Say once in
+the one pointer that sends the assistant to step 6d when a browser search
+comes back empty, CLAUDE.md's `Go update kit` and Restore, and also
+`project-os/Hooks.md`, `project-os/Conversations.md`, the headers of
+`project-os/Install-project-hooks.mjs` and `project-os/Compare-kit-files.mjs`,
+and both tool files under `project-os/mcp/`. Say once in
 the report that it is kept as the record of how the install was done, and that
 the owner may delete it later if they want; if they do, every pointer the
 search finds is theirs to update. For the ones that send the assistant to

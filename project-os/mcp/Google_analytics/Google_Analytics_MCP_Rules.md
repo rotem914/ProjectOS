@@ -1,4 +1,4 @@
-# Google Analytics MCP — Setup & Working Rules
+# Google Analytics MCP: Setup & Working Rules
 
 The official Google Analytics MCP server
 ([googleanalytics/google-analytics-mcp](https://github.com/googleanalytics/google-analytics-mcp),

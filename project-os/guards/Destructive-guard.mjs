@@ -9,7 +9,7 @@
 //
 // The hook feeds this script a JSON payload on stdin ({ tool_name,
 // tool_input: { command }, ... }). If the command matches a destructive
-// pattern, the script exits 2 with the reason on stderr — Claude Code then
+// pattern, the script exits 2 with the reason on stderr. Claude Code then
 // blocks the tool call and hands the reason back to Claude. Anything else
 // exits 0 (allow).
 //
@@ -188,7 +188,7 @@ function splitSegments(command, shell = 'bash') {
 // an escape only under bash semantics; under PowerShell/unknown it is a path
 // separator and stays literal.
 //
-// `quoted` is NOT a data marker — see isWord below. It used to be treated as one
+// `quoted` is NOT a data marker: see isWord below. It used to be treated as one
 // ("quoted tokens are DATA, never flags or subcommands"), which was the whole of
 // finding B1 (review 2026-07-26): the shell strips quotes before the program
 // sees its argv, so `git reset "--hard"` and `git reset --hard` are byte-identical
@@ -238,13 +238,13 @@ function tokenize(segment, shell) {
 }
 
 // Can this token act as a flag, a switch, or a subcommand? Decided on the token's
-// TEXT, never on whether it was quoted — that is the B1 fix.
+// TEXT, never on whether it was quoted. That is the B1 fix.
 //
 // What quoting still tells us is WORD-SPLITTING, and that is the property worth
 // keeping: `git commit -m "reset --hard"` arrives as one token whose text is
 // `reset --hard`, spaces included, and no real flag or subcommand ever contains
 // whitespace. So the whitespace test is what keeps commit messages, grep patterns
-// and prose out of the rules — while `"--hard"`, `'--hard'` and `--"hard"`, which
+// and prose out of the rules, while `"--hard"`, `'--hard'` and `--"hard"`, which
 // all reach the program as exactly `--hard`, are read as the flag they are.
 const isWord = (t) => t.text.length > 0 && !/\s/.test(t.text);
 
@@ -268,7 +268,7 @@ function staticNormalize(p) {
   for (const part of s.split('/')) {
     if (part === '' || part === '.') continue;
     if (part === '..') {
-      if (out.length === 0) return null; // escapes its own root — unprovable
+      if (out.length === 0) return null; // escapes its own root: unprovable
       out.pop();
       continue;
     }
@@ -968,6 +968,6 @@ let code = ALLOW;
 try {
   code = main();
 } catch {
-  code = ALLOW; // fail open — a guard bug must never trap the owner
+  code = ALLOW; // fail open: a guard bug must never trap the owner
 }
 process.exit(code);

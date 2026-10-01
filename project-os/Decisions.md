@@ -1,4 +1,4 @@
-# {{PROJECT_NAME}} — Decisions
+# {{PROJECT_NAME}}: Decisions
 
 Why non-obvious choices were made.
 
@@ -14,7 +14,7 @@ chosen, so nobody re-argues it in six months and nobody quietly undoes it.
 - **A changed decision is superseded, not edited.** Write a new entry naming the
   one it replaces, and italicize the old line in the Index so nobody follows a
   rule that has moved.
-- **This file rotates, the way History does.** `project-os/Archive-old-rows.ps1`
+- **This file rotates, the way History does.** `project-os/Archive-old-rows.mjs` (or its `.ps1` twin)
   keeps the newest 25 entries live at `Go commit` and moves older ones into
   `Decisions-archive.md`, under its own `## Archived decisions` heading. Never
   move an entry there by hand: the script creates the archive the first time
@@ -26,7 +26,7 @@ chosen, so nobody re-argues it in six months and nobody quietly undoes it.
   archive says so.
 - Every new entry also gets a line in the Index, in the same change. The Index is
   the part people read; an entry missing from it is an entry nobody opens.
-- Use the required format below. All four parts, every time — an entry without
+- Use the required format below. All four parts, every time: an entry without
   Consequences is a note, not a decision.
 - Write it so a stranger can follow it without the conversation that produced it.
 
@@ -56,7 +56,7 @@ would make it worth revisiting.
 Every decision below, oldest first. Read this list; open only the entries your
 task touches. A line in _italics_ means part of that entry no longer holds.
 
-- (empty — add a line here with every new entry)
+- (empty: add a line here with every new entry)
 
 ---
 
@@ -83,6 +83,6 @@ Option 3, object storage. Chosen by {{OWNER_NAME}}.
 Instances become stateless, so scaling up is adding a machine and nothing else.
 Cost: uploads now depend on a third-party service being reachable, and local
 development needs a stub for it. Future work must never write user files to the
-local filesystem — a file written locally is invisible to every other instance
+local filesystem: a file written locally is invisible to every other instance
 and disappears on deploy. Revisit if the storage bill outgrows the hosting bill,
 or if the service adds an egress fee.

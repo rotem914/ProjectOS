@@ -102,6 +102,9 @@ try {
   fs.mkdirSync(path.join(PROJ, 'src', 'deep'), { recursive: true });
   r = dispatch('session', {}, PROJ);
   t('marker: session start prints the reminder and the active line', r.code === 0 && r.out.includes('PROJECT RULES') && r.out.includes('[ProjectOS plugin] hooks active for'), r.out);
+  // 2026-10-01: a valid marker used to fall through to the broken-marker lines
+  // whenever no guard differed, so every session start also said "reminders OFF".
+  t('marker: a valid marker gets no broken-marker line', !r.out.includes('reminders OFF') && !r.out.includes('is not valid JSON'), r.out);
   // [R10] The active line names the kit version the plugin carries, and a
   // project whose guard files differ from the plugin's copy is told so, with
   // the one command that updates the plugin folder.
@@ -112,6 +115,7 @@ try {
   fs.appendFileSync(path.join(NEWER, 'project-os', 'guards', 'Destructive-guard.mjs'), '\n// a newer kit\n');
   r = dispatch('session', {}, NEWER);
   t('[R10] a project whose delete guard differs is told, with the pull command', r.code === 0 && r.out.includes("this project's Destructive-guard.mjs differ from the plugin's copy") && r.out.includes(`git -C "${fwd(KIT)}" pull`), r.out);
+  t('[R10] beside the notice, the active line and no broken-marker line', r.out.includes('hooks active for') && !r.out.includes('reminders OFF') && !r.out.includes('is not valid JSON'), r.out);
   r = dispatch('prompt', {}, PROJ);
   t('marker: every prompt prints the standing rules once', r.code === 0 && r.out.startsWith('[ProjectOS plugin]') && count(r.out, 'STANDING RULES') === 1, r.out);
   r = dispatch('pretool', pay(PROJ, P.writeOut), PROJ);
@@ -124,6 +128,53 @@ try {
   t('no settings: git status is allowed', r.code === 0, r.err);
   r = dispatch('pretool', pay(PROJ, P.rm), path.join(PROJ, 'src', 'deep'));
   t('a session opened in a subfolder finds the project and blocks', blocks(r, 'destructive-guard'), r.err);
+
+  // 2026-10-01: in the kit repository itself the reminders stay off, since its
+  // templates carry placeholders, and both guards run as in any project. The
+  // kit used to be skipped whole, so `rm -rf src` went through there. A scratch
+  // copy stands in for the kit, so a settings file in the real one cannot
+  // change the verdicts.
+  const kitRepoCopy = (dir) => {
+    kitProject(dir);
+    fs.mkdirSync(path.join(dir, '.claude-plugin'), { recursive: true });
+    fs.copyFileSync(path.join(KIT, '.claude-plugin', 'plugin.json'), path.join(dir, '.claude-plugin', 'plugin.json'));
+    fs.mkdirSync(path.join(dir, 'hooks'), { recursive: true });
+    fs.copyFileSync(DISPATCH, path.join(dir, 'hooks', 'dispatch.mjs'));
+    fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
+    return dir;
+  };
+  const KITREPO = kitRepoCopy(path.join(TMP, 'kit repo'));
+  r = dispatch('session', {}, KITREPO);
+  t('kit repository: session start prints no reminder', r.code === 0 && r.out === '' && r.log.includes('kit repository itself, reminders off'), r.out || r.log);
+  r = dispatch('prompt', {}, KITREPO);
+  t('kit repository: a prompt prints no reminder', r.code === 0 && r.out === '' && r.log.includes('kit repository itself, reminders off'), r.out || r.log);
+  r = dispatch('pretool', pay(KITREPO, P.rm), KITREPO);
+  t('kit repository: rm -rf src is blocked', blocks(r, 'destructive-guard'), r.err || r.log);
+  r = dispatch('pretool', pay(KITREPO, P.psRm), KITREPO);
+  t('kit repository: PowerShell delete of src is blocked', blocks(r, 'destructive-guard'), r.err || r.log);
+  r = dispatch('pretool', pay(KITREPO, P.writeOut), KITREPO);
+  t('kit repository: a Write outside the folder is blocked', blocks(r, 'path-guard'), r.err || r.log);
+  r = dispatch('pretool', pay(KITREPO, P.psOut), KITREPO);
+  t('kit repository: a PowerShell write outside the folder is blocked', blocks(r, 'path-guard'), r.err || r.log);
+  r = dispatch('pretool', pay(KITREPO, { tool_name: 'Write', tool_input: { file_path: fwd(path.join(KITREPO, 'tests', 'New-tests.mjs')), content: 'x' } }), KITREPO);
+  t('kit repository: a Write inside the folder is allowed', r.code === 0 && r.err === '', r.err || r.log);
+  r = dispatch('pretool', pay(KITREPO, P.status), KITREPO);
+  t('kit repository: git status is allowed', r.code === 0 && r.err === '', r.err || r.log);
+  // The real kit is taken for the kit too: its session and prompt stay silent.
+  r = dispatch('session', {}, KIT);
+  t('the real kit repository: session start prints no reminder', r.code === 0 && r.out === '' && r.log.includes('kit repository itself, reminders off'), r.out || r.log);
+  r = dispatch('prompt', {}, KIT);
+  t('the real kit repository: a prompt prints no reminder', r.code === 0 && r.out === '' && r.log.includes('kit repository itself, reminders off'), r.out || r.log);
+  // 2026-10-01: a session in the kit runs the plugin folder's guards, which can
+  // be older than the ones being edited there, so the stale-guard notice prints
+  // in the kit too, alone, at session start only.
+  const KITEDIT = kitRepoCopy(path.join(TMP, 'kit repo editing a guard'));
+  fs.appendFileSync(path.join(KITEDIT, 'project-os', 'guards', 'Path-guard.mjs'), '\n// being edited\n');
+  r = dispatch('session', {}, KITEDIT);
+  t('kit repository with a guard that differs: session start prints the stale notice, with the pull', r.code === 0 && r.out.includes("this project's Path-guard.mjs differ from the plugin's copy") && r.out.includes(`git -C "${fwd(KIT)}" pull`), r.out || r.log);
+  t('kit repository with a guard that differs: the notice is the only line, no reminder', r.out.split('\n').length === 1 && !r.out.includes('PROJECT RULES') && !r.out.includes('hooks active') && !r.out.includes('reminders OFF'), r.out);
+  r = dispatch('prompt', {}, KITEDIT);
+  t('kit repository with a guard that differs: a prompt still prints nothing', r.code === 0 && r.out === '', r.out);
 
   // [R] T9: the folder the session was opened in decides.
   const PARENT = path.join(TMP, 'parent');
@@ -187,6 +238,10 @@ try {
   t('[R] broken marker: every prompt says the reminders are off', r.code === 0 && r.out.includes('reminders OFF'), r.out);
   r = dispatch('pretool', pay(BROKEN, P.rm), BROKEN);
   t('[R] broken marker: rm -rf src is still blocked', blocks(r, 'destructive-guard'), r.err);
+  // 2026-10-01: a guard that differs used to take the place of the "OFF" line.
+  fs.appendFileSync(path.join(BROKEN, 'project-os', 'guards', 'Destructive-guard.mjs'), '\n// a newer kit\n');
+  r = dispatch('session', {}, BROKEN);
+  t('broken marker and a guard that differs: session start prints both lines', r.code === 0 && r.out.includes('reminders OFF') && r.out.includes("this project's Destructive-guard.mjs differ from the plugin's copy"), r.out);
 
   // A git worktree reads the main checkout's personal settings on macOS and Linux.
   const MAIN = kitProject(path.join(TMP, 'main checkout'));

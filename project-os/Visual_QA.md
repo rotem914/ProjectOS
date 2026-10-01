@@ -7,7 +7,7 @@ defects this project has produced before. Load it before a pass starts.
 A code review reads the change. A visual QA pass **uses the app**. They are a
 matched pair and they catch different things. A defect visible in the code is a
 review finding. A defect that only appears when a careless person clicks, types,
-reloads, or undoes is a visual QA finding — the code can read perfectly and the
+reloads, or undoes is a visual QA finding: the code can read perfectly and the
 behavior still be wrong. `project-os/Code_review.md` is the other half.
 
 ## When a pass runs
@@ -24,7 +24,8 @@ Only that pass delivers the task document below.
 **Drive the screens the change actually reaches**, plus their neighbors for
 regression. Map the changed code to the screens it renders and start there. Do not
 test a screen the change cannot touch. Do not skip a reachable one because the code
-"looks safe" — that judgment is what the pass exists to check.
+"looks safe": that judgment is what the pass exists to check. A full sweep of
+every screen only when the owner asks for one.
 
 ## Driving the app
 
@@ -36,12 +37,9 @@ Reach for the most precise tool you have, in this order:
 2. Otherwise, anything that reads the real document tree.
 3. Screen control, only when nothing else can reach the surface.
 
-Structure beats pixels. A document tree tells you a control is disabled; a
-screenshot only tells you it looks grey.
+Structure beats pixels.
 
 **One driver, one surface.** Never run two things driving the same app at once.
-They fight over focus and windows, and the pass turns into debugging the harness
-instead of the product.
 
 **Search for a tool before concluding you have none.** `CLAUDE.md` rule 6 says
 how, and what an empty search means in a project that carries this kit.
@@ -53,11 +51,11 @@ Never report a pass you did not run.
 | Tier | Meaning |
 |---|---|
 | 🔴 **blocking** | Data loss, silent corruption, a crash, or a broken core flow you reproduced in the running app. Fix before it lands. |
-| 🟠 **important** | Wrong or confusing behavior with no data loss — a control that misleads, a state that drifts out of sync. Should fix; say so if you disagree. |
+| 🟠 **important** | Wrong or confusing behavior with no data loss: a control that misleads, a state that drifts out of sync. Should fix; say so if you disagree. |
 | 🟡 **nit** | Polish, a small accessibility gap on a non-critical control, cosmetic. Non-blocking. |
 
 One rule of thumb that holds everywhere: **if a careless user can lose or silently
-corrupt their work, it is blocking** — no matter how good the page looks.
+corrupt their work, it is blocking**, no matter how good the page looks.
 
 ### The worst defect class here
 
@@ -65,33 +63,29 @@ Name, in one sentence, the worst visual or interaction defect this project
 produces. Write it below, and make that class always blocking.
 
 > **Fill this in.** *Example to replace: "The dangerous defects here are state, not
-> pixels — an edit that reports success while nothing was written."*
+> pixels: an edit that reports success while nothing was written."*
 
 ## The pass method
 
 Four steps. This is what turns "it looks fine" into a real test.
 
 **1 · Per screen, drive it properly.** Load it. Capture the state. Then exercise
-every state of every interactive control — default, hover, focus, active, disabled,
-loading, empty, error. Take each control through **every exit path**, not just one:
-choose, click outside, press Escape, submit. Focus restoration and side effects
-differ per path, which is exactly why only one path gets tested and only one path
-works. Watch the console and the network the whole time. Reload and confirm what
-survived. Glance at neighboring screens for damage.
+every state of every interactive control: default, hover, focus, active, disabled,
+loading, empty, error. A screen that holds content is driven full as well as
+empty. Take each control through **every exit path**, not just one: choose,
+click outside, press Escape, submit. Watch the console and the network the whole
+time. Reload and confirm what survived. Glance at neighboring screens for damage.
 
 **2 · Be a destructive user, never with the owner's real content.** Before the
 first destructive input, decide where the test edits land: a throwaway copy of
 the data, throwaway entries made for this pass, or a snapshot taken first (the
-`Go backup` ZIP counts). The inputs below can erase or corrupt a real entry, and
-the undo that step 4 asks for is often the very thing under test; the guards
-also refuse the git commands that would roll the data files back, so a failed
-undo is the owner's to repair. Touching the owner's real entries needs their
+`Go backup` ZIP counts). Touching the owner's real entries needs their
 yes first (CLAUDE.md rule 4). The resting state is where nothing hides. Go at
 the transitions:
 
 - clear a required field, then leave it;
 - type something, then delete all of it;
-- paste junk — emoji, mixed-direction text, a thousand characters with no spaces,
+- paste junk: emoji, mixed-direction text, a thousand characters with no spaces,
   an absurd number;
 - add an item, then delete it, then add it again;
 - undo and redo in the middle of an edit;
@@ -100,7 +94,7 @@ the transitions:
 - switch mode, theme, or language with unsaved edits pending;
 - do the same action twice quickly.
 
-**3 · Guard against false positives — the settled state, and the tooling.**
+**3 · Guard against false positives: the settled state, and the tooling.**
 Re-check anything you saw mid-transition: a fade or a skeleton caught halfway is
 usually an artifact, not a defect. Then distrust the harness itself, because
 automation lies about what happened.
@@ -112,13 +106,11 @@ automation lies about what happened.
 - Screenshot pixels are not layout pixels. Read state from the document tree, not
   from coordinates.
 
-Re-verify every "it didn't work" before you write it down. A false finding costs
-more than a missed one, because it sends someone to fix code that was never broken.
+Re-verify every "it didn't work" before you write it down.
 
 **4 · Confirm against the source of truth, then clean up.** What the screen shows
-must match what was actually stored — the file, the database, the response — and
-must survive a reload. A screen can display "Saved" over nothing at all; eyes alone
-cannot tell the difference. Then undo your test edits; the throwaway copy,
+must match what was actually stored (the file, the database, the response) and
+must survive a reload. Then undo your test edits; the throwaway copy,
 throwaway entries or snapshot from step 2 are what make that possible, so the
 pass leaves no residue in real data.
 
@@ -127,36 +119,36 @@ pass leaves no residue in real data.
 The spine of the always-look-for list. Each one is something to *do* in the running
 app, not something to read. Add or drop dimensions to fit the product.
 
-- **States & interaction** — every control through its full state set. Focus
+- **States & interaction**: every control through its full state set. Focus
   actually paints. Decorative elements do not steal focus. An overlay that takes
   focus returns it to its trigger on **every** close path.
-- **Editable lists & focus** — typing, deleting, or reordering a row must not drop
+- **Editable lists & focus**: typing, deleting, or reordering a row must not drop
   focus, jump the cursor, or shift a neighbor's value into the field you are in.
-- **Undo, redo & autosave** — undo is scoped and granular; autosave is truthful,
+- **Undo, redo & autosave**: undo is scoped and granular; autosave is truthful,
   saving when it claims to and never on a mere page view, and firing the number of
   writes you expect.
-- **Persistence & reload** — a change survives a reload and matches what was
+- **Persistence & reload**: a change survives a reload and matches what was
   stored. A deleted thing stays deleted. Switching route or mode does not throw
   away unsaved edits in silence.
-- **Theme & appearance** — every supported appearance renders, nothing flashes on
+- **Theme & appearance**: every supported appearance renders, nothing flashes on
   load, text stays legible on every surface.
-- **Layout, overflow & content stress** — hostile content must not clip, overlap,
+- **Layout, overflow & content stress**: hostile content must not clip, overlap,
   or spill its container; blank content renders a sensible fallback, not an empty
   hole.
-- **Empty, error & loading** — all three exist as real states, and an empty state
+- **Empty, error & loading**: all three exist as real states, and an empty state
   is not an error state wearing a disguise. Whitespace in a required field does not
   count as filled.
-- **Input & feedback** — a field snaps back to its last good value rather than
+- **Input & feedback**: a field snaps back to its last good value rather than
   committing garbage; malformed input is visibly flagged, not silently stored; a
   broken reference is surfaced, not quietly shown as the wrong option.
-- **Console & network** — after every interaction the console is clean, and the
+- **Console & network**: after every interaction the console is clean, and the
   network shows the request count you expected. No double-fire. No request just
   from looking at a page.
-- **Language, direction & accessibility** — correct language and text direction,
+- **Language, direction & accessibility**: correct language and text direction,
   user content direction-aware, everything reachable and labeled by keyboard, every
   action working without a pointer.
 
-## Always-look-for list — this project's own
+## Always-look-for list: this project's own
 
 **Empty on purpose.** This is where the pass earns its keep, and it has to come
 from {{PROJECT_NAME}}'s real defects. Seed it with the bootstrap recipe below, then
@@ -167,40 +159,40 @@ it**, and a pointer to the record. Group the rows under the dimensions above.
 
 ### Persistence & reload
 
-> *Example row — delete this one when you write your first real one.*
+> *Example row: delete this one when you write your first real one.*
 >
-> - 🔴 **A save reaches storage** — edit a field, save, reload the page, then open
+> - 🔴 **A save reaches storage**: edit a field, save, reload the page, then open
 >   the stored record directly. The screen saying "Saved" is not evidence.
 >   (Source: `project-os/History.md`, the save-path entry.)
 
-## Bootstrap recipe — fill the list from this project's own memory
+## Bootstrap recipe: fill the list from this project's own memory
 
 Run this once to seed the list, then again whenever the app has moved enough that
 the rows go stale. Sweep these five sources and dedupe into rows, each one an
 action to perform:
 
-1. **Past QA passes and bug reports** — the interaction defects that keep coming
+1. **Past QA passes and bug reports**: the interaction defects that keep coming
    back.
 2. **`project-os/BugAtlas.md`, then `project-os/History.md`**: the atlas rows
    first, then bugs that recurred or took several attempts: lost focus, hijacked
    undo, deletions that came back, a save that bricked. Highest value; these are
    almost always blocking.
-3. **`project-os/Decisions.md`** — the visual and behavioral invariants past
+3. **`project-os/Decisions.md`**: the visual and behavioral invariants past
    choices implied. The theme model, the text direction, the autosave contract, the
    empty-state rule.
-4. **The running app** — drive the real screens and note which controls are
+4. **The running app**: drive the real screens and note which controls are
    fragile. Cite the screen and the file behind it.
-5. **`CLAUDE.md`** — the stated must-not-break rules about what the product looks
+5. **`CLAUDE.md`**: the stated must-not-break rules about what the product looks
    like and how it behaves.
 
-## Output — findings as small, executable tasks
+## Output: findings as small, executable tasks
 
 Two layers, for the full pass, same as a code review:
 
-1. **The reply** — terse: counts by severity, screens driven, headline findings,
+1. **The reply** (terse): counts by severity, screens driven, headline findings,
    and whether the pass ran fully or fell back to a manual check.
    `project-os/Conversations.md` has the reply rules.
-2. **The task document** — one file per pass, one section per severity (🔴 first),
+2. **The task document**: one file per pass, one section per severity (🔴 first),
    one block per finding:
 
 ```
@@ -215,17 +207,15 @@ Status:  [ ] open · [x] done
 ```
 
 When one root cause produces findings on five screens, write the root cause once
-and point the five at it — fixing the root closes them all. Keep each task small
+and point the five at it: fixing the root closes them all. Keep each task small
 enough to run on its own, and write it for someone with no context.
 
 ## Exceptions: settled until their raise-again condition is met
 
-**Empty on purpose.** When {{OWNER_NAME}} rejects a finding — it was intentional,
-or it was a transition artifact, or that screen is not designed yet — one line
+**Empty on purpose.** When {{OWNER_NAME}} rejects a finding (it was intentional,
+or it was a transition artifact, or that screen is not designed yet), one line
 lands here and no later pass raises it again unless its raise-again condition
-comes true. Without this section every sweep re-reports the same non-bug, and the
-owner pays for it every time. Without the condition, a defect stays silenced
-forever, even after the screen changes enough to make it a real one.
+comes true.
 
 One row each: what not to report · the reason in the owner's own words · where it
 was raised · raise again if: the change that would make it a real defect again
@@ -235,7 +225,8 @@ data).
 ## Calibration loop
 
 After every pass, fold the verdict back into this file. The verdict vocabulary is
-**fix / drop / backlog**.
+**fix / drop / backlog**. A `backlog` verdict adds the finding to
+`project-os/Backlog.md`.
 
 - A **rejected** finding becomes an exception row above, with its raise-again
   condition, or the check gets dropped.

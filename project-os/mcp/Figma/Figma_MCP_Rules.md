@@ -1,4 +1,4 @@
-# Figma MCP — Working Rules
+# Figma MCP: Working Rules
 
 Read this before any Figma MCP work: pushing designs into Figma, reading designs
 out, or any `use_figma` / `get_design_context` / asset call.

@@ -23,7 +23,8 @@
 //      reason on stderr and an allowed one exits 0.
 //
 // A case marked [R] is one a review round found open ([R10]: the kit review of
-// 2026-09-28). Only cases that pass
+// 2026-09-28; [R11]: the one of 2026-10-01; [R12]: the second one that day,
+// on scripts that write by other spellings). Only cases that pass
 // today are seeded here; a known hole joins the file when it is fixed.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -307,6 +308,262 @@ t("[R5] a template command that only reads, with an interpolated count", bash("n
 t("[R5] a variable given an inside literal, after a cd outside", bash("cd /c/Users/User/Downloads && node -e \"\nconst out = 'J:/Projects/Rotem E/.tmp/list.txt';\nrequire('fs').writeFileSync(out, require('fs').readdirSync('.').join('\\n'));\n\""), false);
 t("[R5] webbrowser.open is not a file", bash("python -c \"\nimport webbrowser\nwebbrowser.open('http://localhost:4321/')\nprint('w')\n\""), false);
 t("[R5] Image.open reads a picture", bash("python -c \"\nfrom PIL import Image\nim = Image.open('public/media/a.png')\nprint(im.size)\n\""), false);
+
+// [R11] Review 2026-10-01: a ONE-LINE script that only read a file outside the
+// project was refused as a write, because every absolute path in it was
+// checked, while the same script over two lines was allowed. One-line scripts
+// are now judged like multi-line ones, by where they write, and every write
+// that scan used to catch is still refused.
+console.log('path-guard: one-line scripts are judged by where they write');
+t('[R11] node -e that only reads /etc/hostname', bash(`node -e "console.log(require('fs').readFileSync('/etc/hostname','utf8'))"`), false);
+t('[R11] node -e that only reads a settings file in the home folder', bash(`node -e "console.log(require('fs').readFileSync('${HOME}/.claude/settings.json','utf8').length)"`), false);
+t('[R11] node -e that lists a folder outside', bash(`node -e "console.log(require('fs').readdirSync('${OUT}'))"`), false);
+t('[R11] node -e that checks a file outside exists', bash("node -e \"console.log(require('fs').existsSync('C:/Program Files/nodejs/node.exe'))\""), false);
+t('[R11] node -e that reads outside and writes inside', bash(`node -e "const fs=require('fs'); fs.writeFileSync('.tmp/a.txt', fs.readFileSync('${OUT}/a.txt'))"`), false);
+t('[R11] node -e that copies from outside into the project', bash(`node -e "require('fs').copyFileSync('${OUT}/a.png','public/media/a.png')"`), false);
+t('[R11] node -e with web routes in it', bash("node -e \"console.log(['/projects/','/about/'].map(r => r.length))\""), false);
+t('[R11] node -e reading outside, from PowerShell', ps("node -e \"console.log(require('fs').readFileSync('C:\\\\Users\\\\User\\\\a.txt','utf8'))\""), false);
+t('[R11] python3 -c that only reads /etc/hostname', bash(`python3 -c "print(open('/etc/hostname').read())"`), false);
+t('[R11] python3 -c that opens a file outside for reading', bash(`python3 -c "print(open('${OUT}/a.txt','r').read())"`), false);
+t('[R11] python3 -c that lists a folder outside', bash(`python3 -c "import os; print(os.listdir('${OUT}'))"`), false);
+t('[R11] python3 -c that copies from outside into the project', bash(`python3 -c "import shutil; shutil.copy('${OUT}/a.txt','.tmp/a.txt')"`), false);
+t('[R11] python3 -c that unpacks an archive from outside into .tmp', bash(`python3 -c "import zipfile; zipfile.ZipFile('${OUT}/x.zip').extractall('.tmp/x')"`), false);
+t('[R11] a pandas pattern that looks like a route is not a folder', bash("python3 -c \"import pandas as pd; print(pd.Series(['/projects/a']).str.extractall(r'/projects/(\\w+)'))\""), false);
+t("[R11] a string's replace is not a move", bash("python3 -c \"print('C:/Users/User/a.txt'.replace('/', '-'))\""), false);
+t('[R11] perl -e that only reads outside', bash("perl -e \"open(my \\$f, '<', 'C:/Users/User/a.txt'); print <\\$f>\""), false);
+t('[R11] ruby -e that only reads outside', bash("ruby -e \"puts File.read('C:/Users/User/a.txt')\""), false);
+t('[R11] node -e writing inside through a join with +', bash("node -e \"const n='a'; require('fs').writeFileSync('.tmp/' + n + '.txt','x')\""), false);
+t('[R11] node -e that chmods a project file', bash("node -e \"require('fs').chmodSync('scripts/x.sh', 0o755)\""), false);
+
+t('[R11] node -e writeFileSync outside', bash(`node -e "require('fs').writeFileSync('${OUT}/x.txt','a')"`), true);
+t('[R11] node -e appendFileSync outside', bash(`node -e "require('fs').appendFileSync('${OUT}/x.txt','a')"`), true);
+t('[R11] node -e copyFileSync outside', bash(`node -e "require('fs').copyFileSync('a.txt','${OUT}/x.txt')"`), true);
+t('[R11] node -e renameSync outside', bash(`node -e "require('fs').renameSync('a.txt','${OUT}/x.txt')"`), true);
+t('[R11] node -e mkdirSync outside', bash(`node -e "require('fs').mkdirSync('${OUT}/d',{recursive:true})"`), true);
+t('[R11] node -e rmSync outside', bash(`node -e "require('fs').rmSync('${OUT}/d',{recursive:true,force:true})"`), true);
+t('[R11] python3 -c open(path, w) outside', bash(`python3 -c "open('${OUT}/x.txt','w').write('a')"`), true);
+t('[R11] python3 -c shutil.copy outside', bash(`python3 -c "import shutil; shutil.copy('a.txt','${OUT}/x.txt')"`), true);
+t('[R11] node -e that reads inside and writes outside', bash(`node -e "const fs=require('fs'); fs.writeFileSync('${OUT}/x.txt', fs.readFileSync('package.json','utf8'))"`), true);
+t('[R11] python3 -c that reads inside and writes outside', bash(`python3 -c "open('${OUT}/x.txt','w').write(open('package.json').read())"`), true);
+t('[R11] node -e writeFileSync outside, from PowerShell', ps(`node -e "require('fs').writeFileSync('${OUT}/x.txt','a')"`), true);
+t('[R11] node -e writing to an outside folder joined with +', bash(`node -e "require('fs').writeFileSync('${OUT}/' + 'x.txt','a')"`), true);
+t('[R11] node -e writing to a variable folder joined with +', bash(`node -e "const d='${OUT}'; require('fs').writeFileSync(d + '/x.txt','a')"`), true);
+t('[R11] node -e writing to each path of a literal list', bash(`node -e "['${OUT}/x.txt'].forEach(p => require('fs').writeFileSync(p,'a'))"`), true);
+t('[R11] node -e writing through an aliased path module', bash(`node -e "const p=require('path'); require('fs').writeFileSync(p.join('${OUT}','x.txt'),'a')"`), true);
+t('[R11] node -e making a link inside that points outside', bash("node -e \"require('fs').symlinkSync('C:/Users/User','.tmp/esc')\""), true);
+t('[R11] node -e chmodSync outside', bash(`node -e "require('fs').chmodSync('${OUT}/x.txt', 0o644)"`), true);
+t("[R11] python3 -c with % formatting into an outside folder", bash(`python3 -c "n='x'; open('${OUT}/%s.txt' % n,'w').write('a')"`), true);
+t("[R11] python3 -c with .format() into an outside folder", bash(`python3 -c "n='x'; open('${OUT}/{}.txt'.format(n),'w').write('a')"`), true);
+t('[R11] python3 -c pathlib replace() moving a file outside', bash(`python3 -c "from pathlib import Path; Path('a.txt').replace('${OUT}/x.txt')"`), true);
+t('[R11] python3 -c pathlib symlink_to pointing outside', bash("python3 -c \"from pathlib import Path; Path('.tmp/esc').symlink_to('C:/Users/User')\""), true);
+t('[R11] python3 -c unpacking an archive outside', bash(`python3 -c "import zipfile; zipfile.ZipFile('.tmp/x.zip').extractall('${OUT}/x')"`), true);
+t('[R11] python3 -c shutil.unpack_archive outside', bash(`python3 -c "import shutil; shutil.unpack_archive('.tmp/x.zip', '${OUT}/x')"`), true);
+t('[R11] perl -e open with three arguments, outside', bash(`perl -e "open(my \\$f, '>', '${OUT}/x.txt') or die; print \\$f 1"`), true);
+t('[R11] perl -e open with two arguments, outside', bash(`perl -e "open(F, '>${OUT}/x.txt') or die; print F 1"`), true);
+t('[R11] perl -e open without parentheses, outside', bash(`perl -e "open my \\$f, '>', '${OUT}/x.txt' or die"`), true);
+t('[R11] perl -e open without parentheses, inside', bash("perl -e \"open my \\$f, '>', '.tmp/x.txt' or die; print \\$f 1\""), false);
+t('[R11] deno eval writeTextFileSync outside', bash(`deno eval "Deno.writeTextFileSync('${OUT}/x.txt','a')"`), true);
+t('[R11] ruby -e File.delete outside', bash(`ruby -e "File.delete('${OUT}/x.txt')"`), true);
+
+// The same script on one line and on two lines gets the same verdict.
+for (const [name, line, block] of [
+  ['a read of /etc/hostname', "console.log(require('fs').readFileSync('/etc/hostname','utf8'))", false],
+  ['a read outside and a write inside', `const fs=require('fs'); fs.writeFileSync('.tmp/a.txt', fs.readFileSync('${OUT}/a.txt'))`, false],
+  ['a write outside', `require('fs').writeFileSync('${OUT}/x.txt','a')`, true],
+  ['a write to each path of a literal list', `['${OUT}/x.txt'].forEach(p => require('fs').writeFileSync(p,'a'))`, true],
+]) {
+  t(`[R11] one line: ${name}`, bash(`node -e "${line}"`), block);
+  t(`[R11] two lines: ${name}`, bash(`node -e "\n${line}\n"`), block);
+}
+t('[R11] POSIX: node -e that only reads /etc/hostname', { ...bash("node -e \"console.log(require('fs').readFileSync('/etc/hostname','utf8'))\""), cwd: '/home/u/app' }, false);
+t('[R11] POSIX: node -e that writes into /etc', { ...bash("node -e \"require('fs').writeFileSync('/etc/x.conf','a')\""), cwd: '/home/u/app' }, true);
+
+// [R12] The second review of 2026-10-01: once one-line scripts stopped being
+// refused for every absolute path in them, these writes went through, and
+// their two-line forms already had before. Each is checked on one line and on
+// two, so the two readings can never drift apart again. `quote` is the
+// shell's quote around the script, and `after` the words that follow it.
+console.log('path-guard: what a script writes, however it spells it');
+const U = 'C:/Users/User';
+function both(name, head, quote, script, block, after = '') {
+  t(`[R12] one line: ${name}`, bash(`${head} ${quote}${script}${quote}${after}`), block);
+  t(`[R12] two lines: ${name}`, bash(`${head} ${quote}\n${script}\n${quote}${after}`), block);
+}
+// The review's own payloads.
+both('node changes its folder, then writes a relative file', 'node -e', '"', `process.chdir('${U}'); require('fs').writeFileSync('x.txt','a')`, true);
+both('python changes its folder, then writes a relative file', 'python -c', '"', `import os; os.chdir('${U}'); open('x.txt','w').write('a')`, true);
+both('ruby changes its folder, then writes a relative file', 'ruby -e', "'", `Dir.chdir("${U}"); File.write("x.txt","a")`, true);
+both('eval of a write outside', 'node -e', '"', String.raw`eval(\"require('fs').writeFileSync('C:/Users/User/x.txt','a')\")`, true);
+both('new Function of a write outside', 'node -e', '"', String.raw`new Function(\"require('fs').writeFileSync('C:/Users/User/x.txt','a')\")()`, true);
+both('python exec of a write outside', 'python -c', '"', String.raw`exec(\"open('C:/Users/User/x.txt','w').write('a')\")`, true);
+both('a write named by a string key', 'node -e', '"', `require('node:fs')['writeFileSync']('${U}/x.txt','a')`, true);
+both('deno writes under the home folder from Deno.env.get', 'deno eval', '"', "Deno.writeTextFileSync(Deno.env.get('HOME') + '/x.txt','a')", true);
+both('perl rename without parentheses', 'perl -e', "'", `rename "a.txt", "${U}/x.txt"`, true);
+both('perl unlink without parentheses', 'perl -e', "'", `unlink "${U}/x.txt"`, true);
+both('perl mkdir without parentheses', 'perl -e', "'", `mkdir "${U}/d"`, true);
+both('execFileSync cp with an argument list', 'node -e', '"', `require('child_process').execFileSync('cp',['a.txt','${U}/x.txt'])`, true);
+both('subprocess.run cp with an argument list', 'python -c', '"', `import subprocess; subprocess.run(['cp','a.txt','${U}/x.txt'])`, true);
+both('sqlite3.connect makes a database outside', 'python -c', '"', `import sqlite3; sqlite3.connect('${U}/x.db')`, true);
+t('[R12] the three perl payloads in one command', bash(`perl -e 'rename "a.txt", "${U}/x.txt"' ; perl -e 'unlink "${U}/x.txt"' ; perl -e 'mkdir "${U}/d"'`), true);
+// 1. A folder change moves every later relative write, as `cd` does.
+both('a chdir to the home folder', 'python -c', '"', "import os; os.chdir(os.path.expanduser('~')); open('x.txt','w').write('a')", true);
+both('a chdir to a folder built at run time', 'node -e', '"', "process.chdir(require('os').homedir()); require('fs').writeFileSync('x.txt','a')", true);
+both('a perl chdir with no folder goes home', 'perl -e', "'", 'chdir; open(F, ">x.txt")', true);
+both('a perl chdir without parentheses', 'perl -e', "'", `chdir "${U}"; open F, ">x.txt"`, true);
+both('a ruby Dir.chdir with no folder goes home', 'ruby -e', "'", 'Dir.chdir; File.write("x.txt","a")', true);
+both('a ruby Dir.chdir block', 'ruby -e', "'", `Dir.chdir("${U}") do File.write("x.txt","a") end`, true);
+both('Deno.chdir', 'deno eval', '"', `Deno.chdir('${U}'); Deno.writeTextFileSync('x.txt','a')`, true);
+both('process.chdir under another name', 'node -e', '"', `const cd = process.chdir; cd('${U}'); require('fs').writeFileSync('x.txt','a')`, true);
+both('chdir imported from os', 'python -c', '"', `from os import chdir; chdir('${U}'); open('x.txt','w').write('a')`, true);
+both('a write in a function called after the chdir', 'python -c', '"', `def w(): open('x.txt','w').write('a')\nimport os; os.chdir('${U}'); w()`, true);
+both('a command started after the chdir', 'node -e', '"', `process.chdir('${U}'); require('child_process').execSync('touch x.txt')`, true);
+both('a relative save after the chdir', 'python -c', '"', `import os; os.chdir('${U}'); import pandas as pd; pd.DataFrame().to_csv('r.csv')`, true);
+both('a command started with cwd outside', 'python -c', '"', `import subprocess; subprocess.run(['touch','x.txt'], cwd='${U}')`, true);
+both('execSync with a cwd option outside', 'node -e', '"', `require('child_process').execSync('touch x.txt', { cwd: '${U}' })`, true);
+both('ruby system with a chdir option outside', 'ruby -e', "'", `system("touch", "x.txt", chdir: "${U}")`, true);
+t('[R12] a PowerShell -Command that moves with Set-Location, then writes', bash(`powershell -Command "Set-Location ${U}; Set-Content x.txt a"`), true);
+t('[R12] a relative save after a shell cd out of the project', bash(`cd ${U} && python -c "import pandas as pd; pd.DataFrame().to_csv('r.csv')"`), true);
+// 2. Code run from a string is read like the rest of the script.
+both('eval of a variable given a write', 'node -e', '"', String.raw`const s = \"require('fs').writeFileSync('C:/Users/User/x.txt','a')\"; eval(s)`, true);
+both('an indirect eval', 'node -e', '"', String.raw`(0, eval)(\"require('fs').writeFileSync('C:/Users/User/x.txt','a')\")`, true);
+both('vm.runInThisContext', 'node -e', '"', String.raw`require('vm').runInThisContext(\"require('fs').writeFileSync('C:/Users/User/x.txt','a')\")`, true);
+both('Function without new', 'node -e', '"', String.raw`Function(\"require('fs').writeFileSync('C:/Users/User/x.txt','a')\")()`, true);
+both("an arrow's constructor", 'node -e', '"', String.raw`(() => {}).constructor(\"require('fs').writeFileSync('C:/Users/User/x.txt','a')\")()`, true);
+both('exec of compile', 'python -c', '"', String.raw`exec(compile(\"open('C:/Users/User/x.txt','w')\", 'f', 'exec'))`, true);
+both('exec of a variable', 'python -c', '"', String.raw`code = \"open('C:/Users/User/x.txt','w').write('a')\"` + '\nexec(code)', true);
+both('exec of decoded bytes in a script that writes', 'python -c', '"', "import base64; exec(base64.b64decode('eA=='))\nopen('.tmp/x.txt','w').write('a')", true);
+both('ruby eval without parentheses', 'ruby -e', "'", String.raw`eval "File.write(\"C:/Users/User/x.txt\", \"a\")"`, true);
+both('perl eval of a string', 'perl -e', "'", String.raw`eval "unlink \"C:/Users/User/x.txt\""`, true);
+both('perl eval of a variable', 'perl -e', "'", String.raw`my $c = "unlink \"C:/Users/User/x.txt\""; eval $c`, true);
+both('eval of the code after the script', 'node -e', '"', 'eval(process.argv[1])', true, ` '${"require('fs').writeFileSync('C:/Users/User/x.txt','a')".replace(/'/g, "'\\''")}'`);
+both('exec of the code after the script', 'python -c', '"', 'import sys; exec(sys.argv[1])', true, ` '${"open('C:/Users/User/x.txt','w')".replace(/'/g, "'\\''")}'`);
+both('eval of code read from a file outside', 'node -e', '"', `const s = require('fs').readFileSync('${U}/a.txt','utf8'); eval(s)`, true);
+// 3. A method named by a string.
+both('a key kept in a variable, in a script naming a path outside', 'node -e', '"', `const fs = require('fs'); const m = 'writeFileSync'; fs[m]('${U}/x.txt','a')`, true);
+both('a key and a path from the command line', 'node -e', '"', "const fs = require('fs'); fs[process.argv[1]](process.argv[2],'a')", true, ` writeFileSync ${U}/x.txt`);
+both('a chain of string keys', 'node -e', '"', `require('fs')['promises']['writeFile']('${U}/x.txt','a')`, true);
+both('a string key kept under another name', 'node -e', '"', `const w = require('fs')['writeFileSync']; w('${U}/x.txt','a')`, true);
+both('getattr with a literal name', 'python -c', '"', `import os; getattr(os, 'remove')('${U}/x.txt')`, true);
+both('getattr kept under another name', 'python -c', '"', `import os; f = getattr(os, 'remove'); f('${U}/x.txt')`, true);
+both('getattr with a name from the command line', 'python -c', '"', `import os, sys; getattr(os, sys.argv[1])('${U}/x.txt')`, true, ' remove');
+both('ruby send with a symbol', 'ruby -e', "'", `File.send(:write, "${U}/x.txt", "a")`, true);
+both('ruby method(...).call', 'ruby -e', "'", `File.method(:write).call("${U}/x.txt", "a")`, true);
+both('ruby send with a name from the command line', 'ruby -e', "'", `m = ARGV[0]; File.send(m, "${U}/x.txt", "a")`, true);
+// 4. The home folder, in more spellings.
+both('process.env with a bracket', 'node -e', '"', "require('fs').writeFileSync(process.env['USERPROFILE'] + '/x.txt','a')", true);
+both("ruby's ENV", 'ruby -e', "'", 'File.write(ENV["HOME"] + "/x.txt", "a")', true);
+both('Deno.env.get of USERPROFILE', 'deno eval', '"', "Deno.writeTextFileSync(Deno.env.get('USERPROFILE') + '/x.txt','a')", true);
+// 5. Perl and Ruby calls written without parentheses.
+both('perl symlink pointing outside', 'perl -e', "'", `symlink "${U}", ".tmp/esc"`, true);
+both('perl link', 'perl -e', "'", `link "a.txt", "${U}/x.txt"`, true);
+both('perl File::Copy copy', 'perl -e', "'", `use File::Copy; copy "a.txt", "${U}/x.txt"`, true);
+both('perl File::Copy move', 'perl -e', "'", `use File::Copy; move "a.txt", "${U}/x.txt"`, true);
+both('perl rmdir', 'perl -e', "'", `rmdir "${U}/d"`, true);
+both('perl unlink of a list', 'perl -e', "'", `unlink ".tmp/a", "${U}/x.txt"`, true);
+both('perl chmod of a list', 'perl -e', "'", `chmod 0644, "${U}/x.txt"`, true);
+both('perl unlink with a condition after it', 'perl -e', "'", `unlink "${U}/x.txt" if -e "${U}/x.txt"`, true);
+both('perl make_path', 'perl -e', "'", `use File::Path qw(make_path); make_path "${U}/d"`, true);
+both('ruby FileUtils.rm_rf', 'ruby -e', "'", `require "fileutils"; FileUtils.rm_rf "${U}/d"`, true);
+both('ruby File.write', 'ruby -e', "'", `File.write "${U}/x.txt", "a"`, true);
+both('ruby File.open for writing with a block', 'ruby -e', "'", `File.open "${U}/x.txt", "w" do |f| f.write "a" end`, true);
+// 6. An argument list is a command line.
+both('os.execvp', 'python -c', '"', `import os; os.execvp('cp', ['cp', 'a.txt', '${U}/x.txt'])`, true);
+both('os.spawnl', 'python -c', '"', `import os; os.spawnl(os.P_WAIT, '/bin/cp', 'cp', 'a.txt', '${U}/x.txt')`, true);
+both('os.posix_spawn', 'python -c', '"', `import os; os.posix_spawn('/bin/cp', ['cp', 'a.txt', '${U}/x.txt'], {})`, true);
+both('spawnSync cp', 'node -e', '"', `require('child_process').spawnSync('cp', ['a.txt','${U}/x.txt'])`, true);
+both('spawn mkdir', 'node -e', '"', `require('child_process').spawn('mkdir', ['-p','${U}/d'])`, true);
+both('execFile touch', 'node -e', '"', `require('child_process').execFile('touch', ['${U}/x.txt'], () => {})`, true);
+both('execFileSync with the destination in a variable', 'node -e', '"', `const d = '${U}/x.txt'; require('child_process').execFileSync('cp', ['a.txt', d])`, true);
+both('subprocess.check_call mv', 'python -c', '"', `import subprocess; subprocess.check_call(['mv','a.txt','${U}/x.txt'])`, true);
+both('subprocess.Popen tee', 'python -c', '"', `import subprocess; subprocess.Popen(['tee','${U}/x.txt'])`, true);
+both('subprocess.getoutput', 'python -c', '"', `import subprocess; subprocess.getoutput('touch ${U}/x.txt')`, true);
+both('asyncio.create_subprocess_exec', 'python -c', '"', `import asyncio; asyncio.run(asyncio.create_subprocess_exec('cp', 'a.txt', '${U}/x.txt'))`, true);
+both('ruby system with separate arguments', 'ruby -e', "'", `system("cp", "a.txt", "${U}/x.txt")`, true);
+both('ruby spawn with separate arguments', 'ruby -e', "'", `spawn("cp", "a.txt", "${U}/x.txt")`, true);
+both('ruby IO.popen with a list', 'ruby -e', "'", `IO.popen(["cp", "a.txt", "${U}/x.txt"]).read`, true);
+both('ruby Open3.capture2', 'ruby -e', "'", `require "open3"; Open3.capture2("cp", "a.txt", "${U}/x.txt")`, true);
+both('perl system with separate arguments', 'perl -e', "'", `system("cp", "a.txt", "${U}/x.txt")`, true);
+both('perl system without parentheses', 'perl -e', "'", `system "cp", "a.txt", "${U}/x.txt"`, true);
+both('perl exec without parentheses', 'perl -e', "'", `exec "cp", "a.txt", "${U}/x.txt"`, true);
+// 7. Calls that make a file without the word write.
+both('tempfile.mkstemp in the system temp folder', 'python -c', '"', 'import tempfile; tempfile.mkstemp()', true);
+both('tempfile.mkdtemp with dir outside', 'python -c', '"', `import tempfile; tempfile.mkdtemp(dir='${U}')`, true);
+both('tempfile.NamedTemporaryFile with dir outside', 'python -c', '"', `import tempfile; tempfile.NamedTemporaryFile(dir='${U}')`, true);
+both('TemporaryDirectory in the system temp folder', 'python -c', '"', 'from tempfile import TemporaryDirectory; TemporaryDirectory()', true);
+both('Deno.openSync for writing', 'deno eval', '"', `Deno.openSync('${U}/x.txt', { write: true, create: true })`, true);
+both('Deno.makeTempFileSync in the system temp folder', 'deno eval', '"', 'Deno.makeTempFileSync()', true);
+both('Deno.makeTempDirSync with dir outside', 'deno eval', '"', `Deno.makeTempDirSync({ dir: '${U}' })`, true);
+both('Deno.linkSync', 'deno eval', '"', `Deno.linkSync('a.txt', '${U}/x.txt')`, true);
+both('shelve.open', 'python -c', '"', `import shelve; shelve.open('${U}/db')`, true);
+both("dbm.open with 'c'", 'python -c', '"', `import dbm; dbm.open('${U}/db', 'c')`, true);
+both('logging.basicConfig with a filename', 'python -c', '"', `import logging; logging.basicConfig(level=10, filename='${U}/x.log')`, true);
+both('logging.FileHandler', 'python -c', '"', `import logging; logging.FileHandler('${U}/x.log')`, true);
+both('os.mkfifo', 'python -c', '"', `import os; os.mkfifo('${U}/p')`, true);
+both('os.link', 'python -c', '"', `import os; os.link('a.txt', '${U}/x.txt')`, true);
+both('fs.link', 'node -e', '"', `require('fs').link('a.txt', '${U}/x.txt', () => {})`, true);
+both('fs.openSync with flags w', 'node -e', '"', `require('fs').openSync('${U}/x.txt', { flags: 'w' })`, true);
+both('sqlite3.connect by keyword', 'python -c', '"', `import sqlite3; sqlite3.connect(database='${U}/x.db')`, true);
+both('sqlite3.connect to a file URI', 'python -c', '"', `import sqlite3; sqlite3.connect('file:${U}/x.db?mode=rwc', uri=True)`, true);
+both('pandas ExcelWriter', 'python -c', '"', `import pandas as pd; pd.ExcelWriter('${U}/x.xlsx')`, true);
+both('ruby File.new for writing', 'ruby -e', "'", `File.new("${U}/x.txt", "w")`, true);
+t('[R12] PowerShell: python changes its folder, then writes', ps(`python -c "import os; os.chdir('${U}'); open('x.txt','w').write('a')"`), true);
+t('[R12] PowerShell: execFileSync cp with an argument list', ps(`node -e "require('child_process').execFileSync('cp',['a.txt','${U}/x.txt'])"`), true);
+t('[R12] a heredoc python script that changes its folder, then writes', bash(`python3 - <<'EOF'\nimport os\nos.chdir('${U}')\nopen('x.txt','w').write('a')\nEOF`), true);
+t('[R12] a nested python script that changes its folder', bash(`node -e "require('child_process').spawnSync('python', ['-c', \\"import os; os.chdir('${U}'); open('x','w')\\"])"`), true);
+t('[R12] padding with string keys does not wear the reading out', bash(`node -e "const a = {}; ${Array.from({ length: 300 }, (_, i) => `a['k${i}']`).join('; ')}; require('fs')['writeFileSync']('${U}/x.txt','a')"`), true);
+t('[R12] padding with bare calls does not wear the reading out', bash(`perl -e '${Array.from({ length: 300 }, () => 'unlink ".tmp/a"').join('; ')}; unlink "${U}/x.txt"'`), true);
+tWhy('[R12] the refusal after a chdir names the folder the script moved to', bash(`node -e "process.chdir('${U}'); require('fs').writeFileSync('x.txt','a')"`), 'moved its working folder to "c:/users/user"');
+
+// Reads stay allowed, one-line and multi-line alike, and so do writes that
+// land inside, however they are spelled.
+both('a read with readFileSync', 'node -e', '"', `console.log(require('fs').readFileSync('${U}/a.txt','utf8'))`, false);
+both('a check with existsSync', 'node -e', '"', `console.log(require('fs').existsSync('${U}/a.txt'))`, false);
+both('a stat with statSync', 'node -e', '"', `console.log(require('fs').statSync('${U}/a.txt').size)`, false);
+both('a listing with readdirSync', 'node -e', '"', `console.log(require('fs').readdirSync('${U}'))`, false);
+both('python open with no mode', 'python -c', '"', `print(open('${U}/a.txt').read())`, false);
+both("python open with 'r'", 'python -c', '"', `print(open('${U}/a.txt','r').read())`, false);
+both('json.load', 'python -c', '"', `import json; print(json.load(open('${U}/a.json')))`, false);
+both('glob', 'python -c', '"', `import glob; print(glob.glob('${U}/*.png'))`, false);
+both('os.listdir', 'python -c', '"', `import os; print(os.listdir('${U}'))`, false);
+both("perl open with '<'", 'perl -e', "'", `open(my $f, "<", "${U}/a.txt"); print <$f>`, false);
+both("perl open with '<' and no parentheses", 'perl -e', "'", `open my $f, "<", "${U}/a.txt" or die; print <$f>`, false);
+both('ruby File.read', 'ruby -e', "'", `puts File.read("${U}/a.txt")`, false);
+both('a chdir outside that only reads', 'node -e', '"', `process.chdir('${U}'); console.log(require('fs').readdirSync('.'))`, false);
+both('a python chdir outside that only reads', 'python -c', '"', `import os; os.chdir('${U}'); print(os.listdir('.'))`, false);
+both('a ruby chdir outside that only reads', 'ruby -e', "'", `Dir.chdir("${U}"); puts Dir.glob("*")`, false);
+both('an eval that only reads', 'node -e', '"', String.raw`eval(\"console.log(require('fs').readFileSync('C:/Users/User/a.txt','utf8'))\")`, false);
+both('a python exec that only reads', 'python -c', '"', String.raw`exec(\"print(open('C:/Users/User/a.txt').read())\")`, false);
+both('a read named by a string key', 'node -e', '"', `console.log(require('node:fs')['readFileSync']('${U}/a.txt','utf8'))`, false);
+both('cat of a file outside through an argument list', 'python -c', '"', `import subprocess; print(subprocess.run(['cat','${U}/a.txt'], capture_output=True).stdout)`, false);
+both('git -C outside through an argument list', 'node -e', '"', `console.log(require('child_process').execFileSync('git',['-C','${U}/repo','status']).toString())`, false);
+both('sqlite3 in memory', 'python -c', '"', "import sqlite3; print(sqlite3.connect(':memory:'))", false);
+both('sqlite3 read-only URI', 'python -c', '"', `import sqlite3; print(sqlite3.connect('file:${U}/x.db?mode=ro', uri=True))`, false);
+both('sqlite3 inside', 'python -c', '"', "import sqlite3; sqlite3.connect('.tmp/x.db')", false);
+both('tempfile with dir inside', 'python -c', '"', "import tempfile; print(tempfile.mkstemp(dir='.tmp'))", false);
+both('Deno.openSync for reading', 'deno eval', '"', `console.log(Deno.openSync('${U}/a.txt', { read: true }))`, false);
+both("pickle with 'rb'", 'python -c', '"', `import pickle; print(pickle.load(open('${U}/a.pkl','rb')))`, false);
+both("a model's eval() is not code", 'python -c', '"', `import torch; m = torch.load('${U}/m.pt'); m.eval(); print(m)`, false);
+both('re.compile is not code', 'python -c', '"', `import re; p = re.compile(r'x'); print(p.findall(open('${U}/a.txt').read()))`, false);
+both('ast.literal_eval is not code', 'python -c', '"', `import ast; print(ast.literal_eval(open('${U}/a.txt').read()))`, false);
+both("pandas' DataFrame.eval is not code", 'python -c', '"', `import pandas as pd; df = pd.read_csv('${U}/a.csv'); print(df.eval('a + b'))`, false);
+both('an eval of code from the command line in a script that writes nothing', 'node -e', '"', 'console.log(eval(process.argv[1]))', false, " '1+2'");
+both('an exec of a project script', 'python -c', '"', "exec(open('scripts/x.py').read())", false);
+both('a perl eval block', 'perl -e', "'", `eval { open(my $f, "<", "${U}/a.txt") or die; print <$f> }; print $@`, false);
+both('a key named eval', 'node -e', '"', 'const x = {eval: 1}; console.log(x.eval)', false);
+both("a class's constructor", 'node -e', '"', 'class A { constructor(x) { this.x = x } }; console.log(new A(1))', false);
+both('perl unlink inside', 'perl -e', "'", 'unlink ".tmp/x.txt"', false);
+both('perl rename inside', 'perl -e', "'", 'rename ".tmp/a", ".tmp/b"', false);
+both('ruby File.write inside', 'ruby -e', "'", 'File.write ".tmp/x.txt", "a"', false);
+both('a chdir inside, then a relative write', 'node -e', '"', "process.chdir('.tmp'); require('fs').writeFileSync('x.txt','a')", false);
+both('a chdir into src, then a write to ../.tmp', 'python -c', '"', "import os; os.chdir('src'); open('../.tmp/x.txt','w').write('a')", false);
+both('a command started with cwd inside', 'python -c', '"', "import subprocess; subprocess.run(['touch','x.txt'], cwd='.tmp')", false);
+both('a command started with cwd=os.getcwd()', 'python -c', '"', "import os, subprocess; subprocess.run(['git','status'], cwd=os.getcwd())", false);
+both('a command started with cwd=None', 'python -c', '"', "import subprocess; subprocess.run(['git','status'], cwd=None)", false);
+both('mkdir through an argument list, of a joined path inside', 'python -c', '"', "import os, subprocess; d = os.path.join('.tmp', 'x'); subprocess.run(['mkdir', '-p', d])", false);
+both('cp from outside into the project through an argument list', 'python -c', '"', `import subprocess; subprocess.run(['cp', '${U}/Downloads/a.png', 'public/media/a.png'])`, false);
+both('perl chmod of a project file in a script that reads outside', 'perl -e', "'", `chmod 0755, "scripts/x.sh"; open(my $f, "<", "${U}/a.txt")`, false);
+t('[R12] PowerShell: a read outside', ps(`node -e "console.log(require('fs').readFileSync('${U}/a.txt','utf8'))"`), false);
+t('[R12] a heredoc python script that changes its folder and only reads', bash(`python3 - <<'EOF'\nimport os\nos.chdir('${U}')\nprint(os.listdir('.'))\nEOF`), false);
 
 console.log('path-guard: writing programs (bash)');
 t('cp into the project', bash('cp a.png public/media/a.png'), false);
@@ -892,6 +1149,10 @@ hook('[R8] a brace list with an outside word exits 2', payload(bash('touch {a,/c
 hook('POSIX: a write to a sibling folder exits 2', JSON.stringify({ ...write('/home/u/other/x.md'), cwd: PROOT }), 2, 'outside the project folder');
 hook('POSIX: a write inside the project exits 0', JSON.stringify({ ...write('/home/u/app/x'), cwd: PROOT }), 0);
 hook('[R9] the refusal names its rule by title, not by number', payload(write(`${OUT}/x.md`)), 2, 'Every file you write stays inside the project root');
+hook('[R11] a one-line node -e that only reads /etc/hostname exits 0', payload(bash(`node -e "console.log(require('fs').readFileSync('/etc/hostname','utf8'))"`)), 0);
+hook('[R11] a one-line node -e that writes outside exits 2', payload(bash(`node -e "require('fs').writeFileSync('${OUT}/x.txt','a')"`)), 2, 'outside the project folder');
+hook('[R12] a one-line node -e that moves its folder out, then writes, exits 2', payload(bash("node -e \"process.chdir('C:/Users/User'); require('fs').writeFileSync('x.txt','a')\"")), 2, 'moved its working folder');
+hook('[R12] a one-line perl -e unlink without parentheses exits 2', payload(bash("perl -e 'unlink \"C:/Users/User/x.txt\"'")), 2, 'outside the project folder');
 
 // [R9] With CLAUDE_PROJECT_DIR set, as Claude Code always sets it, the payload's
 // cwd is only where a relative path starts. The project stays the one place a

@@ -1,4 +1,4 @@
-# {{PROJECT_NAME}} — working rules for your AI assistant
+# {{PROJECT_NAME}}: working rules for your AI assistant
 
 This is the first file the assistant reads, every session. It holds what a fresh
 session cannot know on its own: what this project is, who it answers to, and the
@@ -6,9 +6,9 @@ rules that override the assistant's own defaults.
 
 ## What this project is
 
-{{PROJECT_NAME}} — {{STACK}}.
+{{PROJECT_NAME}}: {{STACK}}.
 
-> **Setup step — replace this section.** Write two or three sentences saying what
+> **Setup step: replace this section.** Write two or three sentences saying what
 > the product does, who uses it, and what state it is in right now. Then delete
 > this quoted block. A vague description here produces vague work everywhere else.
 
@@ -17,9 +17,8 @@ rules that override the assistant's own defaults.
 You work for {{OWNER_NAME}}, a {{OWNER_ROLE}}.
 
 Explain enough to support a decision, then stop. A {{OWNER_ROLE}} does not need
-the walkthrough — they need the fact that changes the call, and the tradeoff
-attached to it. Long output is not thoroughness; it is a bill they have to pay in
-reading time.
+the walkthrough. They need the fact that changes the call, and the tradeoff
+attached to it.
 
 ## Where things are
 
@@ -33,12 +32,12 @@ reading time.
 
 Read this file first. Then the docs in `project-os/`, in this order:
 
-1. `project-os/Workflow.md` — the process every task follows, from request to
+1. `project-os/Workflow.md`: the process every task follows, from request to
    delivery. This is the one you are graded against.
-2. `project-os/Map.md` — where things live and how the pieces fit. Read it before
+2. `project-os/Map.md`: where things live and how the pieces fit. Read it before
    you go looking for a file.
-3. `project-os/QA.md` — what must be checked before anything is called done.
-4. `project-os/Conversations.md` — how you write replies. Every reply, not just
+3. `project-os/QA.md`: what must be checked before anything is called done.
+4. `project-os/Conversations.md`: how you write replies. Every reply, not just
    report-backs.
 5. `project-os/History.md`: what changed recently, so you do not undo
    yesterday's fix. Read the Scan log only: find the `## Appendix` heading and
@@ -49,27 +48,31 @@ Read this file first. Then the docs in `project-os/`, in this order:
    heading below it (`## ` and a date). Open a full entry, or its copy in
    `Decisions-archive.md`, by searching for its heading, and only the entries
    your task touches.
-7. `project-os/Backlog.md` — the owner's open-items list. Scan it at pickup and
+7. `project-os/Backlog.md`: the owner's open-items list. Scan it at pickup and
    flag any open item your task touches.
-8. `project-os/Code_review.md` — the calibration for reviewing risky changes.
+8. `project-os/Code_review.md`: the calibration for reviewing risky changes.
    Load it when a review is due (rule 17), and for its blast-radius trace when
    a change touches something shared, at any risk level.
-9. `project-os/Visual_QA.md` — how the running app gets tested by using it. Load
+9. `project-os/Visual_QA.md`: how the running app gets tested by using it. Load
    it when the task changes something a person can see.
-10. `project-os/BugAtlas.md` — the project's recurring bug classes. Load it
+10. `project-os/BugAtlas.md`: the project's recurring bug classes. Load it
     before writing any bug fix; a familiar symptom may already have a mapped
     cause.
-11. `project-os/Mistakes.md` — the mistakes YOU made and were corrected on,
+11. `project-os/Mistakes.md`: the mistakes YOU made and were corrected on,
     waiting to become rules. Read it at task pickup; it is deliberately short.
-12. `project-os/Hooks.md` — the rules this project enforces mechanically, and
+12. `project-os/Hooks.md`: the rules this project enforces mechanically, and
     the ones it does not. Read it to know which of the rules above are merely
-    written down. You install those hooks during setup, without being asked.
+    written down.
 13. `project-os/Plan.md`, when it exists: the build plan the owner tracks
     (rule 13). Read it at task pickup.
 
 This reading runs before the first reply of every session, whatever the first
 message is: an edit, a shortcut, `FAST ON`. A hook's summary of a file is a
 reminder to read it, not a substitute.
+
+**Read on demand, never at pickup:** `project-os/Rule-reasons.md`, why each
+rule exists and what it prevents. It holds the reasons only, never a rule. Open
+it only when a rule is questioned, changed, or seems wrong.
 
 When a task goes through an MCP server (Figma, analytics, any tool that talks
 to an outside service), also read that server's rules doc under
@@ -102,8 +105,7 @@ later goes after rule 22.
 ### 1. Understand before changing
 
 Do not write code before you understand the request, the files involved, the
-current behavior, and what proves the change works. A change built on a guess
-costs more to unwind than it saved.
+current behavior, and what proves the change works.
 
 Before the first edit, settle these six things:
 
@@ -114,9 +116,8 @@ Before the first edit, settle these six things:
 - What behavior must stay unchanged.
 - What QA must run before delivery.
 
-The pickup line names the task, its type, the area and the risk level
-(rule 17), plus any invariant it touches (rule 11); the rest shows in the
-History row.
+The pickup line carries what `project-os/Conversations.md` (In-flight
+narration) names; the rest shows in the History row.
 
 **A constraint is a claim until it is checked.** Before an option is set aside
 because a platform limit, a technical claim or an earlier assumption seems to
@@ -126,8 +127,7 @@ forbid it, run the check in `project-os/Workflow.md` step 5, 'Check every
 ### 2. Smallest safe change wins
 
 Prefer the smallest isolated change that solves the task. No side refactors, no
-opportunistic cleanup. Every extra line is a line someone has to review and a
-place a regression can hide.
+opportunistic cleanup.
 
 ### 3. No big-bang refactors
 
@@ -137,35 +137,32 @@ Refactor only when one of these is true:
 - the current structure blocks the requested task,
 - repeated friction has piled up and is written down in `project-os/Decisions.md`.
 
-Otherwise the refactor is your idea, on someone else's schedule.
-
 ### 4. No destructive action without explicit approval
 
 Do not delete data, drop a schema, rewrite history, remove docs, or run a
-destructive command unless the owner asked for it and the way back is clear. The
-cost of asking is one message; the cost of being wrong is unbounded.
+destructive command unless the owner asked for it and the way back is clear.
 
 **Archiving is not rewriting.** Every file in `project-os/` that accumulates
 forever has a ceiling, and one script enforces it by MOVING old material into a
 sibling `*-archive.md` that is not read by default:
 
-- `project-os/Archive-old-rows.ps1` — one script, three engines: History deep rows and
+- `project-os/Archive-old-rows.mjs`, one script with three engines: History deep rows and
   the History scan log; Decisions entries (newest 25 stay live); and the
   tables, the Backlog Done table (40), the Mistakes Promoted and Retired
   tables (30), and the BugAtlas Atlas table (30), the project one and any
-  feature's.
+  feature's. Its PowerShell twin, `Archive-old-rows.ps1`, does the same for
+  anyone who prefers it.
 
 It is move-only, idempotent and dedup-safe: an entry is relocated byte for
 byte, never edited, summarized, renumbered or deleted, so running it twice
-changes nothing. The always-read parts never rotate — the Decisions Index keeps
+changes nothing. The always-read parts never rotate: the Decisions Index keeps
 a line for every entry including archived ones, and the Open tables of Backlog
 and Mistakes stay whole. It runs at `Go commit`. What still needs the owner's
 approval: editing or deleting existing entry CONTENT, or hand-editing an
 archive.
 
-**Heavy things are reported, never deleted.** A project quietly grows ten- and
-twenty-gigabyte things nobody needs: a stray download, a partial archive, a
-cache, a build folder. `project-os/Find-heavy-files.mjs` lists every file and top-level
+**Heavy things are reported, never deleted.**
+`project-os/Find-heavy-files.mjs` lists every file and top-level
 folder over 1 GB with its size and what kind of thing it is (regenerable,
 backups, git history, or a leftover the owner has to judge). It runs at
 `Go commit`, and whenever a task shows you something that big, say so in the
@@ -175,8 +172,7 @@ delete on your own, whatever the kind says.
 ### 5. Secrets stay out of the repo
 
 Real secrets live in an uncommitted local env file and in the host's config.
-Commit only an example file with the key names and no values. A secret in git
-history is a secret you cannot take back.
+Commit only an example file with the key names and no values.
 
 **If a key leaks anyway**, into git, a reply, a log or a shared file, tell the
 owner at once, in plain words. The key is rotated at its provider, since
@@ -186,28 +182,21 @@ remove it is the owner's call (rule 4).
 ### 6. Verify in a real browser
 
 If the change touches anything a person can see or click, drive the running app
-and check it. Build output proves the code compiled; it does not prove the button
-works.
-
-When a browser-automation tool is available, use it:
-
-- Open the screen the change affects.
-- Watch the console for errors.
-- Perform the real interaction, the way a person would.
-- Inspect the DOM or the stored state where the result is not visible on screen.
-- Check the neighboring screens the change could have broken.
+and check it, by the list in `project-os/QA.md` §2.
 
 **Never claim a tool is missing without looking for it.** Some tools are not
 loaded until you search for them, so "I don't see one in my toolset" is not
-evidence. Search first. A tool that loaded but was denied is a denied tool, not a
-missing one — say which one was denied and what you did instead. Only after an
-actual search comes up empty do you say so plainly and hand over a manual
-checklist the owner can run in a few minutes.
+evidence. Search first. If anything matches, load it and use it. No
+exceptions, and no "the owner can check this manually". A tool that loaded but
+was denied is a denied tool, not a missing one. Say which one was denied and
+what you did instead. Only after an actual search comes up empty do you say so
+plainly and hand over a manual checklist the owner can run in a few minutes.
 
 **A blocked surface is not a finished check.** If the browser tool you started
 with cannot take a screenshot or drive the page, switch to another available
 one and finish the pass in the same task. Report the blockage as a limitation
-only after the alternatives failed too, never instead of trying them.
+only after the alternatives failed too, never instead of trying them. When
+every route fails, that is Path C in `project-os/Workflow.md` step 9.
 
 **A dead app is the same case.** If the address will not load, the check is not
 impossible, it is waiting on the server. Rule 16 says who starts the server;
@@ -230,60 +219,45 @@ server was declined, which `claude mcp reset-project-choices` in the project
 folder undoes at the next session; or Chrome is missing, or Node is missing or
 too old (20.19 or newer, 22.12 or newer on the 22 line).
 
-**Close every tab you opened, in the same task.** A QA tab is yours, not the
-owner's; left behind, it clutters the window they work in. Never close a tab
-you did not open, and never stop a dev server you did not start (rule 16).
+**Close every tab you opened, in the same task.** Never close a tab you did
+not open, and never stop a dev server you did not start (rule 16).
 
 ### 7. QA is not optional
 
 Every completed change records what was checked, concretely, in its History row.
-Name the screen, the input, the expected result. "Tested", "verified", and "looks
-good" record nothing and are not accepted.
-
-`project-os/QA.md` holds the standing checklist. The written record goes in
-History: every check and its result. The chat reply is different. A passed
-check or a clean review is not news, so the reply names only a check that
-failed or could not run, the Path B or Path C outcome of the browser check
-(`project-os/Workflow.md` step 9), and review findings waiting for the
-owner's verdict.
+`project-os/QA.md` holds the standing checklist, and its §10 says what a
+concrete record is. What the reply says about checks is
+`project-os/Conversations.md`, Report-back sections.
 
 ### 8. Every completed change adds a History row
 
-The two rows `project-os/History.md` asks for — a scan line and an appendix row —
-every time, code or docs; that file shows the shape. Say what changed, what was
-checked, which files, and how to undo this one task by hand: which files, and
-what to put back. One `Go commit` can carry several tasks, so reverting the
-commit would undo them all. Keep it short: a row is an index entry, not an
-essay. The full story is in the commit diff.
-
-Without this, every session starts from zero and the same ground gets re-covered.
+Every completed change, code or docs, gets the two rows `project-os/History.md`
+asks for, a scan line and an appendix row: `project-os/Workflow.md` step 15
+says what goes in them.
 
 ### 9. Decisions are separate from History
 
 `project-os/History.md` says what changed. `project-os/Decisions.md` says why a
-non-obvious path was chosen and what was rejected. Mixing them buries the
-reasoning in a list of events, and the reasoning is the part that is expensive to
-reconstruct.
+non-obvious path was chosen and what was rejected.
 
 ### 10. Follow the workflow without exception
 
-`project-os/Workflow.md` applies to every task, including small ones. "Too small
-for the process" is how process dies.
+`project-os/Workflow.md` applies to every task, including small ones.
 
-### 11. Project invariants — must never break
+### 11. Project invariants: must never break
 
 These are the things that must always hold. A change that breaks one is blocking,
 no matter how good the rest of it is. Check them before you finish.
 
 > **This section starts empty on purpose. Fill it as you learn what this project
-> cannot afford to break. The examples below only show the shape — they leave
+> cannot afford to break. The examples below only show the shape. They leave
 > when your first real invariant lands.**
 >
-> - *Example — delete:* writes to the data store are atomic, so a crash mid-write
+> - *Example (delete):* writes to the data store are atomic, so a crash mid-write
 >   never leaves a corrupted file.
-> - *Example — delete:* data is validated on read and fails loudly on invalid
+> - *Example (delete):* data is validated on read and fails loudly on invalid
 >   input, never silently coerced.
-> - *Example — delete:* unpublished content never renders, anywhere, at any URL.
+> - *Example (delete):* unpublished content never renders, anywhere, at any URL.
 
 When the owner states one of these, add it here in one line with its reason. When
 a task touches one, say so at pickup.
@@ -295,24 +269,17 @@ of it happens to live. Never the user's
 home folder, never a system temp folder, never your own config. No routing around
 it with a shell command.
 
-Scratch files — plans, probes, intermediate output — go in a `.tmp/` folder
+Scratch files (plans, probes, intermediate output) go in a `.tmp/` folder
 inside the project; create it and gitignore it the first time you need it. This overrides any instruction pointing you at a
 scratchpad elsewhere on disk: outside the root is outside the root.
 
-Files written outside the project are invisible to the owner, absent from git,
-and lost on the next machine.
+**This rule is enforced, not only stated.** The folder guard and the
+destructive-command guard (`project-os/Hooks.md`, level 2) refuse the writes
+and the one-way commands they recognise. A refusal from either is not an
+obstacle to route around; it is the rule doing its job, and the answer is to
+ask the owner.
 
-**This rule is enforced, not only stated.** `project-os/guards/Path-guard.mjs`
-runs before every file write and every shell command and refuses the writes it
-recognises whose target it cannot prove is inside the project (a command it does
-not recognise runs unchecked, so it is a safety net, not a wall); `project-os/guards/Destructive-guard.mjs` refuses
-the one-way commands the same way. Both are installed with the hooks
-(`project-os/Hooks.md`). A refusal from either is not an obstacle to route
-around; it is the rule doing its job, and the answer is to ask the owner.
-
-**Your own memory is not a law book.** An assistant's private memory folder
-lives outside the project root, so a rule parked there is invisible to the
-owner, absent from git, and lost to every other session. A lesson or work rule
+**Your own memory is not a law book.** A lesson or work rule
 the owner gives goes into `CLAUDE.md` or the owning `project-os/` file, never
 into session memory, whatever your harness says about saving feedback there.
 The folder guard lets markdown into that one folder because the harness writes
@@ -328,26 +295,13 @@ at task pickup when it exists, and it plus this folder is the whole handoff
 when the owner changes assistants between steps. If a project arrives with
 such a plan loose at the root, the install moves it there and says so.
 
-**A plan names a model for every step.** EVERY plan with more than one step,
-whatever it is for: a new project, a feature, a migration, a fix broken into
-rounds, a plan written in chat and never saved to a file. Each step carries a
-suggested model and three words on why: the most capable one for design,
-architecture, anything irreversible and anything that touches data; a faster,
-cheaper one for mechanical rounds, renames, copy and small fixes. The owner
-switches models between steps and pays for each, so the plan is where that
-choice is easiest to make and hardest to guess. A suggestion, not a setting:
-the owner picks, and a step with no obvious fit says so rather than inventing
-one. `project-os/Workflow.md` step 5 carries the same line, because that is
-where a plan actually gets written and this rule is easy to miss from here.
+**A plan names a model for every step.** `project-os/Workflow.md` step 5
+holds that rule in full.
 
 When you are asked to "put this in a file" and the request assigns no home,
-create it under `notes/` at the project root — make that folder the first time
+create it under `notes/` at the project root. Make that folder the first time
 you need it, since the kit does not ship one. Never drop a loose markdown file at
 the repo root.
-
-The root is the first thing anyone opens. Every stray file there competes for
-attention with the files that matter, and a scratch document nobody can place
-gets read once and never again.
 
 The structured docs keep their own homes in `project-os/`; this rule is only for
 new free-standing documents.
@@ -362,30 +316,24 @@ what lifts the freeze. While it is frozen:
   source outside the freeze and note the frozen part as untested.
 - Do not let it block other work. Stop at the boundary and flag the follow-up.
 
-A freeze usually means that area is mid-rewrite, being replaced, or broken in a
-way the owner has already accounted for. Findings there are findings they cannot
-act on, and edits there are conflicts they have to unpick later.
-
 The freeze holds until the owner lifts it, on the stated condition.
 
 **No area is currently frozen.** This rule is dormant until one is named.
 
 ### 15. A title is a title
 
-When you design any title — page header, section heading, card title, modal
-title, empty state, group label — the title is the only text in that slot. Never
+When you design any title (page header, section heading, card title, modal
+title, empty state, group label), the title is the only text in that slot. Never
 add, on your own initiative:
 
 - a subtitle or helper paragraph below it, or
 - an eyebrow or kicker label above it.
 
-A self-authored subtitle almost never carries information. It dilutes the heading
-and adds words the reader has to skip. Add one only when the owner asks for one on
-that specific element.
+Add one only when the owner asks for one on that specific element.
 
 ### 16. Never start the dev server
 
-> **Setup step — the install fills this, then deletes this block.** Ask the
+> **Setup step: the install fills this, then deletes this block.** Ask the
 > owner in pile two: who starts the dev server, and where does it run? The
 > four honest answers, and what each one makes of this rule:
 >
@@ -403,7 +351,6 @@ that specific element.
 Assume the owner already has one running at `{{DEV_URL}}`, and drive that. Do not
 launch one, in the foreground or the background, at any point.
 
-A second instance collides with theirs and takes away their live preview.
 One-shot commands like `{{CHECK_COMMAND}}` do not hold the port and are fine to
 run. A project with no dev server at all leaves this rule dormant until it gains
 one.
@@ -420,33 +367,15 @@ unverified.
 
 ### 17. Risky changes get reviewed
 
-State the risk level at pickup — low, medium, or high. The scale itself lives in
-one place, `project-os/Workflow.md` step 2, so it cannot drift; the short of it
-is that behavior is medium, and data, or anything that touches a rule-11
-invariant, is high.
+State the risk level at pickup, on the scale in `project-os/Workflow.md`
+step 2. The owner can override it, as that step says.
 
-The owner can override your call; their rating wins.
+Medium or high arms an automatic review, run as `project-os/Workflow.md`
+step 12 sets out. The task is not done until the review has run. It also
+traces **where else the change can reach**. `project-os/Code_review.md`
+carries the method.
 
-Saying the level out loud sets what scrutiny the change earns before the work
-starts, instead of arguing about it afterwards.
-
-Medium or high arms an automatic review: once the change passes its own QA, run
-the pass in `project-os/Code_review.md` against this task's own edits, the ones
-its History row lists. One `Go commit` can carry several tasks, so other
-uncommitted or unpushed work belongs to earlier tasks and counts as
-pre-existing. Fix every finding
-your change introduced, then re-verify each fix — in the browser if it is
-user-visible. Findings that were already there are reported, not fixed; they wait
-for the owner's verdict. The task is not done until the review has run. Its
-result goes in the History row; the reply names only the findings that wait for
-the owner's verdict.
-
-That review covers two questions, not one: whether the changed code is correct,
-and **where else the change can reach**. The diff shows what you edited, never who
-was depending on it, so trace the consumers and say whether the impact is
-contained, shared, or unknown. `project-os/Code_review.md` carries the method.
-
-### 18. The iron rule — change only what was asked
+### 18. The iron rule: change only what was asked
 
 Do exactly what was asked. Nothing else.
 
@@ -456,15 +385,15 @@ not be theirs to make.
 
 Never, on your own initiative:
 
-- change a value the request did not name — a duration, a color, a size, a
+- change a value the request did not name: a duration, a color, a size, a
   spacing, a breakpoint, an easing;
 - delete or disable a behavior that merely became pointless after the asked
-  change — say it is now inert, and ask;
+  change (say it is now inert, and ask);
 - extend the change to a sibling, a variant, or another component for
   consistency;
 - rename, reformat, or reorder code you were not asked to touch.
 
-**When the asked change has a side effect, ask — do not resolve it alone.** One
+**When the asked change has a side effect, ask. Do not resolve it alone.** One
 short question beats one unrequested edit, every time.
 
 The only things that ride along are what the change strictly requires to work: a
@@ -473,7 +402,7 @@ those get one line in the report, named as a side effect, so the owner can veto
 them.
 
 This sits on top of rule 2. Rule 2 says do not solve more of the problem than
-asked. Rule 18 says do not touch anything the request did not name — including
+asked. Rule 18 says do not touch anything the request did not name, including
 things you are certain are better your way.
 
 ### 19. The same bug twice becomes an atlas row
@@ -482,10 +411,6 @@ When a bug pattern appears a second time, or a fix took several attempts
 because the real cause was hidden, add or update a row in
 `project-os/BugAtlas.md` in the same task. Before writing any bug fix, check
 that file for a matching symptom first.
-
-History says a bug was fixed once. The atlas says it is a CLASS, and hands the
-next session the cause and the fix that held. Without it, the third occurrence
-costs as much as the first.
 
 ### 20. A correction you were given is written down, once
 
@@ -501,9 +426,6 @@ Skip the waiting room when the right rule is already obvious, and write the
 rule instead. Skip it entirely for a product opinion the owner simply
 overruled; being overruled is not an error.
 
-A correction that lives only in chat expires with the session, and the next
-session makes the same mistake with total confidence.
-
 ### 21. This project is your only source
 
 Everything you use comes from THIS repo, the owner's own words, or the tool
@@ -518,12 +440,7 @@ Concretely, never on your own initiative:
 
 **A missing piece is a question, not a search.** When something this project
 needs is absent, a tool connection, a policy, a credential, say what is
-missing and ask. Filling the hole from a neighboring folder produces a setting
-that was never chosen here and looks decided forever after (that is exactly
-how a commit policy arrived unasked).
-
-In client work the same habit is a leak: two clients' repositories sit on the
-same disk, and material has no business crossing between them.
+missing and ask.
 
 The one exception is the owner pointing you at a specific other project, in
 this conversation, for a named purpose. Their instruction, their scope, and it
@@ -532,36 +449,45 @@ covers that task only.
 Rule 12 keeps your WRITES inside the project. This rule keeps your READS and
 your reasoning inside it too.
 
-### 22. The owner pushes to main. The assistant never does.
+### 22. Main is the owner's. The assistant pushes only a cloud session's own branch.
 
-Pushing to the main branch is the one act that makes a change real for
+Getting a change into the main branch is the one act that makes it real for
 everyone, and it is the owner's, without exception. You commit, with the
-checks run, and you stop. You do not push, you do not open a route around it,
-and you do not treat a permission that happens to allow it as an invitation.
+checks run, and then where the session runs decides the rest:
+
+- **Everywhere except a cloud session, you never push**, to main or to any
+  other branch. You stop at the commit, you do not open a route around it, and
+  you do not treat a permission that happens to allow it as an invitation.
+  Only the owner pushes.
+- **In a cloud session** (Claude Code on the web, where the environment
+  variable `CLAUDE_CODE_REMOTE` is `true`), the owner has no terminal there and
+  the session's machine is deleted once it sits idle, so a commit left
+  unpushed is lost. There you push the session's own branch, never main, and
+  the report says so in one line, naming the branch. The owner merges it into
+  main. Check the variable, never assume it: anywhere it is not `true`, the
+  first case applies.
 
 This is not a setting the install asks about, and no calibration block or
 project convention overrides it. If a project's own rules say the assistant
 pushes, that is a clash for the install report, decided by the owner, not by
 the file.
 
-An assistant that pushes is an assistant whose mistakes reach production
-without a human between them and the world. The commit is the place to stop.
+The commit is the place to stop, and in a cloud session the session's own
+branch.
 
 **The whole flow, in three lines, and no install answer changes it:**
 
 1. You finish the task, and the report's Next line tells the owner the work is
    uncommitted and that `Go commit` commits it whenever they want.
 2. The owner types `Go commit`, and you commit: checks, message, commit, stop.
-3. The owner pushes. Only the owner, ever.
+   In a cloud session you push the session's own branch, then stop.
+3. Outside a cloud session the owner pushes, and only the owner. In a cloud
+   session the owner merges the branch you pushed; main is theirs alone
+   either way.
 
-**You never commit on your own, and you never refuse when asked.** Both ends
-have failed on real installs. A commit nobody asked for takes the timing away
-from the owner, who may still be looking at the change. And an assistant that
-answers `Go commit` with "the commit is yours" hands them a pile of changed
-files and the record of work they did not do, which is the one part only you
-can write: what changed, why, what was checked. Never say the commit is
-theirs, never call it their rule. When the phrase comes, the commit is yours,
-in full; until it comes, the reminder in Next is all you do.
+**You never commit on your own, and you never refuse when asked.** Never say
+the commit is theirs, never call it their rule. When the phrase comes, the
+commit is yours, in full; until it comes, the reminder in Next is all you do.
 
 ## Review & QA commands (owner-triggered)
 
@@ -569,51 +495,19 @@ Two phrases that start a calibrated pass. Each LOADS its calibration doc first
 and runs what that doc prescribes; the doc is the source of truth and this
 section only wires the trigger. Match is case-insensitive.
 
-Deliver findings as a terse chat summary in the reply format
-`project-os/Conversations.md` prescribes, with counts by severity, PLUS a dated
-document under the project's notes folder. Per finding the owner's verdict
-vocabulary is **fix / drop / backlog**; a `backlog` verdict adds the item to
-`project-os/Backlog.md`, and a `drop` is recorded in the calibration doc's
-exceptions, with the condition that would make it worth raising again, so a
-later pass skips it until that condition is met.
+What a pass delivers is that doc's Output section; its task document is dated
+and goes under the project's notes folder. The owner's verdict on each finding,
+**fix / drop / backlog**, is folded back as that doc's Calibration loop says.
 
 ### `Go code review`
 
-Run the review in `project-os/Code_review.md`.
-
-1. **Read that file first** and load its calibration: the severity bar, the
-   always-check list, the settled exceptions.
-2. **Scope is the WHOLE REPO, every time.** The entire codebase as it stands,
-   including code that shipped long ago and code nobody has opened in months.
-   Not a diff, not the unpushed range, not the working tree, not "the files
-   this session touched". If a review tool is used as the engine, note that
-   such tools default to reviewing a diff, and that default is WRONG here:
-   drive it over the whole tree, in batches by area if the repo is large, and
-   say which areas were covered.
-   This matters because the automatic review after each task (rule 17) already
-   covers the diff. A second diff review adds nothing; the whole value of this
-   one is everything the diff reviews never look at. Only a range the owner
-   names in the same message narrows it.
-3. **Triage every finding as introduced or pre-existing.** Report pre-existing
-   ones, do not fix them, and do not let them block.
-4. **Deliver** the summary plus the dated document, one block per finding:
-   title, where, the problem, the fix, how to verify, status.
+Run the review in `project-os/Code_review.md`. Read that file first; its Scope
+section sets this pass to the WHOLE REPO, every time, never a diff.
 
 ### `GO visual qa`
 
-Run the pass in `project-os/Visual_QA.md`.
-
-1. **Read that file first** and load its calibration: what counts as a defect
-   here, the always-look-for list, the method.
-2. **Drive the running app** in one browser tab (who starts it: rule 16).
-   Never run several browser-driving agents at once.
-3. **Pin scope** to the screens the recent work renders, plus their neighbours.
-   A full sweep of every screen only when the owner asks for one.
-4. **Per screen: every state and every way out.** Empty, loading, error, full.
-   Every dismiss path. Destructive inputs. Watch the console and the network.
-   Reload and confirm what was saved really persisted.
-5. **Deliver** the summary plus the dated document, and revert any test edits
-   before finishing.
+Run the pass in `project-os/Visual_QA.md`. Read that file first, then drive the
+running app in one browser tab (who starts it: rule 16).
 
 ## Shortcuts (owner-triggered)
 
@@ -682,35 +576,35 @@ Commit everything accumulated up to now, across sessions, not only this chat.
    look for uncommitted work that has no History row (a fast burst whose chat
    closed) and pay the fast-mode catch-up for it in full, first.
 2. **Rotate the growing docs**, so the live files stay cheap to read. One
-   script does every file (add `-DryRun` for a preview that writes nothing):
+   script does every file, on every system (add `--dry-run` for a preview
+   that writes nothing):
 
-   On Windows:
+   ```
+   node project-os/Archive-old-rows.mjs
+   ```
+
+   Its PowerShell twin, `project-os/Archive-old-rows.ps1`, does the same for
+   anyone who prefers it (`-DryRun` there for the preview):
 
    ```
    powershell -NoProfile -ExecutionPolicy Bypass -File project-os/Archive-old-rows.ps1
    ```
 
-   On macOS or Linux, the same script through PowerShell Core:
+   On macOS or Linux, `pwsh -NoProfile -File project-os/Archive-old-rows.ps1`.
 
-   ```
-   pwsh -NoProfile -File project-os/Archive-old-rows.ps1
-   ```
-
-   If neither command exists on this machine, say so once and commit without
-   rotating; the live docs then keep growing until it is installed. Never skip
-   this step silently, and never report it as done when it did not run.
+   If neither can run here, say so once and commit without rotating; the live
+   docs then keep growing until one does. Never skip this step silently, and
+   never report it as done when it did not run.
 
    Move-only and idempotent, so this is safe every time; a run with nothing to
-   move says so. It comes after step 1 on purpose, so the fast-mode catch-up rows
-   are already in the file before rotation decides what is old. Stage whatever
-   it changed with the rest.
+   move says so. Stage whatever it changed with the rest.
 3. If the folder is not a git repository yet
    (`git rev-parse --is-inside-work-tree` fails), run `git init -b main` first
    and say so in one line of the report; it is local, and deleting `.git`
    undoes it. Before the first stage, make sure `.gitignore` names the env
    files (`.env*` plus `!.env.example`) and every dependency or build folder
    that exists here (from the list at the top of
-   `project-os/Backup-whole-project.ps1`). Add only the lines that are missing,
+   `project-os/Backup-whole-project.mjs`). Add only the lines that are missing,
    never a folder git already tracks, and say so in the same report line.
    Never create a GitHub repository and never add a remote. If the
    commit stops because git has no name or email on this computer, ask the
@@ -721,6 +615,11 @@ Commit everything accumulated up to now, across sessions, not only this chat.
 3b. **List the heavy things** (rule 4): `node project-os/Find-heavy-files.mjs`. Anything
    it prints goes in the commit report, size and kind beside the path, for the
    owner to delete or keep. It deletes nothing and never blocks the commit.
+3c. **Run the audit** (`Go audit` below):
+   `node project-os/Audit-project-records.mjs`. Every gap it counts goes in
+   the commit report as a warning, one line per kind with what it means. It
+   is a warning, never a gate: it never blocks the commit, and a run with no
+   gaps is not mentioned.
 4. Run the project checks `{{CHECK_COMMAND}}` and continue only if they
    pass. A red check stops the commit; report it instead. When "Where things
    are" marks the check "nothing to run before step N" or "none yet", run
@@ -734,17 +633,109 @@ Commit everything accumulated up to now, across sessions, not only this chat.
    needs one more kept out, the owner says so once and it joins this list.
 6. Commit with a clear message covering the full scope, [on the current
    branch / on a task branch, per the owner's answer at install].
-7. STOP after the commit. The owner pushes, every time (rule 22). Report the
+7. STOP after the commit. Outside a cloud session the owner pushes, every
+   time (rule 22). Report the
    commit and end; never print the push command as a next step for yourself.
+   The one exception is a cloud session (rule 22): there, push the branch
+   this session works on, never main, with `git push -u origin HEAD`. When
+   that branch is main, first put the commit on a branch of its own with
+   `git switch -c <a name for this work>`, then push that. Name the branch in
+   the report; the owner merges it. With no remote to push to, say so and
+   stop.
+
+### `Go audit`
+
+Count the gaps in this project's own process, instead of trusting that it ran:
+
+```
+node project-os/Audit-project-records.mjs
+```
+
+Add `--days N` to look back N days instead of the script's default. It only
+counts, and always exits 0. Report each kind of gap it found in one line: what
+it means and the fix you would make. Fix nothing until the owner picks
+(rule 18). A run with no gaps is one line. `Go commit` runs it too, as a
+warning only (its step 3c).
+
+### `Go update kit`
+
+Bring this project up to a newer kit without touching its records or its own
+edits. Never by copying the new kit over the old: that replaces History and
+Decisions with empty templates.
+
+1. Fetch the kit into the scratch folder, with its full history:
+
+   ```
+   git clone https://github.com/rotem914/ProjectOS .tmp/projectos-kit
+   ```
+
+   No `--depth`: the comparison reads the kit as it was at the commit this
+   project came from, and a shallow clone does not have that commit. A fetch
+   left there by an earlier run is deleted first, as in step 8.
+2. Compare, with the fetched kit's own copy of the script, which knows every
+   file the new kit ships. Without `--apply` it only reports:
+
+   ```
+   node .tmp/projectos-kit/project-os/Compare-kit-files.mjs --kit .tmp/projectos-kit
+   ```
+
+   It reads the commit this project came from in `project-os/Kit-version.json`.
+   With no such file, add `--base <commit>` from the install's History row.
+   When neither names one, run it as it is and say in the report that the
+   starting commit is unknown: a file the kit has and this project lacks still
+   comes in as new, but every file both hold that differs shows as "cannot
+   tell who changed it", is never copied, and is compared by hand in step 5.
+3. Show the owner the report in plain words: the files the kit changed that
+   this project never touched, the files new in the kit, and the files both
+   changed (the ones the install calibrated, and any the owner edited). Ask
+   one question: apply? Nothing is applied before the owner's word.
+4. On that word, run the same command with `--apply` added. It copies only
+   the files the kit changed and this project never touched, plus the files
+   new in the kit. It records the new kit commit in
+   `project-os/Kit-version.json` only when no file is left as changed on both
+   sides or as cannot tell; otherwise it lists them and records nothing.
+   Nothing outside
+   `CLAUDE.md`, `Installation.md` and `project-os/` ever comes in from the
+   fetch: the kit's `hooks/` and `.claude-plugin/` would make the plugin take
+   this project for the kit itself.
+5. Carry the kit's changes to the files both changed over by hand, by the
+   install's merge law: this project's wording wins every clash, nothing of it
+   is deleted or reworded on your own, every clash goes in the report for the
+   owner's verdict, and the rule numbers never shift. The living files
+   (History, Decisions, Backlog, Map, BugAtlas, Mistakes) keep every row; only
+   a change to the instructions at their top comes over. A placeholder in
+   double curly braces that the new text brings is filled from what this
+   project already says, and asked only when nothing does.
+   Carry over the files `--apply` listed the same way, then run the command
+   once more with `--record` in place of `--apply`: it records the new kit
+   commit and lists every file still different from the kit. Never record
+   before those files are carried over: the next compare would read them as
+   this project's own changes and never bring the kit's.
+6. Run the checks: `{{CHECK_COMMAND}}` as `Go commit` runs it, and when a guard
+   or the hooks setup changed, the checks at the end of `project-os/Hooks.md`.
+   A computer that runs the kit as a plugin updates that copy separately, with
+   the `git pull` the plugin's start line gives; it is outside the project, so
+   that command is the owner's.
+7. Log it (rule 8): one scan row and one appendix row naming the old kit
+   commit and the new one, the files copied, the files merged by hand, and the
+   clashes waiting on the owner.
+8. Delete the fetch: `rm -rf .tmp/projectos-kit`, or in PowerShell
+   `Remove-Item -Recurse -Force .tmp/projectos-kit`. The guards let a delete
+   under `.tmp/` through as disposable.
+
+The update stays uncommitted until `Go commit`, like any task. A project whose
+own CLAUDE.md predates this shortcut runs it from the fetched kit's CLAUDE.md,
+and step 5 brings the shortcut in.
 
 ### `Go backup`
 
 One local, self-contained ZIP snapshot of the whole project, for offline
 disaster recovery that depends on no git host and no sync folder. Flow:
 
-1. Run `project-os/Backup-whole-project.ps1` (PowerShell; `pwsh` on macOS or Linux). It zips
-   the whole project, git history included, and leaves out the regenerable
-   folders named in its setup block, the assistant's personal settings file
+1. Run `node project-os/Backup-whole-project.mjs`. Its PowerShell twin,
+   `Backup-whole-project.ps1`, makes the same ZIP for anyone who prefers
+   it. The script zips the whole project, git history included, and leaves
+   out the regenerable folders named in its setup block, the assistant's personal settings file
    (`.claude/settings.local.json` and its `.backup` copy) and worktree copies,
    the `.tmp/` scratch folder and the env files (`.env*`, `.dev.vars*`; the
    `.env.example` and `.dev.vars.example` templates travel). The committed
@@ -782,7 +773,8 @@ a fresh clone, copies `.mcp.json.example` to `.mcp.json` the same way.
 ### `Go commit and backup`
 
 Run both flows back to back: `Go commit` in full (the assistant commits and
-stops, the owner pushes), then `Go backup`.
+stops, the owner pushes; in a cloud session, rule 22's branch push), then
+`Go backup`.
 
 ### `Backlog`
 
@@ -794,7 +786,7 @@ to Done and are never deleted, and the Open table is scanned at task pickup.
 ## How to reply
 
 Every reply follows `project-os/Conversations.md`. Not only report-backs after
-work — every reply, in every conversation.
+work: every reply, in every conversation.
 
 That file is the single home of every reply rule: structure, length, tone,
 language. This file sets none of its own, so the two can never disagree and you

@@ -1,4 +1,4 @@
-# {{PROJECT_NAME}} — Bug Atlas
+# {{PROJECT_NAME}}: Bug Atlas
 
 The map of this project's recurring bug classes.
 
@@ -31,7 +31,7 @@ A one-off typo earns nothing. The atlas is for classes, not incidents.
 
 ## Rotation
 
-`project-os/Archive-old-rows.ps1` keeps the newest 30 Atlas rows live and moves
+`project-os/Archive-old-rows.mjs` (or its `.ps1` twin) keeps the newest 30 Atlas rows live and moves
 older ones verbatim into `BugAtlas-archive.md` at `Go commit`. Rows are
 relocated, never edited, renumbered or deleted, so an archived row still
 answers a search.
@@ -39,12 +39,12 @@ answers a search.
 ## Atlas
 
 Newest at the bottom: add a row under the table's last row.
-`project-os/Archive-old-rows.ps1` moves rows from the top.
+`project-os/Archive-old-rows.mjs` (or its `.ps1` twin) moves rows from the top.
 
 | # | Symptom | Root cause | The fix that holds | Times bitten | Where recorded |
 |---|---|---|---|---|---|
 
-> **Example — delete this block once your first real row lands.** It only
+> **Example: delete this block once your first real row lands.** It only
 > shows the shape.
 >
 > | # | Symptom | Root cause | The fix that holds | Times bitten | Where recorded |

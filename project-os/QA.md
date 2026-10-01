@@ -7,25 +7,16 @@ It holds only checks that future tasks will reuse. A check that only one task ne
 goes in that task's History row, never here, so this file stays worth reading at
 every pickup.
 
-It exists so "done" means the same thing on every task, instead of whatever felt like
-enough that day.
-
 ## QA ownership
 
 You check everything you can check yourself.
 
 Never hand {{OWNER_NAME}} a check a tool could have run. If you have a terminal, run the
-build. If you have a browser tool, open the page. Asking them to confirm what you could
-have confirmed moves your work onto their desk.
+build. If you have a browser tool, open the page.
 
 If a check genuinely could not run, say so in the reply, in plain words, with the reason.
-An unrun check that is named is information. An unrun check that is silently skipped is a
-false report.
 
 ## 1. Match QA to change type
-
-Each kind of change fails in its own place. A green build says nothing about a route
-that errors, and a working route says nothing about a layout that clips.
 
 | Change type | Required checks |
 |---|---|
@@ -43,32 +34,29 @@ If a change spans rows, run every row it spans.
 ## 2. Browser QA for anything visible
 
 Any change a person can see or operate is verified in a running browser, at `{{DEV_URL}}`.
-A passing build proves the code compiles. It proves nothing about what the screen does.
 
-- Open the changed screen in a fresh tab.
+- Open the changed screen in a fresh tab, and confirm the page loads.
 - Confirm the changed element is actually there.
-- Do the real interaction — click it, type in it, submit it.
+- Do the real interaction: click it, type in it, submit it.
+- Check hover, focus, active, disabled, loading, empty, and error states where they exist.
 - Check the console (§3).
-- Read the DOM or the computed style when the change is about state or styling. Pixels
-  lie; a rule that never matched usually still looks plausible.
+- Check that network responses are what the UI expects.
+- Read the DOM or the computed style when the change is about state or styling.
 - Look at the neighbours for regressions.
 - Reload if anything was saved.
 
-If you have no browser tool, first prove it (§11), then give a manual check list instead —
+If you have no browser tool, first prove it (§11), then give a manual check list instead:
 numbered, specific, one action per line.
 
 ## 3. Console check
 
 A visible change is not verified until you have read the console.
 
-Why: most browser failures never reach the screen. An exception stops one script, the
-rest of the page renders anyway, and the result looks like it worked.
-
 Four allowed outcomes. Write one of them, verbatim shape:
 
 - `Passed: no new console errors`
-- `Passed: known existing error only` — and name it
-- `Failed: <the error>` — then fix and re-check
+- `Passed: known existing error only`, and name it
+- `Failed: <the error>`, then fix and re-check
 - `Not run: <why>`
 
 There is no fifth outcome. "Console looked fine" is not one of these.
@@ -77,31 +65,22 @@ There is no fifth outcome. "Console looked fine" is not one of these.
 
 When a change writes anything that outlives the page, prove the write reached the store.
 
-Why: the screen in front of you already holds the value in memory. It renders the same
-whether the write succeeded or vanished.
-
 - Inspect the stored data after the write.
 - Confirm it reads back intact and passes its own validation.
-- Reload, and confirm the state survived — or reset on purpose, if that was the point.
+- Reload, and confirm the state survived, or reset on purpose, if that was the point.
 - Never delete or rewrite the owner's content to make a check pass.
 
 ## 5. Atomic write guard
 
 This applies where the app writes files itself. A transactional database gives you
-the same guarantee already — there, this section asks nothing.
+the same guarantee already. There, this section asks nothing.
 
 Every write to the data store writes to a temp target first, then swaps it into place.
-
-Why: a crash halfway through a direct write leaves a half-written file where live data used
-to be. The swap is the whole point — either the old file or the new one, never a torn one.
 
 If a new code path writes directly over live data, that is a bug in the change, not a style
 preference.
 
 ## 6. Accessibility basics
-
-A control that only a mouse can reach does not exist for the people who do not use one.
-These are the cheap checks that catch most of it.
 
 For anything interactive:
 
@@ -112,7 +91,7 @@ For anything interactive:
   always trigger the same focus styling a keyboard does, so a healthy ring can measure as
   absent. Send an actual key.
 - **Accessible names.** Inputs have labels. Icon-only buttons have names. Images have an
-  alt decision — authored text, or an empty alt on purpose for decoration.
+  alt decision: authored text, or an empty alt on purpose for decoration.
 - **No pointer-only path to a critical action.** If the only way to submit, confirm, or
   dismiss is a hover or a drag, the action is unreachable for some people.
 - **Headings stay in order**, and new content sits inside the page's main landmark.
@@ -122,25 +101,20 @@ For anything interactive:
 ## 7. Reduced motion
 
 Animation respects the reduced-motion preference. The final state stays reachable with no
-animation at all, because motion is how content arrives, never the content itself — and
+animation at all, because motion is how content arrives, never the content itself, and
 for some people large motion is physically unpleasant.
 
 Gate each animation at its own surface. Never add one blanket rule that zeroes every
-duration everywhere. An entrance that deliberately waits at frame zero (§8) has nothing
-left to release it, so it freezes there and hides its content for good.
+duration everywhere.
 
 ## 8. Cold-asset check for entrance animations
 
-When an animation reveals something — an image, text measured off a loaded font, an
-element whose geometry a script reads — run that entrance once with the thing genuinely not
+When an animation reveals something (an image, text measured off a loaded font, an
+element whose geometry a script reads), run that entrance once with the thing genuinely not
 cached.
 
-Why: a warm cache hides this entire bug class. On your machine the asset is already there,
-so the reveal always has something to reveal. A first-time visitor gets the animation
-running on an empty box, finishing before the content arrives.
-
-- Force the asset to be cold — a unique query string, a cleared cache, a throttled network
-  — and confirm the animation holds at its start until the asset lands, then plays.
+- Force the asset to be cold (a unique query string, a cleared cache, a throttled network)
+  and confirm the animation holds at its start until the asset lands, then plays.
 - Confirm the gate releases on **both** success and failure. A failed load must not leave
   the gate stuck.
 - Confirm it fails open: if the gate never resolves at all, or scripting is off, the
@@ -151,16 +125,12 @@ running on an empty box, finishing before the content arrives.
 ## 9. Narrow-width check for any layout change
 
 Any change to layout, type, or spacing is checked at your smallest supported width before
-it is called done. A narrow screen is a real surface, not a fallback.
+it is called done.
 
-**Resize first, then load.** A page that was loaded wide and then narrowed is not the same
-page. Scripts that measure on load re-fit on resize. A page that has lived across several
-widths reports geometry no fresh visitor ever sees. Set the viewport, then navigate or
-reload. A measurement taken without that reload is unproven.
+**Resize first, then load.** Set the viewport, then navigate or reload. A measurement taken
+without that reload is unproven.
 
-**Check both sides of every breakpoint.** One pixel below it and one pixel above. A rule
-that lands on only one side is invisible at both extremes — you will not catch it at a
-typical phone width or a typical desktop width.
+**Check both sides of every breakpoint.** One pixel below it and one pixel above.
 
 What to check:
 
@@ -168,7 +138,7 @@ What to check:
   width. Probe several widths, not one.
 - **Wide content stays inside its box.** A no-wrap heading inside a clipped parent fails
   silently. Measure the element against its container.
-- **Wide layouts are untouched.** Re-measure anything the narrow rule could have moved — a
+- **Wide layouts are untouched.** Re-measure anything the narrow rule could have moved: a
   shared token, a base rule you overrode. A narrow fix that shifts the wide layout is a
   regression.
 - **Specificity first, then source order.** A media query adds no specificity of its
@@ -181,8 +151,8 @@ will agree with whatever you already believe.
 
 ## 10. No vague QA
 
-Never write `manual QA passed`, `looks good`, or `tested`. They say nothing, and they read
-exactly like a check that was skipped.
+Never write `manual QA passed`, `looks good`, `verified`, or `tested`. Name the screen,
+the input, the expected result.
 
 | Bad | Good |
 |---|---|
@@ -203,33 +173,14 @@ reload. Console: no new errors.
 
 ## 11. Prove a tool is missing before you claim it is
 
-In many setups, tools are not loaded until something asks for them. They are invisible by
-default, which makes "I don't see a browser tool" feel true when it is not.
-
-Before you ever write that no browser tool exists:
-
-1. Search the available tools for one.
-2. If anything matches, load it and use it. No exceptions, and no "the owner can check
-   this manually".
-3. Only if the search returns nothing, say that you searched and found none. In a project
-   that carries this kit, an empty search with no `chrome-devtools` entry in `.mcp.json`
-   means the install's browser step was skipped (Installation.md 6d, CLAUDE.md rule 6): run
-   it now and ask for its one approval. With the entry there, say why nothing loaded, as
-   rule 6 lists. The manual check list is for the session
-   where even that cannot happen.
-
-A tool that loaded but was **refused** is a different case. Name the tool, say it was
-refused, use another route, and never report it as "no tools available". When every
-route fails, that is Path C in `project-os/Workflow.md` step 9.
-
-The failure mode this blocks: declaring early in a task that you have no browser, then
-repeating it for the rest of the task to stay consistent with yourself.
+`CLAUDE.md` rule 6 holds this rule in full: search before you claim a browser tool is
+missing, what an empty search means here, and what a refused or blocked tool is.
 
 ## Checklist before delivery
 
 - [ ] Task type identified, risk level stated.
 - [ ] Context files read.
-- [ ] Scope boundaries named — including what you did not touch.
+- [ ] Scope boundaries named, including what you did not touch.
 - [ ] Smallest safe change used.
 - [ ] `{{CHECK_COMMAND}}` run and passing.
 - [ ] Browser QA run for anything visible.
@@ -244,6 +195,4 @@ repeating it for the rest of the task to stay consistent with yourself.
 - [ ] QA wording is concrete, not vague (§10).
 - [ ] `project-os/History.md` row added.
 - [ ] `project-os/Decisions.md` updated if a non-obvious choice was made.
-- [ ] Reply names only a check that failed or could not run, the Path B or Path C
-      outcome, and review findings waiting for a verdict. Passed checks and a clean
-      review stay in the History row.
+- [ ] Reply reports checks as `project-os/Conversations.md` says (Report-back sections).

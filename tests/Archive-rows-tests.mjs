@@ -1,17 +1,18 @@
-// Fixture tests for the kit's rotation script, project-os/Archive-old-rows.ps1.
+// Fixture tests for the kit's rotation scripts, the twins
+// project-os/Archive-old-rows.ps1 and project-os/Archive-old-rows.mjs.
 //
 // Run from the kit root:   node tests/Archive-rows-tests.mjs
 // It prints one line per failing check and a count at the end, and exits 1 when
-// any check fails. The script is PowerShell, so the suite needs Windows
-// PowerShell or PowerShell 7 (pwsh). Without either it says so plainly and
-// exits 0: the script cannot run on that machine at all, so there is nothing to
-// test there.
+// any check fails. Every case runs against both twins: the PowerShell one when
+// Windows PowerShell or PowerShell 7 (pwsh) is on the machine, the Node one
+// always. Without PowerShell it says so plainly and tests the Node twin alone,
+// since that one is all such a machine can run.
 //
 // This folder sits outside project-os/ on purpose: an install copies all of
 // project-os/ into a client project, and these tests belong to the kit only.
 //
-// Each case builds a fake project in a folder whose name has a space, copies the
-// script into its project-os/, runs it for real and reads the files back. The
+// Each case builds a fake project in a folder whose name has a space, copies one
+// twin into its project-os/, runs it for real and reads the files back. The
 // fake projects live in the OS temp folder, or under PROJECTOS_TEST_TMP when that
 // is set (a project whose rules keep every write inside it points this at its
 // own scratch folder). Nothing else is touched. The folder is removed at the end,
@@ -21,7 +22,11 @@
 // file; nothing is lost when two items look alike; the archive keeps date order
 // across runs; a re-run after a crash writes nothing twice; the first separator
 // is the table's; an example block below a table is left alone; line endings
-// survive; a fresh install's templates move nothing and write nothing.
+// survive; a fresh install's templates move nothing and write nothing; a bad
+// option or a date that is not a day stops the run before anything is written;
+// a byte order mark, a UTF-16 file and broken UTF-8 are read the way .NET reads
+// them. Where PowerShell is present, the twins also run side by side on one
+// awkward project and must leave every file byte-identical (2026-10-01).
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -29,7 +34,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const KIT_POS = fileURLToPath(new URL('../project-os/', import.meta.url));
-const SCRIPT = path.join(KIT_POS, 'Archive-old-rows.ps1');
 
 function findPowerShell() {
   for (const exe of ['powershell', 'pwsh']) {
@@ -39,10 +43,27 @@ function findPowerShell() {
   return null;
 }
 const PS = findPowerShell();
-if (!PS) {
-  console.log('Archive-rows-tests.mjs: SKIPPED. Neither powershell nor pwsh was found, so Archive-old-rows.ps1 cannot run on this machine and nothing was tested.');
-  process.exit(0);
+
+// Options are written once, in the Node twin's kebab case. The PowerShell twin
+// gets the same name in its own spelling: --max-keep-rows becomes -MaxKeepRows.
+const pascal = (kebab) => kebab.replace(/(^|-)([a-z])/g, (_, __, c) => c.toUpperCase()).replace(/Kb$/, 'KB');
+const ENGINES = [];
+if (PS) {
+  ENGINES.push({
+    id: PS,
+    file: 'Archive-old-rows.ps1',
+    command: (script, opts) => [PS, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
+      ...Object.entries(opts).flatMap(([k, v]) => (v === true ? [`-${pascal(k)}`] : [`-${pascal(k)}`, String(v)]))]],
+  });
+} else {
+  console.log('  Neither powershell nor pwsh was found: Archive-old-rows.ps1 cannot run on this machine, so only the Node twin is tested.');
 }
+ENGINES.push({
+  id: 'node',
+  file: 'Archive-old-rows.mjs',
+  command: (script, opts) => [process.execPath, [script,
+    ...Object.entries(opts).flatMap(([k, v]) => (v === true ? [`--${k}`] : [`--${k}`, String(v)]))]],
+});
 
 const BASE = fs.mkdtempSync(path.join(process.env.PROJECTOS_TEST_TMP || os.tmpdir(), 'projectos-archive-tests-'));
 let checks = 0;
@@ -55,20 +76,20 @@ function check(label, ok, detail = '') {
   }
 }
 
-function project(name) {
-  const root = path.join(BASE, name, 'fake proj');
+function project(engine, name) {
+  const root = path.join(BASE, engine.id, name, 'fake proj');
   fs.mkdirSync(path.join(root, 'project-os'), { recursive: true });
-  fs.copyFileSync(SCRIPT, path.join(root, 'project-os', 'Archive-old-rows.ps1'));
+  fs.copyFileSync(path.join(KIT_POS, engine.file), path.join(root, 'project-os', engine.file));
   return root;
 }
-function run(root, ...args) {
-  const r = spawnSync(PS, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-    path.join(root, 'project-os', 'Archive-old-rows.ps1'), ...args], { encoding: 'utf8', cwd: root });
-  return { status: r.status, out: `${r.stdout || ''}${r.stderr || ''}` };
+function run(engine, root, opts = {}) {
+  const [exe, args] = engine.command(path.join(root, 'project-os', engine.file), opts);
+  const r = spawnSync(exe, args, { encoding: 'utf8', cwd: root });
+  return { status: r.status, out: `${r.stdout || ''}${r.stderr || ''}`, stdout: r.stdout || '', stderr: r.stderr || '' };
 }
 const pos = (root, file) => path.join(root, 'project-os', file);
 const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null);
-const write = (p, lines, eol = '\n') => fs.writeFileSync(p, lines.join(eol) + eol);
+const write = (p, lines, eol = '\n') => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, lines.join(eol) + eol); };
 const count = (text, needle) => (text ? text.split(needle).length - 1 : 0);
 const day = (n) => new Date(Date.UTC(2020, 0, n)).toISOString().slice(0, 10);
 // The lines that say what moved, for a short failure message.
@@ -77,6 +98,15 @@ const hasBareLf = (text) => /(^|[^\r])\n/.test(text);
 function entriesTotal(out, name) {
   const m = new RegExp(`=== ${name.replace(/[().]/g, '\\$&')} ===[\\s\\S]*?entries total\\s*:\\s*(\\d+)`).exec(out);
   return m ? Number(m[1]) : null;
+}
+function listFiles(root, rel = '') {
+  const out = {};
+  for (const e of fs.readdirSync(path.join(root, rel), { withFileTypes: true })) {
+    const r = rel ? `${rel}/${e.name}` : e.name;
+    if (e.isDirectory()) Object.assign(out, listFiles(root, r));
+    else if (!/^project-os\/Archive-old-rows\.(ps1|mjs)$/.test(r)) out[r] = fs.readFileSync(path.join(root, r));
+  }
+  return out;
 }
 
 // --- Decisions: one block per "## YYYY-MM-DD" entry -------------------------
@@ -91,9 +121,9 @@ const numbered = (from, to) => {
 const marksInOrder = (text) => [...text.matchAll(/^Why MARK_(\d+)\.$/gm)].map((m) => Number(m[1]));
 const entryCount = (text) => (text.match(/^## \d{4}-\d{2}-\d{2}\b/gm) || []).length;
 
-function caseDecisionsAcrossRuns() {
-  const label = 'decisions';
-  const root = project('decisions');
+function caseDecisionsAcrossRuns(engine) {
+  const label = `${engine.id} decisions`;
+  const root = project(engine, 'decisions');
   const live = pos(root, 'Decisions.md');
   const arch = pos(root, 'Decisions-archive.md');
   // Entries 1 and 2 share a date and a title but are different decisions.
@@ -103,11 +133,11 @@ function caseDecisionsAcrossRuns() {
     ...numbered(3, 30).flat()]);
   const original = read(live);
 
-  let r = run(root, '-DryRun');
+  let r = run(engine, root, { 'dry-run': true });
   check(`${label}: dry run exits 0`, r.status === 0, r.out);
   check(`${label}: dry run writes nothing`, read(live) === original && read(arch) === null);
 
-  r = run(root);
+  r = run(engine, root);
   check(`${label}: run 1 exits 0`, r.status === 0, r.out);
   let a = read(arch) || '';
   let l = read(live) || '';
@@ -120,7 +150,7 @@ function caseDecisionsAcrossRuns() {
 
   fs.appendFileSync(live, `${numbered(31, 36).flat().join('\n')}\n`);
   const liveBefore2 = read(live);
-  r = run(root);
+  r = run(engine, root);
   check(`${label}: run 2 exits 0`, r.status === 0, r.out);
   a = read(arch) || '';
   l = read(live) || '';
@@ -138,23 +168,23 @@ function caseDecisionsAcrossRuns() {
   const archAfter2 = a;
   const liveAfter2 = l;
   fs.writeFileSync(live, liveBefore2);
-  r = run(root);
+  r = run(engine, root);
   check(`${label}: crash re-run exits 0`, r.status === 0, r.out);
   check(`${label}: crash re-run leaves the archive byte-identical`, read(arch) === archAfter2);
   check(`${label}: crash re-run reports the duplicates`, /\+0 new, 6 duplicate\(s\) skipped/.test(r.out), summary(r.out));
   check(`${label}: crash re-run ends at the same live file`, read(live) === liveAfter2);
 }
 
-function caseDecisionsHandMoved() {
-  const label = 'decisions, hand-moved archive';
-  const root = project('decisions-hand');
+function caseDecisionsHandMoved(engine) {
+  const label = `${engine.id} decisions, hand-moved archive`;
+  const root = project(engine, 'decisions-hand');
   const live = pos(root, 'Decisions.md');
   const arch = pos(root, 'Decisions-archive.md');
   // The template's supersede flow: an old entry was moved here by hand, and the
   // live entry that replaced it kept the same date and title.
   write(arch, ['# Decisions - Archive', '', ...entry(day(1), 'Storage choice', 'MARK_OLD')]);
   write(live, [...decisionsHead, ...entry(day(1), 'Storage choice', 'MARK_NEW'), ...numbered(2, 26).flat()]);
-  const r = run(root);
+  const r = run(engine, root);
   check(`${label}: exits 0`, r.status === 0, r.out);
   const a = read(arch) || '';
   check(`${label}: the replacing decision is archived, not skipped`, a.includes('Why MARK_NEW.'), summary(r.out));
@@ -163,9 +193,9 @@ function caseDecisionsHandMoved() {
 }
 
 // --- Tables: Backlog Done, Mistakes tails, BugAtlas ---------------------------
-function caseBacklog() {
-  const label = 'backlog';
-  const root = project('backlog');
+function caseBacklog(engine) {
+  const label = `${engine.id} backlog`;
+  const root = project(engine, 'backlog');
   const live = pos(root, 'Backlog.md');
   const arch = pos(root, 'Backlog-archive.md');
   const same = `| ${day(1)} | ${day(2)} | Same item | chat |`;
@@ -178,7 +208,7 @@ function caseBacklog() {
     '## Done', '', 'Newest at the bottom.', '', '| Added | Closed | Item | Source |', '|---|---|---|---|', '| | | | |',
     ...rows, '', '---', '', '### Example row - delete this', '', ...example], '\r\n');
 
-  const r = run(root);
+  const r = run(engine, root);
   check(`${label}: exits 0`, r.status === 0, r.out);
   const total = entriesTotal(r.out, 'project-os/Backlog.md (Done)');
   check(`${label}: the example block is not counted as Done rows`, total === 45, `entries total ${total}`);
@@ -197,9 +227,9 @@ function caseBacklog() {
   check(`${label}: Open is never touched`, l.includes('## Open\r\n\r\n| Added | Item | Source |\r\n|---|---|---|\r\n| | | |\r\n'));
 }
 
-function caseMistakes() {
-  const label = 'mistakes';
-  const root = project('mistakes');
+function caseMistakes(engine) {
+  const label = `${engine.id} mistakes`;
+  const root = project(engine, 'mistakes');
   const live = pos(root, 'Mistakes.md');
   const arch = pos(root, 'Mistakes-archive.md');
   const prow = (k) => `| ${day(k)} | Promoted slip ${k} | Workflow.md |`;
@@ -214,7 +244,7 @@ function caseMistakes() {
     '---', '', '### Example rows - delete this block', '',
     '| Date | What I did | What was wanted | Home if it repeats | Times |', '|---|---|---|---|---|',
     '| YYYY-MM-DD | Example slip | Example want | CLAUDE.md | 1 |']);
-  const r = run(root);
+  const r = run(engine, root);
   check(`${label}: exits 0`, r.status === 0, r.out);
   const retiredTotal = entriesTotal(r.out, 'project-os/Mistakes.md (Retired)');
   check(`${label}: Retired counts only its own rows`, retiredTotal === 31, `entries total ${retiredTotal}`);
@@ -229,16 +259,16 @@ function caseMistakes() {
   check(`${label}: the example row stays live`, (read(live) || '').includes('| YYYY-MM-DD | Example slip |') && !a.includes('Example slip'));
 }
 
-function caseAtlas() {
-  const label = 'bug atlas';
-  const root = project('atlas');
+function caseAtlas(engine) {
+  const label = `${engine.id} bug atlas`;
+  const root = project(engine, 'atlas');
   const live = pos(root, 'BugAtlas.md');
   const arch = pos(root, 'BugAtlas-archive.md');
   const rows = [];
   for (let k = 1; k <= 32; k++) rows.push(`| ${k} | Symptom ${k} | Cause ${k} | Fix ${k} | 1x | History ${day(k)} |`);
   write(live, ['# Fake - Bug Atlas', '', '## Atlas', '',
     '| # | Symptom | Root cause | The fix that holds | Times bitten | Where recorded |', '|---|---|---|---|---|---|', ...rows]);
-  const r = run(root);
+  const r = run(engine, root);
   check(`${label}: exits 0`, r.status === 0, r.out);
   const a = read(arch) || '';
   check(`${label}: the two oldest rows move`, a.includes('| Symptom 2 |') && !a.includes('| Symptom 3 |'));
@@ -246,9 +276,9 @@ function caseAtlas() {
 }
 
 // --- History: the Scan log and the deep rows ---------------------------------
-function caseHistory() {
-  const label = 'history';
-  const root = project('history');
+function caseHistory(engine) {
+  const label = `${engine.id} history`;
+  const root = project(engine, 'history');
   const live = pos(root, 'History.md');
   const scanArch = pos(root, 'History-scan-archive.md');
   const deepArch = pos(root, 'History-archive.md');
@@ -262,7 +292,7 @@ function caseHistory() {
     '| Date | Area | What changed |', '|---|---|---|', '| | | |', ...scan, '',
     '## Appendix - deep rows', '', 'Newest at the bottom, same as the scan log.', '',
     deepHead, '|---|---|---|---|---|---|---|---|', '| | | | | | | | |', ...deep]);
-  const r = run(root);
+  const r = run(engine, root);
   check(`${label}: exits 0`, r.status === 0, r.out);
   const s = read(scanArch) || '';
   const d = read(deepArch) || '';
@@ -278,16 +308,16 @@ function caseHistory() {
 }
 
 // --- A fresh install: the real templates move nothing and write nothing -------
-function caseFreshTemplates() {
-  const label = 'fresh templates';
-  const root = project('fresh');
+function caseFreshTemplates(engine) {
+  const label = `${engine.id} fresh templates`;
+  const root = project(engine, 'fresh');
   const names = ['History.md', 'Decisions.md', 'Backlog.md', 'Mistakes.md', 'BugAtlas.md'].filter((f) => fs.existsSync(path.join(KIT_POS, f)));
   const before = {};
   for (const f of names) {
     fs.copyFileSync(path.join(KIT_POS, f), pos(root, f));
     before[f] = fs.readFileSync(pos(root, f));
   }
-  const r = run(root);
+  const r = run(engine, root);
   check(`${label}: exits 0`, r.status === 0, r.out);
   check(`${label}: nothing moves`, /DONE - 0 item\(s\) moved/.test(r.out), summary(r.out));
   for (const f of names) check(`${label}: ${f} is byte-identical`, Buffer.compare(before[f], fs.readFileSync(pos(root, f))) === 0);
@@ -297,22 +327,140 @@ function caseFreshTemplates() {
   check(`${label}: no example row counts as an entry`, totals.length > 0 && totals.every((n) => n === 0), `totals ${totals.join(',')}`);
 }
 
-try {
-  caseDecisionsAcrossRuns();
-  caseDecisionsHandMoved();
-  caseBacklog();
-  caseMistakes();
-  caseAtlas();
-  caseHistory();
-  caseFreshTemplates();
-} catch (e) {
-  failures++;
-  console.error(`FAIL the suite itself threw: ${e.stack || e.message}`);
+// --- Stops: a bad option, a date that is not a day ----------------------------
+function caseStops(engine) {
+  const label = `${engine.id} stops`;
+  const root = project(engine, 'stops');
+  const live = pos(root, 'Decisions.md');
+  write(live, [...decisionsHead, ...numbered(1, 30).flat()]);
+  const original = read(live);
+  let r = run(engine, root, { 'max-keep-decisions': 'abc' });
+  check(`${label}: a value that is not a whole number exits 1`, r.status === 1, r.out);
+  check(`${label}: and writes nothing`, read(live) === original && read(pos(root, 'Decisions-archive.md')) === null);
+
+  // A History row dated 30 February: .NET's ParseExact refuses it, and the run
+  // stops there, before the Decisions file further down the list is touched.
+  const hist = pos(root, 'History.md');
+  write(hist, ['# Fake - History', '', '## Appendix', '', '| Date | Task |', '|---|---|', '| 2020-02-30 | Bad day |', `| ${day(5)} | Fine |`]);
+  const histBefore = read(hist);
+  r = run(engine, root, { 'max-keep-rows': 0, 'min-keep-rows': 0 });
+  check(`${label}: a date that is not a day exits 1`, r.status === 1, r.out);
+  check(`${label}: and says so on stderr`, /ParseExact[\s\S]*DateTime/.test(r.stderr), r.stderr.slice(0, 300));
+  check(`${label}: and nothing is written`, read(hist) === histBefore && read(live) === original && read(pos(root, 'History-archive.md')) === null);
 }
 
+// --- Text the way .NET reads it ----------------------------------------------
+function caseEncodings(engine) {
+  const label = `${engine.id} encodings`;
+  const root = project(engine, 'encodings');
+  // Decisions with a UTF-8 byte order mark and CRLF: the mark is dropped on the
+  // rewrite, CRLF stays.
+  const dec = pos(root, 'Decisions.md');
+  fs.writeFileSync(dec, Buffer.concat([Buffer.from([0xEF, 0xBB, 0xBF]), Buffer.from([...decisionsHead, ...numbered(1, 26).flat()].join('\r\n') + '\r\n')]));
+  // Backlog saved as UTF-16 LE (Notepad's "Unicode"): read through its mark,
+  // written back as UTF-8.
+  const back = pos(root, 'Backlog.md');
+  const rows = [];
+  for (let k = 1; k <= 42; k++) rows.push(`| ${day(k)} | ${day(k + 1)} | Item ${k} שלום | chat |`);
+  fs.writeFileSync(back, Buffer.concat([Buffer.from([0xFF, 0xFE]), Buffer.from(['# Fake - Backlog', '', '## Done', '', '| Added | Closed | Item | Source |', '|---|---|---|---|', ...rows].join('\n') + '\n', 'utf16le')]));
+  // Mistakes with a broken UTF-8 sequence in a kept row: .NET turns "E0 80 80"
+  // into two U+FFFD, where a WHATWG decoder would write three.
+  const mis = pos(root, 'Mistakes.md');
+  const promoted = [];
+  for (let k = 1; k <= 31; k++) promoted.push(`| ${day(k)} | Slip ${k} | Workflow.md |`);
+  fs.writeFileSync(mis, Buffer.concat([
+    Buffer.from(['# Fake - Mistakes', '', '## Promoted', '', '| Date | The slip | Where |', '|---|---|---|', ...promoted, '| 2020-03-01 | Broken '].join('\n')),
+    Buffer.from([0xE0, 0x80, 0x80]), Buffer.from(' bytes | x |\n')]));
+  const r = run(engine, root);
+  check(`${label}: exits 0`, r.status === 0, r.out);
+  const d = fs.readFileSync(dec);
+  check(`${label}: the byte order mark is dropped`, !(d[0] === 0xEF && d[1] === 0xBB && d[2] === 0xBF));
+  check(`${label}: CRLF survives the mark`, !hasBareLf(d.toString('utf8')) && /Older entries archived/.test(d.toString('utf8')));
+  const b = read(back) || '';
+  check(`${label}: a UTF-16 file is read and rewritten as UTF-8`, b.startsWith('# Fake - Backlog\n') && b.includes('| Item 3 שלום |') && !b.includes('| Item 2 שלום |'), b.slice(0, 80));
+  check(`${label}: its moved rows land in a UTF-8 archive`, (read(pos(root, 'Backlog-archive.md')) || '').includes('| Item 2 שלום |'));
+  const m = read(mis) || '';
+  check(`${label}: a broken sequence becomes two U+FFFD, as in .NET`, m.includes('Broken �� bytes'), JSON.stringify(m.slice(m.indexOf('Broken'), m.indexOf('Broken') + 20)));
+}
+
+// --- The twins side by side ---------------------------------------------------
+// One awkward project, run by both twins on identical copies: a dry run, a real
+// run and a second real run. Every file must come out byte-identical, and the
+// summaries must match line for line apart from each twin's own name.
+function twinProject(root) {
+  const t = '\r\n';
+  const scan = ['| Date | Area | What changed |', '|---|---|---|', '| | | |'];
+  for (let k = 1; k <= 90; k++) {
+    scan.push(`| ${day(k)} | docs | Scan row ${k}. |`);
+    if (k === 40) scan.push('﻿'); // a stray mark alone on a line is blank to .NET
+    if (k === 50) scan.push('­');
+  }
+  const deep = ['| Date | Task | What changed | Checked | Result | Risk | Commit | Rollback |', '|---|---|---|---|---|---|---|---|'];
+  for (let k = 1; k <= 26; k++) deep.push(`| ${day(k)} | Task ${k} | ${'x'.repeat(60)} שינוי ${k} · détail | ok | Pass | low | none | Undo. |`);
+  fs.writeFileSync(path.join(root, 'project-os', 'History.md'), ['# Fake - History', '', '## Scan log', '', ...scan, '', '## Appendix', '', ...deep].join(t) + t);
+  const dec = [...decisionsHead, '```', `## ${day(1)} - Fenced example`, '```', ''];
+  for (let k = 1; k <= 28; k++) dec.push(`## ${day(k)} - Decision ${k}`, '', `Why ${k} · ${'y'.repeat(70)} ‍.`, '­', '');
+  dec.push(`## ${day(29)}א not an entry to .NET`, 'body');
+  fs.writeFileSync(path.join(root, 'project-os', 'Decisions.md'), Buffer.concat([Buffer.from([0xEF, 0xBB, 0xBF]), Buffer.from(dec.join('\n'))]));
+  fs.writeFileSync(path.join(root, 'project-os', 'Decisions-archive.md'), ['# Old archive', '', `## ${day(1)} - Decision 1`, '', 'Hand-moved.'].join(t));
+  const done = ['## Done', '', '| Added | Closed | Item | Source |', '|---|---|---|---|'];
+  for (let k = 1; k <= 44; k++) done.push(`| ${day(k)} | ${day(k)} | Item ${k} ${'z'.repeat(50)} é ok | chat |`);
+  fs.writeFileSync(path.join(root, 'project-os', 'Backlog.md'), Buffer.from(['# Fake - Backlog', '', '## Open', '', ...done, '', '---', '| x |'].join('\n'), 'utf8'));
+  const feat = path.join(root, 'features', 'alpha');
+  fs.mkdirSync(feat, { recursive: true });
+  const log = ['# alpha', '', '## Log', '', '| Date | Task |', '|---|---|'];
+  for (let k = 1; k <= 23; k++) log.push(`| ${day(k)} | Feature task ${k} |`);
+  fs.writeFileSync(path.join(feat, 'History.md'), log.join('\n'));
+  fs.writeFileSync(path.join(feat, 'BugAtlas.md'), ['## Atlas', '', '| # | Symptom |', '|---|---|', ...Array.from({ length: 33 }, (_, i) => `| ${i} | S ${i} |`)].join('\r\n') + '\r\n');
+  fs.mkdirSync(path.join(root, 'features', '_template'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'features', '_template', 'History.md'), log.join('\n'));
+}
+function caseTwinsAgree() {
+  if (ENGINES.length < 2) return;
+  const roots = ENGINES.map((e) => project(e, 'twins'));
+  roots.forEach(twinProject);
+  const name = (out) => out.replace(/\r\n/g, '\n').replace(/^Archive-old-rows\.(ps1|mjs)/, 'Archive-old-rows').replace(/-DryRun|--dry-run/, 'DRYRUN');
+  for (const step of [{ 'dry-run': true }, {}, {}]) {
+    const runs = ENGINES.map((e, i) => run(e, roots[i], step));
+    const label = `twins agree, ${step['dry-run'] ? 'dry run' : 'real run'}`;
+    check(`${label}: both exit 0`, runs.every((x) => x.status === 0), runs.map((x) => x.out).join('\n'));
+    const [a, b] = runs.map((x) => name(x.stdout));
+    const i = [...a].findIndex((c, k) => c !== b[k]);
+    check(`${label}: the summaries match`, a === b, `first difference at ${i}: ${JSON.stringify(a.slice(Math.max(0, i - 40), i + 40))} vs ${JSON.stringify(b.slice(Math.max(0, i - 40), i + 40))}`);
+    const [fa, fb] = roots.map((r) => listFiles(r));
+    const keys = [...new Set([...Object.keys(fa), ...Object.keys(fb)])];
+    const differ = keys.filter((k) => !fa[k] || !fb[k] || Buffer.compare(fa[k], fb[k]) !== 0);
+    check(`${label}: every file is byte-identical`, differ.length === 0, differ.join(', '));
+  }
+}
+
+for (const engine of ENGINES) {
+  try {
+    caseDecisionsAcrossRuns(engine);
+    caseDecisionsHandMoved(engine);
+    caseBacklog(engine);
+    caseMistakes(engine);
+    caseAtlas(engine);
+    caseHistory(engine);
+    caseFreshTemplates(engine);
+    caseStops(engine);
+    caseEncodings(engine);
+  } catch (e) {
+    failures++;
+    console.error(`FAIL the ${engine.id} cases threw: ${e.stack || e.message}`);
+  }
+}
+try {
+  caseTwinsAgree();
+} catch (e) {
+  failures++;
+  console.error(`FAIL the twins case threw: ${e.stack || e.message}`);
+}
+
+const engines = ENGINES.map((e) => e.id).join(' + ');
 if (failures > 0) {
-  console.error(`Archive-rows-tests.mjs: ${failures} of ${checks} checks FAILED (${PS}). Fake projects kept for a look: ${BASE}`);
+  console.error(`Archive-rows-tests.mjs: ${failures} of ${checks} checks FAILED (${engines}). Fake projects kept for a look: ${BASE}`);
   process.exit(1);
 }
 fs.rmSync(BASE, { recursive: true, force: true });
-console.log(`Archive-rows-tests.mjs: all ${checks} checks passed (${PS})`);
+console.log(`Archive-rows-tests.mjs: all ${checks} checks passed (${engines})`);
