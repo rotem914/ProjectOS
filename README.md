@@ -75,6 +75,7 @@ Each one ships with its structure already in place and a worked example at the e
 | `.gitignore`, `.gitattributes` | This repository's own git settings. |
 | `.claude-plugin/plugin.json`, `hooks/hooks.json`, `hooks/dispatch.mjs` | The plugin the once-per-computer step below sets up. Its one dispatcher decides, project by project, whether the hooks apply. |
 | `tests/` | The kit's test suites, one per guard or script, run from the kit root before a change to any of them ships. |
+| `scripts/Multiple-claude-accounts.ps1` | Windows only, and separate from the install. Gives each client their own Claude Desktop, kept apart from your personal one: run it once, then double-click "New Claude client" on your desktop for each new client. |
 
 ## Once per computer
 
