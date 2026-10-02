@@ -23,12 +23,16 @@ Claude Code reads it as a plugin from then on. Its one hook,
 `hooks/dispatch.mjs` at the kit root, fires in every session and decides per
 project: it looks for `project-os/Hooks-settings.json`, walking up from the
 folder the session was opened in (never from a folder the shell moved into
-later), and does nothing where that file is absent. Where it is
+later), and does nothing where that file is absent, except to say so in a
+folder that holds projects (see "A session opened in a folder above the
+project" below). Where it is
 present, it prints the reminder text it finds in that file (as data, never
 run) and runs the two guards from the plugin's own copy, with the project root
 set to the project it found. No install step, no settings write, so no
 environment can refuse it. It announces itself once per session with a line
-beginning `[ProjectOS plugin] hooks active for`. In the kit's own repository
+beginning `[ProjectOS plugin] hooks active for`, after checking that its own
+copy of each guard loads; when one does not, that line reads `guards OFF`
+instead (see "When the plugin says guards OFF" below). In the kit's own repository
 the guards run the same way and only the reminders stay off, that line
 included, since the files there are the templates shipped to projects.
 
@@ -46,10 +50,25 @@ that covers the tool being called (no matcher, `*`, or a plain list such as
 Only the settings Claude Code loads for that session count: those of the folder the session was opened in and, on macOS and Linux,
 also the personal file at the root of the git repository, which Claude Code
 loads there even for a session opened in a subfolder (see `--shared` below).
+Claude Code reads them once, when the session opens, so wiring written during
+a session, as the installer does during an install, counts only from the next
+one: until then the plugin keeps running its own guards and sending its
+reminder, through a `/clear` or a compaction too. To know what the settings
+wired when the session opened, it keeps one small file per session in a
+`ProjectOS-plugin-sessions` folder under the system's temp folder, never in
+the project, and removes those older than a week.
 Anything not proven runs the plugin's own copy: a moved or renamed
 project, a path from another computer, or a matcher that leaves the tool out.
 At worst a guard runs twice, which blocks the same thing. A project can keep
 its own wiring forever.
+
+That is also how a project gets newer guards than the plugin carries: the
+installer wires the project's own copies, and from the next session the
+plugin steps aside for them on every tool (`Installation.md` 6b, and
+`Go update kit` in CLAUDE.md). On Windows that holds for a session opened at
+the project root. A session opened in a subfolder there loads only that
+subfolder's settings, so the plugin runs its own copy, and updating the
+plugin folder (`git pull` inside it) is what brings that one up to date.
 
 The installer step is one command, run from the project root:
 
@@ -210,13 +229,65 @@ markdown only. An `EXTRA_ROOTS` list at the top of
 the file, empty by default, is where the owner names any other folder writes
 may reach.
 
+What it reads, beyond a plain command:
+
+- **Loops and conditions.** The command after `if`, `then`, `else`, `do` and
+  the other words of a loop or condition, and after a `case` pattern, is read
+  like any other. A rename loop over names in the current folder,
+  `for f in *.jpeg; do mv "$f" "${f%.jpeg}.jpg"; done`, stays allowed; any
+  other path built while the command runs is refused.
+- **Text blocks are text.** A PowerShell here-string, a bash here-document
+  inside a quoted `$( )` (the usual way a commit message is written), and a
+  quoted text of several lines given to a program that takes it as text (a
+  commit or tag message, a `gh` title or body, what `echo`, `printf`,
+  `Write-Host` or `Write-Output` prints, a PowerShell `-Value` or `-Message`)
+  are never read as commands, unless the same command can run text: `iex`,
+  `Invoke-Expression`, `eval`, `sh -c`, `| bash` and the like. Printed text
+  that a later pipe carries on is read line by line.
+- **Inline scripts of any length.** A script given on the command line
+  (`node -e`, `python -c` and their other spellings) or piped into an
+  interpreter or a shell is refused when it names a path outside the project,
+  unless that path is only read, and a script that reads a file outside and
+  writes inside is refused too. A web route such as `'/projects/'` looks like
+  such a path. It counts in a one-line script; a script of several lines
+  counts only a path shaped like a folder on this computer (a drive, `~`,
+  `/c/`, the system's top folders), unless it writes to a path it builds
+  while it runs.
+- **Pipelines.** A delete, overwrite, empty or rename that names no path of
+  its own (`Get-ChildItem <folder> | Remove-Item`) is checked against where
+  its pipeline starts, and refused when that start cannot be read.
+  `find -exec` works in the folders find searches.
+- **git elsewhere.** git pointed at another folder (`-C`, `--git-dir`,
+  `--work-tree`, or a `cd` before it) may only read there: status, log, diff,
+  show. Anything that changes a repository outside the project, or in a
+  folder chosen while the command runs, is refused.
+
 **The destructive-command guard**, `guards/Destructive-guard.mjs`. Fires before
 every shell command and blocks the one-way operations: recursive or forced
 deletes whose targets are not provably disposable, force pushes, history
 rewrites, hard resets, branch deletes. Its job is the command nobody meant to
 run. A dry-run flag passes; a delete inside `node_modules`, a build folder, the
 project's `.tmp/` scratch folder, the OS temp folder or a `*.tmp` leftover
-passes; everything else stops with the reason.
+passes; everything else stops with the reason. Also judged like a recursive
+delete:
+
+- **Many files at once.** A delete with a wildcard (`rm *.log`,
+  `Remove-Item *.zip`), one fed by a pipe (`... | Remove-Item`) and `xargs rm`
+  pass only inside throwaway folders.
+- **Through a link.** A throwaway target that reaches through a link (a
+  symlink or a junction) into a folder that is not throwaway is refused, since
+  a delete through a link removes the real files. Deleting the link itself,
+  with no trailing slash, passes.
+- **`git checkout` with a file or folder name.** It throws away that file's
+  uncommitted changes, so it is refused like `git restore`. Switching
+  branches passes; a branch that shares its name with a folder is switched
+  with `git switch`.
+
+Text blocks are text here too, as above. One command is refused on purpose:
+`echo projectos-live-probe` gets the fixed line
+`ProjectOS live probe: the guards are on in this session. Nothing was run.`,
+which is how the install proves the guards are live in a session
+(`Installation.md` 6b).
 
 Both are the same shape: read the tool call from standard input, exit 0 to
 allow, exit 2 with one line on standard error to block, and on any error of
@@ -232,7 +303,9 @@ Hooks.md says so here rather than pretending; a project that wants it writes it.
 - **Fail open.** A hook that crashes, or cannot read what it needs, exits
   quietly and allows the action. A bug in a guard must never trap you inside
   your own project. The only thing a hook may block on purpose is the specific
-  thing it exists to block.
+  thing it exists to block. The plugin still allows when its own copy of a
+  guard gives no verdict, but never in silence: see "When the plugin says
+  guards OFF".
 - **A guard blocks, a linter warns.** Anything that changes the world gets
   stopped before it happens. Anything about style or wording gets corrected on
   the next message, never by forcing a redo.
@@ -301,10 +374,32 @@ once rather than assuming.
 If nothing happens, the usual causes are: the session was not restarted, the
 JSON has a syntax error, or the command form does not survive your shell.
 
-**A session opened in a folder above the project gets no hooks at all.** The
-plugin stays silent there by design, and Claude Code does not load the
-project's own `.claude` settings for it, even after the shell moves into the
-project. Open the session in the project folder.
+**A session opened in a folder above the project gets no hooks at all.**
+Claude Code does not load the project's own `.claude` settings for it, even
+after the shell moves into the project, and the plugin runs nothing there. It
+says so, though: when a folder directly inside the session's folder carries
+the kit, session start prints one line beginning
+`[ProjectOS plugin] rules and guards OFF here`, naming that project's folder.
+Open the session in the project folder itself.
+
+**When the plugin says guards OFF.** At session start the plugin runs its own
+copy of each guard once, on an empty call; a guard the project's settings
+already wire is not checked, since the plugin does not run it there. When one
+is missing, will not load or does not answer, the start line reads
+`[ProjectOS plugin] guards OFF for <project>: <reason>` in place of
+`hooks active`, and every call that guard would check goes through
+unchecked. Each such call also shows one hook error beginning
+`[ProjectOS plugin] guard skipped on this call, fail open`, and still runs.
+The usual cause is the plugin folder itself: a file an antivirus removed, or
+an update that stopped halfway. Two fixes:
+
+- In the project, run `node project-os/Install-project-hooks.mjs`: from the
+  next session the project's own guards run, and the plugin steps aside for
+  them.
+- The plugin folder is outside the project, so its repair is the owner's. The
+  line ends with the `git status` that shows what changed there. When nobody
+  edited that folder on purpose, deleting it and running the
+  once-per-computer command again puts it back as the kit ships it.
 
 **Where the plugin does not reach, stated plainly.** A session run in the
 cloud, a session whose setting sources exclude the personal folder, a managed

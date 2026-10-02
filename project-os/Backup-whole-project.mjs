@@ -19,9 +19,11 @@
 // It makes the same snapshot as the `Go backup` shortcut in CLAUDE.md.
 //
 // FAILURE CONTRACT. This script has exactly two outcomes:
-//   success  -> exit 0, a `<project>_<stamp>.zip` exists in backups/, and every
-//               file the walk found is listed in that archive by name. Names
-//               are checked, not contents: a damaged entry is not caught.
+//   success  -> exit 0, a `<project>_<stamp>.zip` exists in backups/, every
+//               file and folder the walk found is listed in that archive by
+//               name, and the git history in it opens (THE HISTORY CHECK
+//               below). Outside .git, names are checked, not contents: a
+//               damaged entry is not caught.
 //   failure  -> exit 1, the reason on stderr, and no ZIP from this run left
 //               behind (a ZIP of the same name from an EARLIER run can be).
 // There is deliberately no third "mostly worked" outcome. A backup that quietly
@@ -30,6 +32,19 @@
 // On success it also prints "Left out by name:", every folder the walk skipped
 // because of its name. A source folder on that line means the list below needs
 // changing.
+//
+// THE HISTORY CHECK (2026-10-02). Folders go into the ZIP as entries of their
+// own, so a folder that holds no file comes back on a restore. Git packs its
+// refs into one file now and then, at the end of a commit or a pull, and
+// leaves .git/refs holding only empty folders; a ZIP of files alone then
+// restored a .git without refs, which git refuses to call a repository, while
+// the run had said OK. So whenever the ZIP holds the project's .git, the run
+// proves that history opens before it calls the ZIP good: .git/HEAD,
+// .git/objects and .git/refs must be in the archive, and where git is on this
+// machine, every entry under .git is copied out of the finished archive into a
+// folder of its own in backups/, git opens that copy and reads its latest
+// commit, and the folder is removed again. Without git, the three parts alone
+// are checked, and the run says so.
 //
 // WHAT IS NEVER IN THE ZIP, whatever the list below says: the backups/ and .tmp/
 // (scratch) folders at the project root, the assistant's personal settings
@@ -42,8 +57,10 @@
 // committed settings.json, which can carry the team's guard wiring, and the
 // project's own commands, agents and skills. Common key files stay out too, by
 // name (KEY_FILE_PATTERNS below). A secret saved under any other name travels
-// in the ZIP, so keep those outside the project. Names compare without regard
-// to case, as PowerShell's -contains and -like do in the twin.
+// in the ZIP, so keep those outside the project. The env and key file rules
+// skip the project's own .git, so a branch called fix/credentials travels with
+// the history (2026-10-02). Names compare without regard to case, as
+// PowerShell's -contains and -like do in the twin.
 //
 // A git worktree or submodule is refused: its .git is a file pointing at
 // history kept in another folder, so the ZIP would hold no history. Commit
@@ -61,11 +78,13 @@
 // and the CRC and sizes are patched into the header in place. ZIP64 records
 // are written whenever a size, an offset or the entry count passes its 32-bit
 // or 16-bit field. Names are UTF-8 (flag bit 11) with forward slashes, and
-// each entry carries its file's modification time. On macOS and Linux it also
-// carries the file's permission bits, so a restored script stays executable,
-// as it does from the twin under pwsh. PROJECTOS_FORCE_ZIP64=1 writes every
+// each entry carries its file's modification time. A folder is an entry of
+// its own: no data, stored, its name ending in a slash. On macOS and Linux an
+// entry also carries the file's permission bits, so a restored script stays
+// executable, as it does from the twin under pwsh. PROJECTOS_FORCE_ZIP64=1 writes every
 // record in its ZIP64 form, so the kit's tests reach that path with a tiny
 // project; it changes nothing about what goes in.
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
@@ -119,17 +138,25 @@ const ROOT_ONLY_DIRS = ['backups', '.tmp'];
 // stay on this machine, and the worktrees folder is left out.
 const CLAUDE_LOCAL_FILES = ['settings.local.json', 'settings.local.json.backup', 'settings.json.backup'];
 const CLAUDE_LOCAL_DIRS = ['worktrees'];
-// Common key files stay on this machine too, by name (owner, 2026-10-01):
-// a certificate or private key store (.pem, .p12, .pfx, .jks, .keystore), an
-// SSH private key (id_rsa, id_dsa, id_ecdsa, id_ed25519, and the same with a
-// suffix such as id_rsa_work, since ssh-keygen users name one key per host)
-// and a cloud credentials file (credentials, client secret and service
-// account JSON). An SSH public key (.pub) is not a secret and travels.
+// Common key files stay on this machine too, by name (owner, 2026-10-01,
+// widened 2026-10-02 after the common real names were found travelling): a
+// certificate or private key store (.pem, .p12, .pfx, .jks, .keystore), an
+// Apple or PuTTY private key (.p8, .ppk), an SSH private key (id_rsa, id_dsa,
+// id_ecdsa, id_ed25519, and the same with a suffix such as id_rsa_work, since
+// ssh-keygen users name one key per host), a cloud credentials file (a file
+// named credentials in any folder, as AWS names it, and credentials, client
+// secret, service account and Firebase adminsdk JSON), an env file named the
+// other way round (production.env), the npm, PyPI, netrc and git login files,
+// and terraform state, which holds every secret the infrastructure was given.
+// A copy of any of them, the name followed by one of KEY_COPY_ENDINGS
+// (id_rsa.old, key.pem.bak), stays out too. An SSH public key (.pub) is not a
+// secret and travels.
 // Forced like the lists above, so editing the setup block cannot widen it. A
 // run names every key file it left out, since a restore has to bring them
 // back by hand. A secret saved under any other name still travels.
 // A Keynote deck ends in .key, so that ending is deliberately not listed.
-const KEY_FILE_PATTERNS = ['*.pem', '*.p12', '*.pfx', '*.jks', '*.keystore', 'id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519', 'id_rsa_*', 'id_dsa_*', 'id_ecdsa_*', 'id_ed25519_*', '*credentials*.json', 'client_secret*.json', '*service-account*.json', '*service_account*.json'];
+const KEY_FILE_PATTERNS = ['*.pem', '*.p12', '*.pfx', '*.jks', '*.keystore', '*.p8', '*.ppk', 'id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519', 'id_rsa_*', 'id_dsa_*', 'id_ecdsa_*', 'id_ed25519_*', 'credentials', '*credentials*.json', 'client_secret*.json', '*service-account*.json', '*service_account*.json', '*serviceAccount*.json', '*adminsdk*.json', '*.env', '.npmrc', '.pypirc', '.netrc', '.git-credentials', '*.tfstate', '*.tfstate.*'];
+const KEY_COPY_ENDINGS = ['.bak', '.old', '.orig'];
 const PUBLIC_KEY_PATTERNS = ['*.pub'];
 // A template travels, key file and env file alike (2026-10-01): a name whose
 // last dot-separated part, or the part just before its ending, is one of
@@ -145,7 +172,18 @@ const isTemplate = (name) => name.toLowerCase().split('.').slice(-2).some((part)
 const like = (pattern) => new RegExp('^' + pattern.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$', 'i');
 const KEY_FILE_RES = KEY_FILE_PATTERNS.map(like);
 const PUBLIC_KEY_RES = PUBLIC_KEY_PATTERNS.map(like);
-const isKeyFile = (name) => !isTemplate(name) && !PUBLIC_KEY_RES.some((re) => re.test(name)) && KEY_FILE_RES.some((re) => re.test(name));
+const isKeyName = (name) => !isTemplate(name) && !PUBLIC_KEY_RES.some((re) => re.test(name)) && KEY_FILE_RES.some((re) => re.test(name));
+// A copy is judged by the name it was copied from, so id_rsa.pub.bak travels
+// like id_rsa.pub, and a template's copy travels like the template.
+const copiedFrom = (name) => {
+  const lower = name.toLowerCase();
+  const end = KEY_COPY_ENDINGS.find((e) => lower.length > e.length && lower.endsWith(e));
+  return end ? name.slice(0, name.length - end.length) : null;
+};
+const isKeyFile = (name) => {
+  const original = copiedFrom(name);
+  return isKeyName(name) || (original !== null && isKeyName(original));
+};
 
 // The key-file line prints in one order on every machine and in both twins:
 // ASCII letters compared without case, every other character by its UTF-16
@@ -257,6 +295,54 @@ function readSmall(fd, size) {
   return buf.subarray(0, size);
 }
 
+// The local header, written at `start`; it returns its length. The CRC and
+// sizes (14 to 25) are zero here and patched in once the data is written. It
+// has no room to grow later, so the caller decides its ZIP64 field first.
+function writeLocalHeader(name, method, time, date, local64, entry64, start) {
+  const header = Buffer.alloc(30 + name.length + (local64 ? 20 : 0));
+  header.writeUInt32LE(0x04034b50, 0);
+  header.writeUInt16LE(entry64 ? 45 : 20, 4);
+  header.writeUInt16LE(UTF8_NAMES, 6);
+  header.writeUInt16LE(method, 8);         // 8 deflate, 0 stored
+  header.writeUInt16LE(time, 10);
+  header.writeUInt16LE(date, 12);
+  if (local64) {
+    header.writeUInt32LE(MAX32, 18);
+    header.writeUInt32LE(MAX32, 22);
+  }
+  header.writeUInt16LE(name.length, 26);
+  header.writeUInt16LE(local64 ? 20 : 0, 28);
+  name.copy(header, 30);
+  if (local64) {
+    header.writeUInt16LE(0x0001, 30 + name.length); // the ZIP64 extra field
+    header.writeUInt16LE(16, 32 + name.length);     // both sizes, filled in later
+  }
+  writeAt(header, start);
+  return header.length;
+}
+
+// A folder goes in as an entry of its own, with no data, so a folder that
+// holds no file still comes back on a restore (THE HISTORY CHECK above).
+function addFolder(full, rel) {
+  const name = Buffer.from(`${rel}/`, 'utf8');
+  if (name.length > MAX16) throw new Error('the path is too long for a ZIP entry name');
+  const st = fs.statSync(full);
+  const start = pos;
+  const local64 = FORCE_ZIP64;
+  const entry64 = local64 || start >= MAX32;
+  const { time, date } = dosDateTime(st.mtime);
+  try {
+    pos = start + writeLocalHeader(name, 0, time, date, local64, entry64, start);
+  } catch (e) {
+    pos = start;
+    throw e;
+  }
+  // Both forms set the MS-DOS directory bit; Unix also marks the top half a
+  // directory and keeps its permission bits.
+  const attrs = (HOST === 3 ? (0o040000 | (st.mode & 0o7777)) * 65536 : 0) + 0x10;
+  central.push({ name, method: 0, crc: 0, usize: 0, csize: 0, offset: start, time, date, entry64, attrs });
+}
+
 async function addEntry(full, rel) {
   const name = Buffer.from(rel, 'utf8');
   if (name.length > MAX16) throw new Error('the path is too long for a ZIP entry name');
@@ -272,27 +358,7 @@ async function addEntry(full, rel) {
     const local64 = FORCE_ZIP64 || deflateBound(size) >= MAX32;
     const entry64 = local64 || start >= MAX32;
     const { time, date } = dosDateTime(before.mtime);
-    const header = Buffer.alloc(30 + name.length + (local64 ? 20 : 0));
-    header.writeUInt32LE(0x04034b50, 0);
-    header.writeUInt16LE(entry64 ? 45 : 20, 4);
-    header.writeUInt16LE(UTF8_NAMES, 6);
-    header.writeUInt16LE(8, 8);              // deflate
-    header.writeUInt16LE(time, 10);
-    header.writeUInt16LE(date, 12);
-    // CRC and sizes (14 to 25) are patched in once the data is written.
-    if (local64) {
-      header.writeUInt32LE(MAX32, 18);
-      header.writeUInt32LE(MAX32, 22);
-    }
-    header.writeUInt16LE(name.length, 26);
-    header.writeUInt16LE(local64 ? 20 : 0, 28);
-    name.copy(header, 30);
-    if (local64) {
-      header.writeUInt16LE(0x0001, 30 + name.length); // the ZIP64 extra field
-      header.writeUInt16LE(16, 32 + name.length);     // both sizes, filled in below
-    }
-    writeAt(header, start);
-    pos = start + header.length;
+    pos = start + writeLocalHeader(name, 8, time, date, local64, entry64, start);
 
     let crc = 0;
     let usize = 0;
@@ -347,7 +413,7 @@ async function addEntry(full, rel) {
     // Unix keeps the permission bits in the top half, marked a regular file;
     // the MS-DOS form carries no bits the restore would need.
     const attrs = HOST === 3 ? (0o100000 | (before.mode & 0o7777)) * 65536 : 0;
-    central.push({ name, crc, usize, csize, offset: start, time, date, entry64, attrs });
+    central.push({ name, method: 8, crc, usize, csize, offset: start, time, date, entry64, attrs });
   } catch (e) {
     // The next entry overwrites whatever this one left; the run fails anyway.
     pos = start;
@@ -380,7 +446,7 @@ function finishArchive() {
     h.writeUInt16LE(MADE_BY, 4);
     h.writeUInt16LE(e.entry64 ? 45 : 20, 6);
     h.writeUInt16LE(UTF8_NAMES, 8);
-    h.writeUInt16LE(8, 10);
+    h.writeUInt16LE(e.method, 10);
     h.writeUInt16LE(e.time, 12);
     h.writeUInt16LE(e.date, 14);
     h.writeUInt32LE(e.crc, 16);
@@ -444,6 +510,8 @@ function finishArchive() {
 
 // The read-back reader: the end record (and its ZIP64 form when the plain one
 // says so), then every central directory header, read in chunks from disk.
+// It gives each entry's name with what the history check needs to copy the
+// entry back out: its method, its compressed size and its local header.
 function readExact(fd, length, at) {
   const buf = Buffer.alloc(length);
   let got = 0;
@@ -454,7 +522,7 @@ function readExact(fd, length, at) {
   }
   return buf;
 }
-function archiveNames(file) {
+function archiveEntries(file) {
   const fd = fs.openSync(file, 'r');
   try {
     const size = fs.fstatSync(fd).size;
@@ -482,7 +550,7 @@ function archiveNames(file) {
     }
     const cdEnd = cdStart + cdSize;
     if (cdEnd > size) throw new Error('the central directory runs past the end of the file');
-    const names = new Set();
+    const entries = new Map();
     let buf = Buffer.alloc(0);
     let bufAt = cdStart;
     let p = cdStart;
@@ -498,13 +566,28 @@ function archiveNames(file) {
       if (buf.readUInt32LE(o) !== 0x02014b50) throw new Error(`central directory entry ${i + 1} of ${count} is damaged`);
       const flags = buf.readUInt16LE(o + 8);
       const nameLen = buf.readUInt16LE(o + 28);
-      const total = 46 + nameLen + buf.readUInt16LE(o + 30) + buf.readUInt16LE(o + 32);
+      const extraLen = buf.readUInt16LE(o + 30);
+      const total = 46 + nameLen + extraLen + buf.readUInt16LE(o + 32);
       need(total);
       o = p - bufAt;
-      names.add(buf.toString(flags & UTF8_NAMES ? 'utf8' : 'latin1', o + 46, o + 46 + nameLen));
+      const name = buf.toString(flags & UTF8_NAMES ? 'utf8' : 'latin1', o + 46, o + 46 + nameLen);
+      let usize = buf.readUInt32LE(o + 24);
+      let csize = buf.readUInt32LE(o + 20);
+      let offset = buf.readUInt32LE(o + 42);
+      // A ZIP64 field holds only the values that did not fit, in this fixed
+      // order: uncompressed size, compressed size, local header offset.
+      const extraEnd = o + 46 + nameLen + extraLen;
+      for (let x = o + 46 + nameLen; x + 4 <= extraEnd; x += 4 + buf.readUInt16LE(x + 2)) {
+        if (buf.readUInt16LE(x) !== 0x0001) continue;
+        let q = x + 4;
+        if (usize === MAX32) { usize = Number(buf.readBigUInt64LE(q)); q += 8; }
+        if (csize === MAX32) { csize = Number(buf.readBigUInt64LE(q)); q += 8; }
+        if (offset === MAX32) { offset = Number(buf.readBigUInt64LE(q)); q += 8; }
+      }
+      entries.set(name, { method: buf.readUInt16LE(o + 10), csize, offset });
       p += total;
     }
-    return names;
+    return entries;
   } finally {
     fs.closeSync(fd);
   }
@@ -515,6 +598,7 @@ function archiveNames(file) {
 const enumErrors = [];
 const pruned = [];
 const keyFiles = [];
+const folders = [];
 const files = [];
 const relOf = (full) => path.relative(root, full).split(path.sep).join('/');
 
@@ -525,7 +609,9 @@ function isFolder(dirent, full) {
   try { return fs.statSync(full).isDirectory(); } catch { return false; }
 }
 
-function walk(dir) {
+// inGit is true under the project's own .git folder, where the name rules for
+// env and key files do not apply.
+function walk(dir, inGit = false) {
   // Enumeration failure is FATAL, never silent. An unreadable directory
   // (permissions, a sync-client lock, a path too long) would otherwise yield
   // zero entries for its ENTIRE subtree, recorded nowhere, while the script
@@ -554,7 +640,8 @@ function walk(dir) {
         pruned.push(relOf(entry.full));
         continue;
       }
-      walk(entry.full);
+      folders.push({ full: entry.full, rel: relOf(entry.full) });
+      walk(entry.full, inGit || (dir === root && sameName(entry.name, '.git')));
       continue;
     }
     const lower = entry.name.toLowerCase();
@@ -564,13 +651,135 @@ function walk(dir) {
     if (lower.endsWith('.tmp') || lower.includes('.tmp.')) continue;
     // Env files and the common key files stay on this machine; the
     // templates travel. A secret under any other name still goes in.
-    if ((lower.startsWith('.env') || lower.startsWith('.dev.vars')) && !isTemplate(entry.name)) continue;
-    if (isKeyFile(entry.name)) { keyFiles.push(relOf(entry.full)); continue; }
+    // An env file named the other way round (production.env) is a key file
+    // instead, so the run names it.
+    // Neither rule applies under the project's own .git: git's files there are
+    // never secrets by name, and a branch called fix/credentials is a ref file
+    // the restored history needs. Left out, the restore lost that branch, and
+    // the history check failed whenever it was checked out (2026-10-02).
+    if (!inGit && (lower.startsWith('.env') || lower.startsWith('.dev.vars')) && !isTemplate(entry.name)) continue;
+    if (!inGit && isKeyFile(entry.name)) { keyFiles.push(relOf(entry.full)); continue; }
     files.push({ full: entry.full, rel: relOf(entry.full) });
   }
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// The history check (THE HISTORY CHECK in the header).
+
+// What git looks for before it calls a folder a repository.
+const HISTORY_PARTS = ['HEAD', 'objects/', 'refs/'];
+
+// git runs with every GIT_ variable dropped, so a hook's GIT_DIR or
+// GIT_OBJECT_DIRECTORY cannot point the check at the live history, and with
+// safe.directory opened for that one call, since the copy sits in a folder no
+// safe.directory setting names.
+const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)));
+function runGit(gitDir, args) {
+  const r = spawnSync('git', ['-c', 'safe.directory=*', `--git-dir=${gitDir}`, ...args], { env: gitEnv, encoding: 'utf8', windowsHide: true });
+  const err = (r.stderr || '').trim() || (r.error ? r.error.message : `git exited with ${r.status}`);
+  return { ok: !r.error && r.status === 0, out: (r.stdout || '').trim(), err };
+}
+function gitFound() {
+  const r = spawnSync('git', ['--version'], { env: gitEnv, windowsHide: true });
+  return !r.error && r.status === 0;
+}
+
+// The folder the history is copied into, removed again on every path out.
+let checkDir = null;
+function removeCheckDir() {
+  if (checkDir === null) return true;
+  try {
+    fs.rmSync(checkDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  } catch { /* the caller names the folder */ }
+  return !fs.existsSync(checkDir);
+}
+const checkDirLeft = () => `The history check folder could not be removed, delete it by hand: ${checkDir}`;
+
+// Copies every entry under .git out of the finished archive, as any unzip
+// would: a folder entry becomes a folder, a file entry is inflated into its
+// file, streamed, since a pack file can be large.
+async function extractHistory(file, entries, gitName, dest) {
+  const prefix = `${gitName}/`;
+  const fd = fs.openSync(file, 'r');
+  try {
+    for (const [name, e] of entries) {
+      if (!name.startsWith(prefix)) continue;
+      const out = path.join(dest, ...name.split('/'));
+      if (name.endsWith('/')) {
+        fs.mkdirSync(out, { recursive: true });
+        continue;
+      }
+      fs.mkdirSync(path.dirname(out), { recursive: true });
+      const local = readExact(fd, 30, e.offset);
+      if (local.readUInt32LE(0) !== 0x04034b50) throw new Error(`${name}: its local header is damaged`);
+      if (e.method !== 0 && e.method !== 8) throw new Error(`${name}: compression method ${e.method} is not one this script writes`);
+      if (e.csize === 0) {
+        fs.writeFileSync(out, '');
+        continue;
+      }
+      const at = e.offset + 30 + local.readUInt16LE(26) + local.readUInt16LE(28);
+      await pipeline(
+        fs.createReadStream(file, { fd, autoClose: false, start: at, end: at + e.csize - 1 }),
+        ...(e.method === 8 ? [zlib.createInflateRaw()] : []),
+        fs.createWriteStream(out),
+      );
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// Proves the snapshot's history opens, or stops the run. It returns the line
+// the run prints about it.
+async function checkHistory(entries, gitFolder) {
+  const gitName = gitFolder.rel;
+  const anyCase = new Set([...entries.keys()].map((n) => n.toLowerCase()));
+  const absent = HISTORY_PARTS.map((p) => `${gitName}/${p}`).filter((n) => !anyCase.has(n.toLowerCase()));
+  if (absent.length > 0) {
+    // Every name the walk found is in the archive by now, so the project's
+    // own .git lacks the part too.
+    stopWithFailure(`the snapshot's history would not open: git needs ${gitName}/HEAD, ${gitName}/objects and ${gitName}/refs, and ${absent.length} of them are not in the archive`,
+      [...absent, `the project's own ${gitName} lacks it too, so git cannot open this project's history either`]);
+  }
+  const parts = `${gitName}/HEAD, ${gitName}/objects and ${gitName}/refs are in the archive`;
+  if (!gitFound()) return `History check: git was not found, so only the parts git needs were checked: ${parts}.`;
+
+  try {
+    checkDir = fs.mkdtempSync(path.join(backups, 'history-check-'));
+    await extractHistory(partial, entries, gitName, checkDir);
+  } catch (e) {
+    stopWithFailure("the snapshot's history could not be copied out of the archive to check it", [e.message]);
+  }
+  const copy = path.join(checkDir, gitName);
+  const opens = runGit(copy, ['rev-parse', '--git-dir']);
+  if (!opens.ok) {
+    if (runGit(gitFolder.full, ['rev-parse', '--git-dir']).ok) {
+      stopWithFailure("the snapshot's history does not open with git, although this project's does", [opens.err]);
+    }
+    return `History check: git cannot open this project's own history either, so only the parts git needs were checked: ${parts}.`;
+  }
+  // Reading the latest commit proves the refs lead somewhere and the object
+  // they name comes out of the archive whole. Signatures are kept out of that
+  // read: with log.showSignature set, in the user's git config or the
+  // project's own, git log prints its signature lines on the same output as
+  // the hash, and a signed latest commit failed every run (2026-10-02). As a
+  // -c setting rather than a flag, so a git too old to know it ignores it.
+  const head = runGit(copy, ['rev-parse', '--verify', '--quiet', 'HEAD']);
+  if (head.ok) {
+    const log = runGit(copy, ['-c', 'log.showSignature=false', 'log', '-1', '--format=%H']);
+    if (!log.ok || log.out !== head.out) {
+      stopWithFailure("the snapshot's latest commit cannot be read back with git", [log.ok ? `git log names ${log.out}, HEAD names ${head.out}` : log.err]);
+    }
+    return `History check: the snapshot's history opens with git, latest commit ${head.out}.`;
+  }
+  // No latest commit in the copy is right only for a project with none yet.
+  const liveHead = runGit(gitFolder.full, ['rev-parse', '--verify', '--quiet', 'HEAD']);
+  if (liveHead.ok) {
+    stopWithFailure("the snapshot's history has no latest commit, although this project's has one", [`this project's latest commit: ${liveHead.out}`]);
+  }
+  return "History check: the snapshot's history opens with git and holds no commit yet.";
+}
 
 async function main() {
   try {
@@ -612,15 +821,25 @@ async function main() {
   }
 
   // Expected contents, decided BEFORE writing so they can be compared against
-  // what the archive actually ended up holding.
-  const expected = new Set(files.map((f) => f.rel));
+  // what the archive actually ended up holding. A folder's name ends in a
+  // slash, as its entry's does.
+  const expected = new Set([...folders.map((d) => `${d.rel}/`), ...files.map((f) => f.rel)]);
 
   let added = 0;
+  let addedFolders = 0;
   const skipped = [];
   try {
     zipFd = fs.openSync(partial, 'wx');
   } catch (e) {
     stopWithFailure('the archive could not be created', [e.message]);
+  }
+  for (const d of folders) {
+    try {
+      addFolder(d.full, d.rel);
+      addedFolders++;
+    } catch (e) {
+      skipped.push(`${d.rel}/: ${e.message}`);
+    }
   }
   for (const f of files) {
     try {
@@ -646,12 +865,12 @@ async function main() {
 
   // Independent read-back: trust what the archive HOLDS, not what the writer
   // thought it wrote. Catches a missing entry, an archive a mid-write crash left
-  // unreadable, and any entry-name mangling. It reads names only: an entry whose
-  // content was damaged still passes, and so does anything the walk itself
-  // skipped, since the expected list comes from that same walk.
+  // unreadable, and any entry-name mangling. Outside .git it reads names only:
+  // an entry whose content was damaged still passes, and so does anything the
+  // walk itself skipped, since the expected list comes from that same walk.
   let actual;
   try {
-    actual = archiveNames(partial);
+    actual = archiveEntries(partial);
   } catch (e) {
     stopWithFailure('the finished archive could not be re-opened for verification', [e.message]);
   }
@@ -660,6 +879,12 @@ async function main() {
   if (missing.length > 0) {
     stopWithFailure(`${missing.length} expected file(s) are absent from the finished archive`, missing);
   }
+
+  // The project's .git, when the walk took it in: the setup block can leave
+  // it out for a working-tree-only ZIP, and then there is no history to check.
+  const gitFolder = folders.find((d) => sameName(d.rel, '.git'));
+  const historyLine = gitFolder ? await checkHistory(actual, gitFolder) : null;
+  const checkDirStays = !removeCheckDir();
 
   // The rename is checked like every other step: a failed one would print OK
   // over an older ZIP of the same name, or over no ZIP at all. Another program
@@ -681,13 +906,15 @@ async function main() {
   }
 
   console.log(`OK: ${zipPath}`);
-  console.log(`Added ${added} file(s), all ${actual.size} verified present in the archive by name.`);
+  console.log(`Added ${added} file(s) and ${addedFolders} folder(s), all ${actual.size} verified present in the archive by name.`);
+  if (historyLine !== null) console.log(historyLine);
   if (pruned.length > 0) {
     console.log(`Left out by name: ${sortNames(pruned).join(', ')}`);
   }
   if (keyFiles.length > 0) {
     console.log(`Left out as key files (bring them back by hand on a restore): ${sortNames(keyFiles).join(', ')}`);
   }
+  if (checkDirStays) console.log(checkDirLeft());
 }
 
 try {
@@ -699,5 +926,6 @@ try {
   for (const d of f.details) console.error(`  - ${d}`);
   console.error('No .zip was produced. Nothing here is a usable snapshot - fix the cause and re-run.');
   try { fs.rmSync(partial, { force: true }); } catch { /* reported above; the name says partial */ }
+  if (!removeCheckDir()) console.error(checkDirLeft());
   process.exitCode = 1;
 }

@@ -598,10 +598,13 @@ Commit everything accumulated up to now, across sessions, not only this chat.
 
    Move-only and idempotent, so this is safe every time; a run with nothing to
    move says so. Stage whatever it changed with the rest.
-3. If the folder is not a git repository yet
-   (`git rev-parse --is-inside-work-tree` fails), run `git init -b main` first
-   and say so in one line of the report; it is local, and deleting `.git`
-   undoes it. Before the first stage, make sure `.gitignore` names the env
+3. If this folder has no version history of its own yet, run
+   `git init -b main` first and say so in one line of the report; it is
+   local, and deleting `.git` undoes it. It has none when
+   `git rev-parse --show-toplevel` fails, or when it names a folder above
+   this one while `git ls-files` here prints nothing: a new project sitting
+   inside another project's folder, whose commits must never land in that
+   other project. Before the first stage, make sure `.gitignore` names the env
    files (`.env*` plus `!.env.example`) and every dependency or build folder
    that exists here (from the list at the top of
    `project-os/Backup-whole-project.mjs`). Add only the lines that are missing,
@@ -673,45 +676,61 @@ Decisions with empty templates.
    project came from, and a shallow clone does not have that commit. A fetch
    left there by an earlier run is deleted first, as in step 8.
 2. Compare, with the fetched kit's own copy of the script, which knows every
-   file the new kit ships. Without `--apply` it only reports:
+   file the new kit ships. Without `--apply` it changes none of this
+   project's files and only fills its review folder, `.tmp/kit-merge/`:
 
    ```
    node .tmp/projectos-kit/project-os/Compare-kit-files.mjs --kit .tmp/projectos-kit
    ```
 
    It reads the commit this project came from in `project-os/Kit-version.json`.
-   With no such file, add `--base <commit>` from the install's History row.
-   When neither names one, run it as it is and say in the report that the
+   With no such file it looks for that commit itself, in the kit's history,
+   by the scripts and guards this project carries, and its "Base:" line says
+   "found in the kit's history, not recorded yet". Only when it says the base
+   is unknown, add `--base <commit>` from the install's History row.
+   When the row names none either, run it as it is and say in the report that the
    starting commit is unknown: a machinery file the kit has and this project
    lacks still comes in as new, but every file both hold that differs shows as "cannot
    tell who changed it", is never copied, and is compared by hand in step 5.
 3. Show the owner the report in plain words: the files the kit changed that
-   this project never touched, the files new in the kit, and the files both
-   changed (the ones the install calibrated, and any the owner edited). A file
-   this project removed, such as Installation.md, stays removed. Ask one
-   question: apply? Nothing is applied before the owner's word.
+   this project never touched, the files new in the kit, the calibrated files
+   the tool merged cleanly with this project's wording kept, and what is left
+   by hand (step 5). A file this project removed, such as Installation.md,
+   stays removed. Ask one question: apply? Nothing is applied before the
+   owner's word.
 4. On that word, run the same command with `--apply` added. It copies only
    the machinery files the kit changed and this project never touched, plus
-   the machinery files new in the kit. It records the new kit commit in
+   the machinery files new in the kit, and writes each calibrated file that
+   merged cleanly. It records the new kit commit in
    `project-os/Kit-version.json` only when nothing is left to carry over by
-   hand: no file changed on both sides or cannot tell, and no calibrated file
-   with a kit change or new in the kit. Otherwise it lists them and records
-   nothing.
+   hand: no machinery file changed on both sides or cannot tell, and no
+   calibrated file with a clash, a placeholder nothing here fills, or new in
+   the kit. Otherwise it lists them and records nothing new; a base it found
+   in the kit's history it records first, so the next compare starts there.
    Nothing outside
    `CLAUDE.md`, `Installation.md` and `project-os/` ever comes in from the
    fetch: the kit's `hooks/` and `.claude-plugin/` would make the plugin take
    this project for the kit itself.
-5. Carry the kit's changes to the files both changed over by hand, by the
-   install's merge law: this project's wording wins every clash, nothing of it
-   is deleted or reworded on your own, every clash goes in the report for the
-   owner's verdict, and the rule numbers never shift. The living files
+5. Settle what is left by hand, by the install's merge law: this project's
+   own wording wins every clash, nothing of it is deleted or reworded on your
+   own, every clash with it goes in the report for the owner's verdict, and
+   the rule numbers never shift. A filled-in value is not this project's
+   wording: the tool fills both kit copies with this project's values (its
+   name, its owner, its address, its check command) before it merges, and
+   labels each clash it leaves. A clash it labels as a setup block the
+   install filled is yours: take the kit's new block and fill it again from
+   this project's answer. Only a clash it labels as this project's own
+   wording goes to the owner. Settle each in its merged copy under
+   `.tmp/kit-merge/`, then copy that over this project's file; every compare
+   empties that folder, so copy a merge out before running one again. A
+   clean merge whose new lines bring a placeholder nothing here fills is
+   copied over the same way, the placeholder then filled from what this
+   project already says, and asked only when nothing does. The living files
    (History, Decisions, Backlog, Map, BugAtlas, Mistakes) keep every row; only
    a change to the instructions at their top comes over, and the report
    counts the lines the kit changed in each one's template. A calibrated file
    new in the kit is copied by hand and its setup block filled from what this
-   project already says. A placeholder in
-   double curly braces that the new text brings is filled from what this
-   project already says, and asked only when nothing does.
+   project already says.
    Carry over the files `--apply` listed the same way, then run the command
    once more with `--record` in place of `--apply`: it records the new kit
    commit and lists every file still different from the kit, calibrated ones
@@ -720,19 +739,44 @@ Decisions with empty templates.
    this project's own changes and never bring the kit's.
 6. Run the checks: `{{CHECK_COMMAND}}` as `Go commit` runs it, and when a guard
    or the hooks setup changed, the checks at the end of `project-os/Hooks.md`.
-   A computer that runs the kit as a plugin updates that copy separately, with
-   the `git pull` the plugin's start line gives; it is outside the project, so
-   that command is the owner's.
+   A computer that runs the kit as a plugin keeps its own copy of the guards,
+   and an older plugin never says when that copy is behind. So compare the
+   two folders yourself, from the project root, line endings aside (both
+   guards allow this command):
+
+   ```
+   git diff --no-index --ignore-cr-at-eol --quiet "$HOME/.claude/skills/projectos/project-os/guards" project-os/guards
+   ```
+
+   Exit 0 means they match. An error that it could not access the plugin's
+   folder means this computer has no plugin. Either way nothing more is
+   needed here. Any other exit 1 means they differ: when this project's
+   `.claude` settings wire no guard of their own, run
+   `node project-os/Install-project-hooks.mjs` too. From the next session the
+   project's own guards run, and the plugin steps aside for them. Updating the
+   plugin's copy is then an optional tidy-up,
+   `git -C "$HOME/.claude/skills/projectos" pull`; it is outside the project,
+   so that command is the owner's.
 7. Log it (rule 8): one scan row and one appendix row naming the old kit
-   commit and the new one, the files copied, the files merged by hand, and the
-   clashes waiting on the owner.
-8. Delete the fetch: `rm -rf .tmp/projectos-kit`, or in PowerShell
-   `Remove-Item -Recurse -Force .tmp/projectos-kit`. The guards let a delete
-   under `.tmp/` through as disposable.
+   commit and the new one, the files copied, the files merged by the tool and
+   by hand, and the clashes waiting on the owner.
+8. Delete the fetch and the review folder:
+
+   ```
+   rm -rf .tmp/projectos-kit .tmp/kit-merge
+   ```
+
+   In PowerShell, `Remove-Item -Recurse -Force .tmp/projectos-kit, .tmp/kit-merge`.
+   The guards let a delete under `.tmp/` through as disposable.
 
 The update stays uncommitted until `Go commit`, like any task. A project whose
 own CLAUDE.md predates this shortcut runs it from the fetched kit's CLAUDE.md,
-and step 5 brings the shortcut in.
+and step 5 brings the shortcut in. Whatever version of these steps the project
+carried when the update started, the update finishes with the newest. When
+`--apply` ends on a line saying this project's CLAUDE.md now carries newer
+Go update kit steps, finish with steps 5 to 8 as the merged CLAUDE.md writes
+them; when CLAUDE.md is settled by hand in step 5, go on with steps 6 to 8 as
+the settled file writes them.
 
 ### `Go backup`
 
@@ -751,13 +795,30 @@ disaster recovery that depends on no git host and no sync folder. Flow:
    (`.env*`, `.dev.vars*`; a template, a name with example, sample or
    template as one of its parts, travels). The script's own header holds
    the full list. The committed
-   `.claude/settings.json` and the project's own commands travel. Common key
-   files stay out too, by name (certificates, SSH private keys, cloud
-   credential files), and the run names each one it left out. A secret saved
-   under any other name travels in the ZIP, so keep those outside the project.
-   Every file name is checked in the finished archive (names, not content).
-   The run either passes that check or fails and leaves no ZIP at all; there
-   is no "mostly worked".
+   `.claude/settings.json` and the project's own commands travel. Key files
+   stay out too, recognised by their name only, and the run names each one
+   it left out:
+   - certificates and key stores: `*.pem`, `*.p12`, `*.pfx`, `*.jks`,
+     `*.keystore`;
+   - private keys: SSH (`id_rsa`, `id_ed25519` and the like), Apple (`*.p8`)
+     and PuTTY (`*.ppk`);
+   - cloud credentials: a file named `credentials`, and the credentials,
+     client secret, service account and Firebase admin SDK JSON files;
+   - login files: `.npmrc`, `.pypirc`, `.netrc`, `.git-credentials`;
+   - an env file under another name, such as `production.env`;
+   - Terraform state, `*.tfstate` and its backups;
+   - a copy of any of these ending in `.bak`, `.old` or `.orig`.
+
+   A template (example, sample or template in its name), an SSH public key
+   (`.pub`) and a Keynote deck (`.key`) travel. A secret saved under any
+   other name travels in the ZIP, so keep those outside the project.
+   Every file and folder name is checked in the finished archive (names, not
+   content), so an empty folder comes back on a restore too. When the project
+   has a git history, the run also proves the snapshot's history opens: it
+   copies that history out of the ZIP and has git read its latest commit
+   (with no git on the computer, it checks that the parts git needs are
+   there). The run either passes both checks or fails and leaves no ZIP at
+   all; there is no "mostly worked".
 2. The ZIP lands in `backups/` at the project root, which is gitignored.
 3. Never commit or push a ZIP.
 4. Tell the owner to move the ZIP to external storage; a backup on the same
@@ -780,9 +841,9 @@ never travels: run `node project-os/Install-project-hooks.mjs` in the restored
 folder (with `--shared` too if the project used it), or confirm the plugin's
 start line names the new folder, and run the two guard probes from
 `project-os/Hooks.md`. Then run the project as usual. The full git history is
-inside the snapshot's `.git` folder, so nothing has to be fetched from
-anywhere. Say in the restore report, in one line, that the guards were wired
-again.
+inside the snapshot's `.git` folder, and the backup run proved it opens, so
+nothing has to be fetched from anywhere. Say in the restore report, in one
+line, that the guards were wired again.
 
 `.mcp.json` travels in the snapshot but is written for the system that made
 it: restoring on the other system, switch its `chrome-devtools` entry to this

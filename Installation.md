@@ -2,8 +2,10 @@
 
 This file is the whole procedure for installing ProjectOS into a project.
 The assistant reads it and follows it exactly, every step, in order.
-The owner does two things only: answers one batch of questions, and reads one
-report at the end.
+The owner's part: approving the commands and file changes Claude Code asks
+about while the install runs, answering one sitting of questions near the
+start, reading one report at the end, and answering the short set of
+decisions that follows it.
 
 The install is not done until the report in the last section has been
 delivered.
@@ -22,11 +24,10 @@ the reading step.
    git clone --depth 1 https://github.com/rotem914/ProjectOS .tmp/projectos-kit
    ```
 
-   Note its commit for step 7 and the report:
-   `git -C .tmp/projectos-kit rev-parse --short HEAD`. Without git, download
+   Without git, download
    `https://github.com/rotem914/ProjectOS/archive/refs/heads/main.zip` into
-   `.tmp/`, unpack it into `.tmp/projectos-kit`, copy from the one folder
-   inside it, and write the commit as unknown.
+   `.tmp/`, unpack it into `.tmp/projectos-kit`, and copy from the one folder
+   inside it.
    The install needs only the newest files, so this clone is shallow. The
    update path is different: `Go update kit` (CLAUDE.md) compares against the
    kit as it was at the commit a project came from, which needs the kit's full
@@ -44,6 +45,23 @@ the reading step.
    `tests/`, `hooks/` or `.claude-plugin/`. They belong to the kit repository, and the
    last two together make the plugin take this project for the kit itself:
    its guards would still run here, but its reminders would stay off.
+
+   Right after a copy that brought `project-os/` in, write down which kit it
+   came from, from the project root:
+
+   ```
+   node .tmp/projectos-kit/project-os/Compare-kit-files.mjs --kit .tmp/projectos-kit --record
+   ```
+
+   It writes one file, `project-os/Kit-version.json`, with the fetch's commit
+   and today's date, and ends on a line starting "Wrote
+   project-os/Kit-version.json". A "differs CLAUDE.md" line before it is
+   expected when the kit's copy came in as `CLAUDE-kit.md`. From now on the
+   commit lives in that file, not in your memory of this conversation: step 7
+   and the report read it back. Skip this when `project-os/` was already
+   there, since a file already there stays as it is. From a ZIP it writes
+   nothing and says the kit folder is not a git clone: leave it at that, and
+   the first `Go update kit` finds the commit in the kit's history.
 3. Run the fetch's fast suite once, from the project root:
 
    ```
@@ -135,7 +153,9 @@ question, and it should not be asked.
 
 ## 2b. Checks before you go further
 
-Each one catches a failure that is invisible afterwards.
+Each one catches a failure that is invisible afterwards. Run the last one,
+whether this folder has its own version history, first: three of the others
+read that history.
 
 **Was the kit cloned in place?** Check where this folder's history points:
 
@@ -237,19 +257,33 @@ the rules are documents only until it is installed, and that until then the
 growing files are archived and `Go backup` runs only through the PowerShell
 twins, where PowerShell exists.
 
-**Is this folder a git repository yet?** A brand-new project can be a blank
-folder with nothing in it but the kit. Check:
+**Does this folder have its own version history yet?** A brand-new project
+can be a blank folder with nothing in it but the kit, and it can sit inside
+another project's folder, where git answers with that other project's history.
+Ask git for the top folder of the history it sees:
 
 ```
-git rev-parse --is-inside-work-tree
+git rev-parse --show-toplevel
 ```
 
-If it is not one, the install still runs in full: no code means step 3's
-"nothing exists to run yet", and no git means only that the version history
+This folder has its own history when that prints this folder itself (the same
+folder, whatever the slashes or letter case). When it fails, there is none
+yet. When it names a folder above this one, run `git ls-files` here: nothing
+printed means a new project that only sits inside another one's folder, with
+no history of its own yet, and its commits must never land in that other
+project. Files listed mean this folder is already part of that project, a
+folder inside a larger repository on purpose: its history is that one, so
+read it as a project with history and say so in one line under What was set.
+
+With no history of its own, the install still runs in full: no code means
+step 3's "nothing exists to run yet", and no history means only that it
 starts at the owner's first `Go commit`, which creates it in this folder
 (CLAUDE.md, `Go commit`). The install itself creates nothing: no repository,
 and no connection to GitHub or anywhere else. Say it in the report as ONE item
-under What was set, never under Waiting on you, one sentence per line:
+under What was set, never under Waiting on you, one sentence per line, adding
+a first line naming the outer folder when this one sits inside another
+project's ("This folder sits inside <outer folder>, and keeps its own
+history."):
 "No version history yet."
 "Your first Go commit starts it in this folder."
 "Putting it on GitHub is yours, whenever you want a copy off this computer."
@@ -258,7 +292,7 @@ Write `Go commit` in
 the report's "What to say" section exactly as on any other install: it works
 as written. Every check above that reads git history (the CLAUDE.md one, the
 clone one and the installed-before one) says "no history yet" instead of
-failing.
+failing, or of reading the other project's history.
 
 ## 3. Learn the repo before asking
 
@@ -285,12 +319,26 @@ Pass and fail are not the only outcomes:
 - **It passes.** It becomes the standing check.
 - **It fails.** That is a Problems line and a question for the owner, never the
   standing check.
+- **It fails only on the kit's own files.** Step 0 copied the kit in before
+  this check ran, so a check that formats or lints the whole folder
+  (`prettier --check .`, `eslint .`) can go red on `project-os/`, `CLAUDE.md`
+  or `Installation.md` alone. When every failure it names lies in those, it
+  is not failing on this project: record it as "fails on the kit's files
+  only", and ask ONE question in pile two, keeping them out as the
+  recommended option: keep the kit's files out of that tool, so the check can
+  gate every `Go commit`? On a yes, step 6 adds them to the tool's ignore
+  file, the check runs again at the end of step 6d, and a pass there makes
+  it the standing check; on a no, it stays a Problems line. Never run the
+  formatter over the kit's files to make it pass: `Go update kit` would then
+  read every one as changed here and never update it again.
 - **Nothing exists to run yet.** A project with a plan and no code has no check
   command and no dev address. Do not invent one and do not leave the row empty:
-  write the FUTURE command the plan will create, name the plan step that creates
-  it, and mark every table that carries it "nothing to run before that step",
-  the check in CLAUDE.md's Go commit step 4 included, so a commit before that
-  step runs nothing instead of failing.
+  write the FUTURE command the plan will create, and mark every table that
+  carries it, the check in CLAUDE.md's Go commit step 4 included, with
+  "(nothing to run before plan step N)" right after the command, N being the
+  plan step that creates it, so a commit before that step runs nothing
+  instead of failing. Keep the mark in that shape, parentheses included:
+  `Go update kit` then reads it as the install's mark, not the owner's wording.
   The report's Problems section says so in one fixed line: "No check exists yet;
   it arrives at step N of the plan." The same shape applies to the dev address.
   With no plan either, write "none yet" wherever the command or the dev address
@@ -324,6 +372,10 @@ pile-two question below goes through it, one tab per question, the options as
 rows with one line each on what they mean, and a free-text way out. Pile one
 never goes in it: those are statements to be waved through, not choices. In a
 client with no such panel, the feed carries both piles as written below.
+
+**Every question marks the option you recommend**, wherever one exists: it
+comes first, says "(recommended)", and its one line says why. Only a question
+with no better side, such as the owner's role, goes without one.
 
 The panel holds a limited number of questions: today at most four per panel,
 each with two to four options. A longer pile two goes in panels sent one after
@@ -425,7 +477,9 @@ choose where they go.
 **Committing asks one thing: the branch.** `Go commit` runs the project's
 check command from pile one (every one of them, in a workspace). Pile two asks
 one question about it: commit straight to the current branch, or give each task
-its own branch. The answer fills the bracket in CLAUDE.md's Go commit step 6.
+its own branch. The answer replaces the whole bracket in CLAUDE.md's Go commit
+step 6 with the chosen option, word for word, so `Go update kit` reads it as
+the install's answer, not the owner's wording.
 Rule 22 settles the rest: the assistant commits, only on the owner's
 `Go commit`, and the owner pushes; in a cloud session the assistant pushes
 the session's own branch, never main, and the owner merges it. Neither is a
@@ -517,6 +571,16 @@ Do the setup steps the files carry, then clear the scaffolding:
   installer's copy of the personal settings can ever be committed. A
   `.gitignore` created here from nothing also gets `.env*` and
   `!.env.example`, so a secrets file is never offered to the first commit;
+- when the project has a formatter or linter config (Prettier, ESLint,
+  Biome, markdownlint and the like), add the kit's files, `project-os/`,
+  `CLAUDE.md` and `Installation.md`, and for a tool that checks JSON the two
+  files step 6d writes, `.mcp.json.example` and `.mcp.json`, to that tool's
+  ignore file (`.prettierignore`, `.markdownlintignore`), or to the ignore
+  list in its config when it has no such file, skipping a line already there.
+  Leave it only when the owner said no to it in step 4. The tool then never
+  fails on the kit's files nor rewrites them, which would stop `Go update kit`
+  from ever updating them. The check runs once more at the end of step 6d,
+  after the last of those files is written;
 - replace the skeleton tree in project-os/Map.md with the real one and fill
   its Data and Ownership tables;
 - delete the example blocks at the end of Map.md, History.md, Decisions.md,
@@ -566,39 +630,44 @@ project, the plugin folder is there, and that is all a hand run can show. It
 prints the same line when Claude Code has not loaded the plugin: switched off,
 cloned during this session, or left out by a setting. Go on to the live check. If the file does
 not exist or it prints nothing, the plugin is not on this computer, and the
-installer path below is the path.
+installer path below is the path. A line beginning
+`[ProjectOS plugin] guards OFF` in its place, at session start or here, means
+the plugin's own copy of a guard cannot run: take the installer path, and
+give the owner that line's repair in the report (`project-os/Hooks.md`,
+"When the plugin says guards OFF").
 
 **The live check: one real, harmless command.** When the line was in your
 context or the hand run printed it, make one real tool call, from the project
-root. It uses a name nobody has: `projectos-live-probe-` followed by today's
-date and the time as digits, for example `projectos-live-probe-202609251412`,
-written NAME below. It deletes only when nothing by that name exists:
+root, the same in Bash and PowerShell:
 
 ```
-[ -e NAME ] || rm -rf NAME
+echo projectos-live-probe
 ```
 
-In PowerShell the same call is
-`if (-not (Test-Path NAME)) { Remove-Item -Recurse -Force NAME }`, and the
-guard refuses it the same way. Never put the name under `.tmp` or end it in
-`.tmp`, because the guard lets those through as disposable. Since it deletes
-only a name that does not exist, it can never remove anything. This is the one
-approved probe of the install: the owner's request to install ProjectOS covers
-it, so CLAUDE.md rule 4 does not turn it into a question. Read the result:
+A live destructive guard refuses exactly this command, before it runs and
+before any approval prompt, with this one line:
 
-- **Refused with `destructive-guard: blocked`**, while neither
-  `.claude/settings.json` nor `.claude/settings.local.json` wires a destructive
-  guard of its own: the plugin is live, and the plugin path applies. Claude
-  Code usually adds that the hook comes from the `projectos@skills-dir` plugin.
-  That is confirmation, not the key.
-- **The command simply runs**, in PowerShell perhaps with a "Cannot find path"
-  error: nothing was lost, the plugin is not live in this session, and the
-  installer path applies.
-- **Anything else**, a refusal that does not say `destructive-guard: blocked`
-  or one while the project's settings already wire the guard: the installer
-  path is the safe fallback.
+```
+ProjectOS live probe: the guards are on in this session. Nothing was run.
+```
 
-**The plugin path.** When the live check proved the plugin on: read
+It changes nothing either way, so CLAUDE.md rule 4 has nothing to ask about.
+Read the result:
+
+- **Refused with that line**, while neither `.claude/settings.json` nor
+  `.claude/settings.local.json` wires a destructive guard of its own: the
+  plugin is live, and the plugin path applies. Claude Code usually adds that
+  the hook comes from the `projectos@skills-dir` plugin. That is
+  confirmation, not the key.
+- **The command simply runs** and prints the word: the plugin is not live in
+  this session, or its copy is older than this probe, so its guards are older
+  than the ones this install brought in. Either way the installer path
+  applies.
+- **Anything else**, a refusal in other words, or one while the project's
+  settings already wire the guard: the installer path is the safe fallback.
+
+**The plugin path.** When the live check proved the plugin on, and no line
+says this project's guard files differ from the plugin's copy (below): read
 `Hooks.md` and adapt the wording exactly as the installer path below says (the
 plugin reads the same file), write NOTHING under `.claude`, and skip the
 wiring, speaking and guard checks below. Run the installer once, with `--dry`
@@ -614,26 +683,38 @@ node "$HOME/.claude/skills/projectos/hooks/dispatch.mjs" prompt
 ```
 
 A line saying the reminders are OFF means Hooks-settings.json is not valid
-JSON: fix it and run the command again. Nothing back while the file is valid
-means a settings file in `.claude/` already carries the kit's reminder, and
-that copy is the one sent (Hooks.md, "Settings wiring wins"): name the file
-and the event in the report, so the owner can remove that copy or have the
-installer replace it. In the report, "# Rules switched on" says
+JSON: fix it and run the command again. A run by hand prints the plugin's
+text whatever the settings carry, so look in the two settings files the live
+check read: one that already carries the kit's reminder holds the copy
+sessions get (Hooks.md, "Settings wiring wins"). Name the file and the event
+in the report, so the owner can remove that copy or have the installer
+replace it. In the report, "# Rules switched on" says
 they come from the plugin on this computer, and that another computer needs
 the same once-per-computer command.
 
-The plugin runs the guards from its own folder, not from the copy this install
-just put in the project, so an older plugin guards a newer project with older
-rules. The plugin says so itself: its start line ends in the kit version it
-carries, and when this project's guard files differ from its copy a second line
-names them and gives the one `git pull` that updates the plugin folder. That
-folder is outside the project, so the command is the owner's to run: put it in
-the report under "# Rules switched on" (section 8), never run it yourself.
+**When the plugin's guards differ, the installer path instead.** The plugin
+runs the guards from its own folder, not from the copy this install just put
+in the project, so an older plugin guards a newer project with older rules.
+It says so itself: when this project's guard files differ from its copy, a
+second line after its start line names them, at session start and in the hand
+run alike. Then take the installer path below, in full, exactly as on a
+computer without the plugin. The project's own guards are then wired in this
+project's settings, and from the next session the plugin steps aside for them
+and stays quiet beside the installed reminders (Hooks.md, "Settings wiring
+wins"). "# Rules switched on" takes the shape section 8 gives for this case.
+That second line also gives the `git pull` that updates the plugin folder:
+now an optional tidy-up, not the protection. The folder is outside the
+project, so the command is the owner's to run, never yours. A plugin too old
+to print that line is too old to refuse the live probe as well, so the live
+check has already sent you down the installer path.
 
-A plugin older than that second line prints nothing even when the files
-differ. So when no second line comes, compare the two guard files yourself,
-`project-os/guards/` against the plugin folder's copy, and treat a difference
-exactly as if the line had come.
+**With a plugin folder on this computer, run the installer last.** A plugin
+from before 2026-10-02 steps aside the moment the installer writes this
+project's settings, while the session runs those settings only from its next
+start, so everything after the run would go unguarded. So when the plugin
+folder exists, do the installer path below now except "Run it" and the proof
+after it, and run those two as the install's last writes, right before the
+report, then add their result to step 7's History row.
 
 **The installer path**, as part of the install:
 
@@ -717,7 +798,8 @@ node project-os/Install-project-hooks.mjs
   the fix that ends this for every future project on that machine.
 
 - **Tell the owner the one thing that is theirs:** hooks are read at session
-  start, so the ones you just installed take effect in their NEXT session.
+  start, so the ones you just installed take effect in their NEXT session,
+  opened in this project's own folder, never a folder above it.
   Give them the check: ask the assistant what rules it was given this turn, and
   see whether it reads them back.
 
@@ -764,8 +846,10 @@ once, after step 6 has settled its exclusion list and gitignored `backups/`:
 node project-os/Backup-whole-project.mjs
 ```
 
-It prints the ZIP path and a count of files whose names were checked in the
-archive, or fails and leaves nothing; either is the proof. If it prints a
+It prints the ZIP path, a count of the files and folders whose names were
+checked in the archive and, when the project has a git history, a line
+beginning "History check:" saying that history opens from the snapshot. Or it
+fails and leaves nothing; either is the proof. If it prints a
 "Left out by name" line, read it: a source folder on it means the exclusion
 list names something this project keeps on purpose, so fix the list and run
 again. A ZIP that took minutes or weighs hundreds of megabytes means a
@@ -880,27 +964,30 @@ Finding one working browser never ends the step.
 Never write the server into the owner's personal configuration, and never copy
 another project's connection (rule 21). The project file is the whole setup.
 
+**Then run the check once more**, when step 3 ran it, now that every file the
+install writes outside `project-os/` is in place. A failure is a Problems line,
+and a check step 3 ruled out for the kit's files alone becomes the standing
+check when it now passes.
+
 ## 7. Log the install
 
 Log the install itself in project-os/History.md: one scan row and one appendix
 row, each at the bottom of its table. On a first install they are the first
 rows; on a re-run they follow the ones already there. Both name the kit commit
-the files came from, so a later update can tell which kit this project runs:
-the one step 0 noted, on a re-run the one the earlier install row names, or
-unknown when the files were copied in by hand.
+the files came from, so a later update can tell which kit this project runs.
+Read it back from `project-os/Kit-version.json`, which step 0 wrote right
+after the copy and which `Go update kit` (CLAUDE.md) reads; never write it
+here. On a re-run, a file already there stays as it is.
 
-Write the same commit into `project-os/Kit-version.json`, the file
-`Go update kit` (CLAUDE.md) reads to know which kit this project starts from.
-The date is the day the files came in: today, or on a re-run the earlier
-install row's date.
+Two cases have no such file. Files copied in by hand, or from a ZIP: the rows
+say the commit is not recorded, and the report says the first `Go update kit`
+looks for it in the kit's history. A re-run of an install older than the
+file: write it once from the earlier install row, its commit and its date,
+in this shape:
 
 ```
 {"commit": "<the short commit>", "date": "YYYY-MM-DD"}
 ```
-
-When the commit is unknown, do not write the file, and say so in the report:
-a later `Go update kit` then starts without knowing which kit this project
-came from. On a re-run, a file already there stays as it is.
 
 The row's shape, since the file asks for about 900 characters: the kit
 commit, the files placed, the questions answered in a word each, and every
@@ -929,8 +1016,9 @@ were read past and left unanswered (review 2026-09-28).
 
 1. **What was set.** Each value, and where it came from: the repo, or the
    owner's answer. The first line is the kit commit the files came from, the
-   same one step 7 writes into History and `project-os/Kit-version.json`, or,
-   when it is unknown, that the file was not written and why.
+   one `project-os/Kit-version.json` holds and step 7 writes into History,
+   or, when there is no such file, that the commit is not recorded and the
+   first `Go update kit` looks for it in the kit's history.
 2. **Problems.** Every place the project does not work the way the kit
    expects: a failing check command, no dev server, a tool that is not wired,
    a block that cannot be filled. One line each, with its practical
@@ -955,14 +1043,20 @@ were read past and left unanswered (review 2026-09-28).
    > such as writing outside this project.
    >
    > One thing is yours:
-   > close this session and start a new one,
+   > close this session and start a new one, before you say Go commit,
    > because that setting is read when a session opens.
+   > Open it in this project's own folder, never in a folder above it:
+   > only there do the rules and guards switch on.
    >
    > To check the rules reach me, ask me in the new session:
    >
    > ```
    > what rules were you given this turn?
    > ```
+
+   In a cloud session, this block and the refused one below put Go commit
+   first instead: a new cloud session starts from the repository, without
+   this session's uncommitted files.
 
    When the plugin was proven live in 6b, the block says so instead, and asks
    nothing of the owner here:
@@ -972,25 +1066,28 @@ were read past and left unanswered (review 2026-09-28).
    >
    > They come from the ProjectOS plugin on this computer,
    > so nothing had to be installed in this project.
-   > Every new session starts with them on.
+   > Every new session opened in this project's own folder starts with them on.
+   > A session opened in a folder above it gets none.
    > Another computer needs the same one-time command,
    > written in project-os/Hooks.md under "Two ways the hooks get wired".
    > If I read your rules back to you, they are reaching me.
 
-   When the session's start line said this project's guard files differ from
-   the plugin's copy, or your own comparison found them different (6b, the
-   plugin path), add two lines to that block: this computer's copy of the kit
-   is behind the one in this project, and the one
-   command that updates it, which is the owner's to run because the plugin
-   folder is outside the project:
+   When the plugin was live but 6b took the installer path anyway, because its
+   guard files differed from this project's or it said guards OFF, use the
+   first block, and add its reason in one line at the end: the plugin on this
+   computer carries older guards, or a guard it cannot run, so this project
+   now runs its own from the next session. For older guards, add the optional
+   tidy-up beneath it, in its chat-box form, the owner's to run since the
+   plugin folder is outside the project: it brings the newer guards to every
+   other project that leans on this computer's copy.
 
    ```
-   git -C "$HOME/.claude/skills/projectos" pull
+   !git -C "$HOME/.claude/skills/projectos" pull
    ```
 
-   The pull is ALSO one Waiting-on-you item, a single line: it is the one
-   thing that keeps the guards current, and as a line under this block alone
-   it was read past twice (install reports, 2026-09-29).
+   For a guard the plugin cannot run, give the repair from `project-os/Hooks.md`
+   ("When the plugin says guards OFF") in its place. Neither is a
+   Waiting-on-you item: this project's own guards protect it either way.
 
    If the install could not write that setting, this section is REPLACED by
    the honest version, and it moves to the top as the report's FIRST section:
@@ -1014,7 +1111,14 @@ were read past and left unanswered (review 2026-09-28).
    > !node project-os/Install-project-hooks.mjs
    > ```
    >
-   > Then start a new session, and ask me what rules I was given this turn.
+   > Then start a new session in this project's own folder,
+   > and ask me what rules I was given this turn.
+   > Say Go commit in that new session, not this one.
+
+   When the plugin was live and 6b took the installer path only for its older
+   or broken guards, a refused write still leaves the plugin running: keep the
+   plugin's block instead, with that reason line and the same chat-box command
+   beneath it, as the way to bring this project's own guards in.
 
    Say in one line where the hooks were installed: personal to this machine by
    default, and team-wide is available on request. Do not turn it into a
@@ -1084,7 +1188,8 @@ were read past and left unanswered (review 2026-09-28).
 6. **Waiting on you.** The closing section: everything that needs the owner's
    answer or verdict, numbered, so each item can be answered in one word. When
    the client has a question panel, every item with options goes through it
-   right after the report, as Conversations.md rule 13 requires; this section
+   right after the report, as Conversations.md rule 13 requires, each marking
+   the option you recommend (step 4); this section
    lists them one line each and says the panel follows. An install with
    nothing waiting says so in one line, so the owner knows the report is over.
 

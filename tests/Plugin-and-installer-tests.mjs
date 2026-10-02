@@ -14,7 +14,7 @@
 // purpose, and that folder is removed at the end.
 //
 // A case marked [R] is one the review of 2026-09-25 found open.
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -61,14 +61,40 @@ const cmdsOf = (s, ev) => ((s.hooks || {})[ev] || []).flatMap((g) => g.hooks.map
 const count = (s, needle) => s.split(needle).length - 1;
 const guardCmd = (dir, name) => `node "${fwd(dir)}/project-os/guards/${name}"`;
 
-function dispatch(mode, payload, session, { linux = false } = {}) {
+// A scratch copy of the plugin. The dispatcher runs the guards beside its own
+// folder, so one can be removed or broken in the copy without touching the kit.
+function pluginCopy(dir) {
+  for (const f of ['hooks/dispatch.mjs', '.claude-plugin/plugin.json', ...GUARDS.map((g) => `project-os/guards/${g}`)]) {
+    fs.mkdirSync(path.dirname(path.join(dir, f)), { recursive: true });
+    fs.copyFileSync(path.join(KIT, f), path.join(dir, f));
+  }
+  return dir;
+}
+const pluginGuard = (dir, g) => path.join(dir, 'project-os', 'guards', g);
+
+// The OS temp folder the plugin sees is this test's own folder, so the
+// session records it writes there go when the folder does. The projects sit
+// inside it either way, so no guard verdict changes. With `sid`, the payload
+// carries that session id, as Claude Code's does.
+const TEMP_ENV = { TEMP: TMP, TMP, TMPDIR: TMP };
+function dispatch(mode, payload, session, { linux = false, plugin, sid } = {}) {
   fs.writeFileSync(LOG, '');
-  const r = spawnSync(process.execPath, [...(linux ? LINUX : []), DISPATCH, mode], {
-    input: JSON.stringify(payload || {}),
+  const script = plugin ? path.join(plugin, 'hooks', 'dispatch.mjs') : DISPATCH;
+  const r = spawnSync(process.execPath, [...(linux ? LINUX : []), script, mode], {
+    input: JSON.stringify({ ...(payload || {}), ...(sid ? { session_id: sid } : {}) }),
     encoding: 'utf8',
-    env: { ...process.env, CLAUDE_PROJECT_DIR: session || '', PROJECTOS_PLUGIN_LOG: LOG },
+    env: { ...process.env, ...TEMP_ENV, CLAUDE_PROJECT_DIR: session || '', PROJECTOS_PLUGIN_LOG: LOG },
   });
   return { code: r.status, out: (r.stdout || '').trim(), err: (r.stderr || '').trim(), log: fs.readFileSync(LOG, 'utf8') };
+}
+// A session that starts now in `session`: its start writes the record later
+// calls go by. Returns the options those calls pass.
+let sids = 0;
+const newSid = () => `test-session-${++sids}`;
+function started(session, opts = {}) {
+  const sid = newSid();
+  dispatch('session', { source: 'startup' }, session, { ...opts, sid });
+  return { ...opts, sid };
 }
 function install(dir, flags = [], { linux = false, home } = {}) {
   const env = { ...process.env };
@@ -186,14 +212,40 @@ try {
   r = dispatch('pretool', pay(A, writeB), A);
   t('a session opened in one project is blocked from writing into its sibling', blocks(r, 'path-guard'), r.err);
 
-  // Installed wiring: the plugin stands down for what the settings carry.
+  // [R] T51 (2026-10-02): a session opened on the folder that holds the
+  // projects runs with no rules and no guards. Session start now says so in
+  // one line, naming the project folders to open instead.
+  r = dispatch('session', {}, PARENT);
+  t('[R] T51 a session on a folder holding two projects gets one line naming both', r.code === 0 && r.out.split('\n').length === 1 && r.out.includes(`rules and guards OFF here, in ${fwd(PARENT)}`) && r.out.includes(fwd(A)) && r.out.includes(fwd(B)) && r.out.includes('Open the session in one of those folders itself'), r.out);
+  t('T51 the line carries no reminder and no active line', !r.out.includes('PROJECT RULES') && !r.out.includes('hooks active'), r.out);
+  r = dispatch('prompt', {}, PARENT);
+  t('T51 a prompt on that folder still prints nothing', r.code === 0 && r.out === '', r.out);
+  const ONE = path.join(TMP, 'one project inside');
+  const SITE = kitProject(path.join(ONE, 'site'));
+  fs.mkdirSync(path.join(ONE, 'notes'), { recursive: true });
+  r = dispatch('session', {}, ONE);
+  t('T51 a folder holding one project names that folder, by its full path', r.code === 0 && r.out.split('\n').length === 1 && r.out.includes(`the ProjectOS project is the folder inside it, ${fwd(SITE)}. Open the session in that folder itself`), r.out);
+  const MANY = path.join(TMP, 'four projects inside');
+  for (const n of ['p1', 'p2', 'p3', 'p4']) kitProject(path.join(MANY, n));
+  r = dispatch('session', {}, MANY);
+  t('T51 a folder holding four projects names three and counts the rest, still one line', r.code === 0 && r.out.split('\n').length === 1 && r.out.includes(fwd(path.join(MANY, 'p3'))) && !r.out.includes(fwd(path.join(MANY, 'p4'))) && r.out.includes('and 1 more'), r.out);
+  const DEEP = path.join(TMP, 'two levels above');
+  kitProject(path.join(DEEP, 'group', 'site'));
+  r = dispatch('session', {}, DEEP);
+  t('T51 a project two levels down is not named: session start stays silent', r.code === 0 && r.out === '', r.out);
+  r = dispatch('session', {}, path.join(PROJ, 'src', 'deep'));
+  t('T51 a session in a project subfolder finds the project and gets no folder line', r.code === 0 && r.out.includes('hooks active for') && !r.out.includes('rules and guards OFF here'), r.out);
+
+  // Installed wiring: in a session that starts after the install, the plugin
+  // stands down for what the settings carry.
   const INST = kitProject(path.join(TMP, 'installed'));
   install(INST);
-  r = dispatch('prompt', {}, INST);
-  t('installed: the plugin prints no second copy of the standing rules', r.code === 0 && r.out === '', r.out);
-  r = dispatch('session', {}, INST);
+  const instSession = { sid: newSid() };
+  r = dispatch('session', { source: 'startup' }, INST, instSession);
   t('installed: session start prints only the active line', r.code === 0 && count(r.out, 'PROJECT RULES') === 0 && r.out.includes('hooks active for'), r.out);
-  r = dispatch('pretool', pay(INST, P.rm), INST);
+  r = dispatch('prompt', {}, INST, instSession);
+  t('installed: the plugin prints no second copy of the standing rules', r.code === 0 && r.out === '', r.out);
+  r = dispatch('pretool', pay(INST, P.rm), INST, instSession);
   t('installed: the plugin stands down for both guards', standsDown(r, 2), r.log);
 
   const GONE = kitProject(path.join(TMP, 'guard gone'));
@@ -210,17 +262,18 @@ try {
     { matcher: 'Write|Edit', hooks: [{ type: 'command', command: guardCmd(PART, 'Path-guard.mjs') }] },
     { matcher: 'Bash|PowerShell|Monitor.*', hooks: [{ type: 'command', command: guardCmd(PART, 'Destructive-guard.mjs') }] },
   ] } });
-  r = dispatch('pretool', pay(PART, P.writeOut), PART);
+  const partSession = started(PART);
+  r = dispatch('pretool', pay(PART, P.writeOut), PART, partSession);
   t('[R] Path-guard wired for Write|Edit: the plugin stands down for a Write', standsDown(r, 1), r.log);
-  r = dispatch('pretool', pay(PART, P.psOut), PART);
+  r = dispatch('pretool', pay(PART, P.psOut), PART, partSession);
   t('[R] Path-guard wired for Write|Edit: a PowerShell write outside is still blocked', blocks(r, 'path-guard'), r.err || r.log);
-  r = dispatch('pretool', pay(PART, P.rm), PART);
+  r = dispatch('pretool', pay(PART, P.rm), PART, partSession);
   t('[R] a pattern matcher is not taken as proof: rm -rf src is blocked', blocks(r, 'destructive-guard'), r.err || r.log);
 
   // [R] T17: an installed reminder in an older wording stands in for ours.
   const OLD = kitProject(path.join(TMP, 'old wording'));
   writeSettings(OLD, { hooks: { UserPromptSubmit: [{ hooks: [{ type: 'command', command: `node -e "console.log('STANDING RULES: 1) an older wording.')"` }] }] } });
-  r = dispatch('prompt', {}, OLD);
+  r = dispatch('prompt', {}, OLD, started(OLD));
   t('[R] settings carry an older wording of the standing rules: the plugin adds no second list', r.code === 0 && r.out === '', r.out);
 
   // [R] 2026-09-26: a reminder of the project's own, for something else, never silences the kit's.
@@ -243,6 +296,150 @@ try {
   r = dispatch('session', {}, BROKEN);
   t('broken marker and a guard that differs: session start prints both lines', r.code === 0 && r.out.includes('reminders OFF') && r.out.includes("this project's Destructive-guard.mjs differ from the plugin's copy"), r.out);
 
+  // [R] T48 (2026-10-02): a guard the plugin cannot run used to fail open in
+  // silence, while the session still said hooks active. Scratch copies of the
+  // plugin stand in, each with one guard removed or broken.
+  const HEALTHY = pluginCopy(path.join(TMP, 'plugin healthy'));
+  const writeIn = { tool_name: 'Write', tool_input: { file_path: fwd(path.join(PROJ, 'notes.md')), content: 'x' } };
+  const everyday = {
+    'git status': P.status,
+    'npm test': { tool_name: 'Bash', tool_input: { command: 'npm test' } },
+    'a PowerShell listing': { tool_name: 'PowerShell', tool_input: { command: 'Get-ChildItem src' } },
+    'a Write inside the project': writeIn,
+  };
+  r = dispatch('session', {}, PROJ, { plugin: HEALTHY });
+  t('T48 healthy plugin: session start says hooks active and no guards OFF', r.code === 0 && r.out.includes('hooks active for') && !r.out.includes('guards OFF') && r.log === '', r.out || r.log);
+  for (const [what, call] of Object.entries(everyday)) {
+    r = dispatch('pretool', pay(PROJ, call), PROJ, { plugin: HEALTHY });
+    t(`T48 healthy plugin: ${what} is allowed in silence`, r.code === 0 && r.err === '', r.err || r.log);
+  }
+
+  const NO_DEL = pluginCopy(path.join(TMP, 'plugin without its delete guard'));
+  fs.rmSync(pluginGuard(NO_DEL, 'Destructive-guard.mjs'));
+  r = dispatch('session', {}, PROJ, { plugin: NO_DEL });
+  t('[R] T48 delete guard missing: session start says guards OFF and why, in place of hooks active', r.code === 0 && r.out.includes(`[ProjectOS plugin] guards OFF for ${fwd(PROJ)}: Destructive-guard.mjs is missing from ${fwd(path.join(NO_DEL, 'project-os', 'guards'))}`) && !r.out.includes('hooks active'), r.out);
+  t('T48 delete guard missing: the reminders still print, and the line says they are on', r.out.includes('PROJECT RULES') && r.out.includes('while the reminders stay active from') && r.out.includes(`git -C "${fwd(NO_DEL)}" status`), r.out);
+  r = dispatch('pretool', pay(PROJ, P.rm), PROJ, { plugin: NO_DEL });
+  t('[R] T48 delete guard missing: rm -rf src still goes through, with exit 1 and one stderr line naming it', r.code === 1 && r.err.split('\n').length === 1 && r.err.includes('guard skipped on this call, fail open: Destructive-guard.mjs is missing from'), r.err);
+  t('[R] T48 delete guard missing: the diagnostic log records it', r.log.includes('Destructive-guard.mjs: no verdict, allow'), r.log);
+  r = dispatch('pretool', pay(PROJ, P.writeOut), PROJ, { plugin: NO_DEL });
+  t('T48 delete guard missing: the folder guard still blocks a Write outside', blocks(r, 'path-guard') && !r.err.includes('skipped'), r.err);
+  r = dispatch('pretool', pay(PROJ, writeIn), PROJ, { plugin: NO_DEL });
+  t('T48 delete guard missing: a Write inside, which that guard is never sent, stays silent', r.code === 0 && r.err === '', r.err);
+
+  const MERGED = pluginCopy(path.join(TMP, 'plugin with merge markers'));
+  const mergedGuard = pluginGuard(MERGED, 'Destructive-guard.mjs');
+  fs.writeFileSync(mergedGuard, '<<<<<<< HEAD\n' + fs.readFileSync(mergedGuard, 'utf8'));
+  r = dispatch('session', {}, PROJ, { plugin: MERGED });
+  t('[R] T48 delete guard left unloadable: session start says guards OFF, with the error', r.code === 0 && r.out.includes('guards OFF for') && r.out.includes('Destructive-guard.mjs did not load (exit 1: SyntaxError') && !r.out.includes('hooks active'), r.out);
+  r = dispatch('pretool', pay(PROJ, P.rm), PROJ, { plugin: MERGED });
+  t('[R] T48 delete guard left unloadable: rm -rf src goes through with exit 1, the error on stderr and in the log', r.code === 1 && r.err.includes('Destructive-guard.mjs gave no verdict (exit 1: SyntaxError') && r.log.includes('Destructive-guard.mjs: no verdict, allow'), r.err || r.log);
+
+  const ODD = pluginCopy(path.join(TMP, 'plugin with an odd exit'));
+  fs.writeFileSync(pluginGuard(ODD, 'Destructive-guard.mjs'), "import fs from 'node:fs';\nfs.readFileSync(0);\nprocess.stderr.write('something odd\\n');\nprocess.exit(3);\n");
+  r = dispatch('pretool', pay(PROJ, P.rm), PROJ, { plugin: ODD });
+  t('T48 a guard exiting 3: the call goes through with exit 1, naming the exit', r.code === 1 && r.err.includes('Destructive-guard.mjs gave no verdict (exit 3: something odd)'), r.err);
+
+  const NO_PATH = pluginCopy(path.join(TMP, 'plugin with a broken folder guard'));
+  const brokenPath = pluginGuard(NO_PATH, 'Path-guard.mjs');
+  fs.writeFileSync(brokenPath, '<<<<<<< HEAD\n' + fs.readFileSync(brokenPath, 'utf8'));
+  r = dispatch('pretool', pay(PROJ, P.rm), PROJ, { plugin: NO_PATH });
+  t('T48 folder guard broken: the delete guard still runs and blocks, and the skipped guard is named too', blocks(r, 'destructive-guard') && r.err.includes('Path-guard.mjs gave no verdict'), r.err);
+  r = dispatch('pretool', pay(PROJ, P.writeOut), PROJ, { plugin: NO_PATH });
+  t('T48 folder guard broken: a Write outside goes through with exit 1', r.code === 1 && r.err.includes('Path-guard.mjs gave no verdict'), r.err);
+
+  const NONE = pluginCopy(path.join(TMP, 'plugin with no guard at all'));
+  for (const g of GUARDS) fs.rmSync(pluginGuard(NONE, g));
+  r = dispatch('session', {}, PROJ, { plugin: NONE });
+  t('T48 both guards missing: one guards OFF line names both', r.code === 0 && count(r.out, 'guards OFF') === 1 && r.out.includes('Path-guard.mjs is missing') && r.out.includes('Destructive-guard.mjs is missing') && r.out.includes('Every call they would check'), r.out);
+  r = dispatch('pretool', pay(PROJ, P.rm), PROJ, { plugin: NONE });
+  t('T48 both guards missing: one stderr line names both', r.code === 1 && r.err.split('\n').length === 1 && r.err.includes('guards skipped on this call') && r.err.includes('Path-guard.mjs') && r.err.includes('Destructive-guard.mjs'), r.err);
+
+  r = dispatch('session', {}, BROKEN, { plugin: NO_DEL });
+  t('T48 broken marker and a missing guard: the OFF line no longer says the guards are active', r.code === 0 && r.out.includes('reminders OFF') && r.out.includes('Guards OFF: Destructive-guard.mjs is missing') && !r.out.includes('Guards still active'), r.out);
+  r = dispatch('session', {}, KITREPO, { plugin: NO_DEL });
+  t('T48 kit repository with a missing guard: session start says guards OFF, and still no reminder', r.code === 0 && r.out.includes('guards OFF for') && !r.out.includes('PROJECT RULES') && !r.out.includes('hooks active') && !r.out.includes('reminders stay active'), r.out);
+  r = dispatch('session', { source: 'startup' }, INST, { plugin: NO_DEL, sid: newSid() });
+  t('T48 settings wire both guards for every tool: the plugin copy is not checked, no guards OFF', r.code === 0 && r.out.includes('hooks active for') && !r.out.includes('guards OFF'), r.out);
+  r = dispatch('session', {}, PART, { plugin: NO_DEL });
+  t('T48 settings wire the delete guard under a pattern only: its missing plugin copy is reported', r.code === 0 && r.out.includes('guards OFF for') && r.out.includes('Destructive-guard.mjs is missing'), r.out);
+
+  // T53 (2026-10-02): once the installer wired the project's own guards, an
+  // older plugin steps aside for both of them, on every tool it is sent, so
+  // the project's newer guards are the ones that run. The older plugin's
+  // guards here let everything through and leave a line in the log.
+  const OLDER = pluginCopy(path.join(TMP, 'older plugin'));
+  for (const g of GUARDS) fs.writeFileSync(pluginGuard(OLDER, g), `import fs from 'node:fs';\nfs.readFileSync(0);\nfs.appendFileSync(process.env.PROJECTOS_PLUGIN_LOG, 'older ${g} ran\\n');\n`);
+  const NEWKIT = kitProject(path.join(TMP, 'newer kit than the plugin'));
+  fs.mkdirSync(path.join(NEWKIT, 'src'), { recursive: true });
+  const installSession = started(NEWKIT, { plugin: OLDER });
+  r = dispatch('pretool', pay(NEWKIT, P.rm), NEWKIT, installSession);
+  t('T53 before the install: the older plugin runs its own copy and rm -rf src goes through', r.code === 0 && r.log.includes('older Destructive-guard.mjs ran'), r.log);
+  r = install(NEWKIT);
+  t('T53 the installer wires the project into its settings with the plugin on the computer', r.code === 0 && r.out.includes(`added:    ${ALL}`), r.out);
+  const toolCalls = {
+    Write: P.writeOut,
+    Edit: { tool_name: 'Edit', tool_input: { file_path: OUTSIDE, old_string: 'a', new_string: 'b' } },
+    NotebookEdit: { tool_name: 'NotebookEdit', tool_input: { notebook_path: `${OUTSIDE}.ipynb`, new_source: 'x' } },
+    Bash: P.rm,
+    PowerShell: P.psRm,
+    Monitor: { tool_name: 'Monitor', tool_input: { command: 'rm -rf src' } },
+  };
+  // [R] R1 (2026-10-02): Claude Code reads the settings hooks when a session
+  // starts, so the wiring just written runs only from the next session. The
+  // plugin used to step aside the moment the file was written, which left the
+  // rest of the install session with no guard and no reminder. Now it keeps
+  // running its own copy there, on every tool, through a compaction and a
+  // /clear, and steps aside from the next session on.
+  const pluginRan = (r, n) => count(r.log, 'older ') === n && !r.log.includes('stand down');
+  for (const [tool, call] of Object.entries(toolCalls)) {
+    const n = /^(Bash|PowerShell|Monitor)$/.test(tool) ? 2 : 1;
+    r = dispatch('pretool', pay(NEWKIT, call), NEWKIT, installSession);
+    t(`[R] R1 later in the install session: the plugin still runs ${n === 2 ? 'both guards' : 'the folder guard'} on ${tool}`, pluginRan(r, n) && r.log.includes('only since this session started'), r.log);
+  }
+  r = dispatch('prompt', {}, NEWKIT, installSession);
+  t('[R] R1 later in the install session: every prompt still gets the standing rules', r.code === 0 && count(r.out, 'STANDING RULES') === 1, r.out);
+  r = dispatch('session', { source: 'compact' }, NEWKIT, installSession);
+  t('[R] R1 a compaction in the install session: the reminder prints and the plugin guards are still checked', r.code === 0 && r.out.includes('PROJECT RULES') && r.log.includes('older'), r.out || r.log);
+  r = dispatch('pretool', pay(NEWKIT, P.rm), NEWKIT, installSession);
+  t('[R] R1 after that compaction the plugin still runs both guards', pluginRan(r, 2), r.log);
+  const clearSession = { plugin: OLDER, sid: newSid() };
+  dispatch('session', { source: 'clear' }, NEWKIT, clearSession);
+  r = dispatch('pretool', pay(NEWKIT, P.rm), NEWKIT, clearSession);
+  t('[R] R1 a /clear in the install session, under a new session id: the plugin still runs both guards', pluginRan(r, 2), r.log);
+  r = dispatch('prompt', {}, NEWKIT, clearSession);
+  t('R1 after that /clear every prompt still gets the standing rules', r.code === 0 && count(r.out, 'STANDING RULES') === 1, r.out);
+  const nextSession = started(NEWKIT, { plugin: OLDER });
+  for (const [tool, call] of Object.entries(toolCalls)) {
+    const n = /^(Bash|PowerShell|Monitor)$/.test(tool) ? 2 : 1;
+    r = dispatch('pretool', pay(NEWKIT, call), NEWKIT, nextSession);
+    t(`T53 in the next session: the older plugin steps aside for ${n === 2 ? 'both guards' : 'the folder guard'} on ${tool}`, standsDown(r, n) && r.err === '' && !r.log.includes('older'), r.log);
+  }
+  r = dispatch('prompt', {}, NEWKIT, nextSession);
+  t('R1 in the next session the plugin prints no second copy of the standing rules', r.code === 0 && r.out === '', r.out);
+  const wiredCmds = cmdsOf(settingsOf(NEWKIT), 'PreToolUse');
+  for (const [g, call] of [['Path-guard.mjs', P.writeOut], ['Destructive-guard.mjs', P.rm]]) {
+    const cmd = wiredCmds.find((c) => c.includes(g)) || '';
+    const quoted = (/"([^"]+)"/.exec(cmd) || [])[1] || '';
+    const script = path.resolve(quoted.replace('${CLAUDE_PROJECT_DIR}', fwd(NEWKIT)));
+    const own = spawnSync(process.execPath, [script], { input: JSON.stringify(pay(NEWKIT, call)), encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: NEWKIT } });
+    t(`T53 after the install: the ${g} the settings run is the project's own copy, and it blocks`, script === path.join(NEWKIT, 'project-os', 'guards', g) && own.status === 2, `${cmd}\n${own.stderr}`);
+  }
+  r = dispatch('session', { source: 'startup' }, NEWKIT, { plugin: OLDER, sid: newSid() });
+  t('T53 after the install: session start skips the plugin guard check and still says the guards differ', r.code === 0 && !r.log.includes('older') && !r.out.includes('guards OFF') && r.out.includes('Path-guard.mjs and Destructive-guard.mjs differ'), r.out || r.log);
+  // On macOS and Linux the installer names the guards by the project's own
+  // path and a subfolder session also loads the git root's personal file, so
+  // the older plugin steps aside there too.
+  const NEWKIT_L = kitProject(path.join(TMP, 'newer kit linux'));
+  fs.mkdirSync(path.join(NEWKIT_L, '.git'), { recursive: true });
+  fs.mkdirSync(path.join(NEWKIT_L, 'src', 'deep'), { recursive: true });
+  install(NEWKIT_L, [], { linux: true });
+  r = dispatch('pretool', pay(NEWKIT_L, P.rm), NEWKIT_L, started(NEWKIT_L, { linux: true, plugin: OLDER }));
+  t('T53 Linux: at the project root the older plugin steps aside for both guards', standsDown(r, 2) && !r.log.includes('older'), r.log);
+  const DEEP_L = path.join(NEWKIT_L, 'src', 'deep');
+  r = dispatch('pretool', pay(DEEP_L, P.rm), DEEP_L, started(DEEP_L, { linux: true, plugin: OLDER }));
+  t('T53 Linux: in a subfolder session the older plugin steps aside for both guards', standsDown(r, 2) && !r.log.includes('older'), r.log);
+
   // A git worktree reads the main checkout's personal settings on macOS and Linux.
   const MAIN = kitProject(path.join(TMP, 'main checkout'));
   fs.mkdirSync(path.join(MAIN, '.git', 'worktrees', 'w'), { recursive: true });
@@ -250,8 +447,44 @@ try {
   install(MAIN);
   const WT = kitProject(path.join(TMP, 'worktree w'));
   fs.writeFileSync(path.join(WT, '.git'), `gitdir: ${fwd(MAIN)}/.git/worktrees/w\n`);
-  r = dispatch('prompt', {}, WT, { linux: true });
+  r = dispatch('prompt', {}, WT, started(WT, { linux: true }));
   t('Linux: a worktree follows its .git file to the main checkout, whose settings carry the reminders', r.code === 0 && r.out === '', r.out);
+
+  // R1 with no record (a session that began before the plugin kept them): a
+  // settings file counts only when it is older than the session's transcript,
+  // and when that cannot be told the plugin runs its own copy.
+  const NOREC = kitProject(path.join(TMP, 'no session record'));
+  fs.mkdirSync(path.join(NOREC, 'src'), { recursive: true });
+  const before = path.join(TMP, 'transcript before the install.jsonl');
+  fs.writeFileSync(before, '');
+  install(NOREC);
+  const after = path.join(TMP, 'transcript after the install.jsonl');
+  fs.writeFileSync(after, '');
+  r = dispatch('pretool', { ...pay(NOREC, P.rm), transcript_path: before }, NOREC, { sid: 'never-started' });
+  t('[R] R1 no record, settings newer than the transcript: the plugin runs its own copy and blocks', blocks(r, 'destructive-guard') && r.log.includes('only since this session started'), r.err || r.log);
+  r = dispatch('prompt', { transcript_path: before }, NOREC, { sid: 'never-started' });
+  t('R1 no record, settings newer than the transcript: the prompt gets the standing rules', r.code === 0 && count(r.out, 'STANDING RULES') === 1, r.out);
+  r = dispatch('pretool', pay(NOREC, P.rm), NOREC);
+  t('R1 no record and no transcript: the plugin runs its own copy and blocks', blocks(r, 'destructive-guard'), r.err || r.log);
+  // A file system that keeps no creation time cannot tell, so this one case
+  // runs only where it does.
+  if (fs.statSync(after).birthtimeMs > 0) {
+    r = dispatch('pretool', { ...pay(NOREC, P.rm), transcript_path: after }, NOREC, { sid: 'never-started-either' });
+    t('R1 no record, settings older than the transcript: the plugin stands down as before', standsDown(r, 2), r.log);
+  }
+
+  // R1 reads the session id from stdin at session start. A host that leaves
+  // stdin open must not hold the hook until it times out.
+  const open = await new Promise((resolve) => {
+    const began = Date.now();
+    const child = spawn(process.execPath, [DISPATCH, 'session'], { env: { ...process.env, ...TEMP_ENV, CLAUDE_PROJECT_DIR: PROJ }, stdio: ['pipe', 'pipe', 'ignore'] });
+    const stop = setTimeout(() => child.kill(), 20000);
+    let out = '';
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (d) => { out += d; });
+    child.on('close', (status) => { clearTimeout(stop); resolve({ status, out, ms: Date.now() - began }); });
+  });
+  t('R1 a session start whose stdin stays open still ends within seconds, with the reminder', open.status === 0 && open.ms < 8000 && open.out.includes('PROJECT RULES'), JSON.stringify(open));
 
   // ---- the installer -------------------------------------------------------
   const FRESH = kitProject(path.join(TMP, 'fresh'));
@@ -266,7 +499,7 @@ try {
   const FRESH_L = kitProject(path.join(TMP, 'fresh linux'));
   install(FRESH_L, [], { linux: true });
   t('[R10] Linux: a fresh install names the guards by this project\'s own path', cmdsOf(settingsOf(FRESH_L), 'PreToolUse')[0] === guardCmd(FRESH_L, 'Path-guard.mjs'), cmdsOf(settingsOf(FRESH_L), 'PreToolUse').join('\n'));
-  r = dispatch('pretool', pay(FRESH, P.rm), FRESH);
+  r = dispatch('pretool', pay(FRESH, P.rm), FRESH, started(FRESH));
   t('[R10] after a personal install the plugin stands down for the placeholder wiring too', standsDown(r, 2), r.log);
   r = install(FRESH);
   t('a second run changes nothing', r.code === 0 && r.out.includes('nothing to change'), r.out);

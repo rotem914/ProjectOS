@@ -25,8 +25,10 @@
 // A case marked [R] is one a review round found open ([R10]: the kit review of
 // 2026-09-28; [R11]: the one of 2026-10-01; [R12]: the second one that day,
 // on scripts that write by other spellings; [R13]: the final one that day,
-// on one-line scripts that write while naming a path outside). Only cases
-// that pass today are seeded here; a known hole joins the file when it is fixed.
+// on one-line scripts that write while naming a path outside; [R14]: the kit
+// fix list of 2026-10-02; [R15]: round two of that list, the same day, on
+// problems round one caused). Only cases that pass today are seeded here; a
+// known hole joins the file when it is fixed.
 import fs from 'node:fs';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -232,24 +234,24 @@ t("[R3] review 15: an everyday read-only script stays allowed", bash("python -c 
 t("[R3] review 16: an everyday read-only script stays allowed", bash("python -c \"import json, os; d=json.load(open(os.path.expanduser('~/.claude/settings.json'))); open('.tmp/hooks.json','w').write(json.dumps(d.get('hooks'), indent=2))\""), false);
 t("[R3] review 17: an everyday read-only script stays allowed", bash("python -c \"\nimport os, glob\nfiles = glob.glob(os.path.expanduser('~/.claude/projects/J--Projects-Rotem-E/*.jsonl'))\nos.makedirs('.tmp', exist_ok=True)\nopen('.tmp/sessions.txt', 'w').write('\\n'.join(files))\n\""), false);
 t("[R3] review 18: an everyday read-only script stays allowed", bash("python -c \"\nimport json, os, urllib.request\nreq = urllib.request.Request('https://api.github.com/repos/rotem914/RotemE/traffic/views', headers={'Authorization': 'token ' + os.environ['GH_TOKEN']})\ndata = json.load(urllib.request.urlopen(req))\njson.dump(data, open('.tmp/views.json', 'w'), indent=2)\n\""), false);
-t("[R3] review 19: an everyday read-only script stays allowed", bash("node -e \"\nconst fs = require('fs');\nconst html = fs.readFileSync('dist/index.html', 'utf8');\nconst hrefs = [...html.matchAll(/href=\\\"([^\\\"]+)\\\"/g)].map(m => m[1]);\nconsole.log(hrefs.filter(h => h.startsWith('/projects/')).length);\n\""), false);
-t("[R3] review 20: an everyday read-only script stays allowed", ps("node -e '\nconst fs = require(\"fs\");\nconst html = fs.readFileSync(\"dist/index.html\", \"utf8\");\nconst links = [...html.matchAll(/href=\"([^\"]+)\"/g)].map(m => m[1]);\nconsole.log(links.filter(h => h.startsWith(\"/projects/\")).join(\"\\n\"));\n'"), false);
+t("[R3] review 19: [R15] a multi-line script naming a web route reads inside and stays allowed (R9)", bash("node -e \"\nconst fs = require('fs');\nconst html = fs.readFileSync('dist/index.html', 'utf8');\nconst hrefs = [...html.matchAll(/href=\\\"([^\\\"]+)\\\"/g)].map(m => m[1]);\nconsole.log(hrefs.filter(h => h.startsWith('/projects/')).length);\n\""), false);
+t("[R3] review 20: [R15] a multi-line script naming a web route reads inside and stays allowed (R9)", ps("node -e '\nconst fs = require(\"fs\");\nconst html = fs.readFileSync(\"dist/index.html\", \"utf8\");\nconst links = [...html.matchAll(/href=\"([^\"]+)\"/g)].map(m => m[1]);\nconsole.log(links.filter(h => h.startsWith(\"/projects/\")).join(\"\\n\"));\n'"), false);
 t("[R3] review 21: an everyday read-only script stays allowed", bash("node -e \"\nconst fs = require('fs');\nconst t = fs.readFileSync('C:/Users/User/.claude/settings.json', 'utf8');\nconsole.log(Object.keys(JSON.parse(t).hooks || {}));\n\""), false);
 t("[R3] cd-shaped 1: a script that starts git but writes no file stays allowed", bash("cd \"$(git rev-parse --show-toplevel)\" && node -e \"console.log(require('child_process').execSync('git status --short').toString())\""), false);
 t("[R3] cd-shaped 2: a script that starts git but writes no file stays allowed", bash("cd \"J:\\Projects\\Rotem E\" && node -e \"const r=require('child_process').spawnSync('git',['diff','--stat'],{encoding:'utf8'}); console.log(r.stdout)\""), false);
 
 // Third review: write destinations are checked, reads never are.
-t("[R4] review 01: a script that writes only inside, or only reads, stays allowed", bash("node -e \"\nconst t = require('fs').readFileSync('C:/Users/User/.claude/settings.json', 'utf8');\nrequire('fs').writeFileSync('.tmp/summary.txt', String(t.length))\n\""), false);
+t("[R4] review 01: [R14] a multi-line script naming a path outside, not provably a read, is refused (T1)", bash("node -e \"\nconst t = require('fs').readFileSync('C:/Users/User/.claude/settings.json', 'utf8');\nrequire('fs').writeFileSync('.tmp/summary.txt', String(t.length))\n\""), true);
 t("[R4] review 02: a script that writes only inside, or only reads, stays allowed", bash("node -e \"require('fs').writeFileSync('note.txt', require('os').homedir())\""), false);
 t("[R4] review 03: a script that writes only inside, or only reads, stays allowed", bash("cd /c/Windows\nnode -e \"require('fs').writeFileSync('J:/Projects/Rotem E/.tmp/x.txt','y')\""), false);
-t("[R4] review 04: a script that writes only inside, or only reads, stays allowed", bash("node -e \"\nconst fs = require('fs');\nconst rows = fs.readFileSync('C:/Users/User/Downloads/ga-export.csv', 'utf8').split('\\n').map(l => l.split(','));\nconst top = rows.filter(r => Number(r[2]) > 100);\nfs.writeFileSync('.tmp/ga-top.json', JSON.stringify(top, null, 2));\nconsole.log(top.length);\n\""), false);
-t("[R4] review 05: a script that writes only inside, or only reads, stays allowed", bash("python -c \"\nimport csv, json\nrows = list(csv.DictReader(open('C:/Users/User/Downloads/ga-pages.csv', encoding='utf-8')))\ntop = [r for r in rows if int(r['views']) > 50]\njson.dump(top, open('.tmp/ga-pages-top.json', 'w'), indent=2)\nprint(len(top), 'pages over 50 views')\n\""), false);
-t("[R4] review 06: a script that writes only inside, or only reads, stays allowed", ps("node -e '\nconst fs = require(\"fs\");\nconst rows = fs.readFileSync(\"C:/Users/User/Downloads/ga.csv\", \"utf8\").split(\"\\n\");\nfs.writeFileSync(\".tmp/ga-rows.txt\", String(rows.length));\nconsole.log(rows.length);\n'"), false);
-t("[R4] review 07: a script that writes only inside, or only reads, stays allowed", bash("python -c \"\nimport subprocess, json\nurls = ['/', '/projects/', '/articles/', '/about/']\nres = {}\nfor u in urls:\n    r = subprocess.run(['curl', '-s', '-o', '/dev/null', '-w', '%{http_code}', 'http://localhost:4321' + u], capture_output=True, text=True)\n    res[u] = r.stdout\nprint(json.dumps(res))\n\""), false);
-t("[R4] review 08: a script that writes only inside, or only reads, stays allowed", bash("node -e \"\nconst fs = require('fs');\nconst html = fs.readFileSync('dist/index.html', 'utf8');\nconst want = ['/projects/', '/articles/', '/about/'];\nconst missing = want.filter(w => !html.includes('href=\\\"' + w));\nfs.writeFileSync('.tmp/missing-links.json', JSON.stringify(missing));\nconsole.log(missing.length > 0 ? 'missing: ' + missing.join(', ') : 'all links present');\n\""), false);
-t("[R4] review 09: a script that writes only inside, or only reads, stays allowed", bash("node -e \"\nconst fs = require('fs');\nconst redirects = fs.readFileSync('public/_redirects', 'utf8').trim().split('\\n').map(l => l.split(/\\s+/));\nconst bad = redirects.filter(([from, to]) => !from.startsWith('/') || !to.startsWith('/articles/'));\nfs.writeFileSync('.tmp/bad-redirects.json', JSON.stringify(bad, null, 2));\nconsole.log(bad.length);\n\""), false);
-t("[R4] review 10: a script that writes only inside, or only reads, stays allowed", bash("node -e \"\nconst { execSync } = require('child_process');\nlet out = '';\ntry { out = execSync('npx astro check', { encoding: 'utf8' }); } catch (e) { out = e.stdout || ''; }\nconst ours = out.split('\\n').filter(l => l.includes('/src/') && /error/i.test(l));\nconsole.log(ours.length > 0 ? ours.join('\\n') : 'no errors in src');\n\""), false);
-t("[R4] review 11: a script that writes only inside, or only reads, stays allowed", bash("python -c \"\nimport re, json\nurls = [l.strip() for l in open('dist/sitemap-0.xml', encoding='utf-8') if '<loc>' in l]\nurls = [re.sub(r'/+$', '', re.sub(r'</?loc>', '', u)) for u in urls]\njson.dump(urls, open('.tmp/sitemap-urls.json', 'w'), indent=2)\nprint(len(urls))\n\""), false);
+t("[R4] review 04: [R14] a multi-line script naming a path outside, not provably a read, is refused (T1)", bash("node -e \"\nconst fs = require('fs');\nconst rows = fs.readFileSync('C:/Users/User/Downloads/ga-export.csv', 'utf8').split('\\n').map(l => l.split(','));\nconst top = rows.filter(r => Number(r[2]) > 100);\nfs.writeFileSync('.tmp/ga-top.json', JSON.stringify(top, null, 2));\nconsole.log(top.length);\n\""), true);
+t("[R4] review 05: [R14] a multi-line script naming a path outside, not provably a read, is refused (T1)", bash("python -c \"\nimport csv, json\nrows = list(csv.DictReader(open('C:/Users/User/Downloads/ga-pages.csv', encoding='utf-8')))\ntop = [r for r in rows if int(r['views']) > 50]\njson.dump(top, open('.tmp/ga-pages-top.json', 'w'), indent=2)\nprint(len(top), 'pages over 50 views')\n\""), true);
+t("[R4] review 06: [R14] a multi-line script naming a path outside, not provably a read, is refused (T1)", ps("node -e '\nconst fs = require(\"fs\");\nconst rows = fs.readFileSync(\"C:/Users/User/Downloads/ga.csv\", \"utf8\").split(\"\\n\");\nfs.writeFileSync(\".tmp/ga-rows.txt\", String(rows.length));\nconsole.log(rows.length);\n'"), true);
+t("[R4] review 07: [R15] a multi-line script that names no folder outside stays allowed (R9)", bash("python -c \"\nimport subprocess, json\nurls = ['/', '/projects/', '/articles/', '/about/']\nres = {}\nfor u in urls:\n    r = subprocess.run(['curl', '-s', '-o', '/dev/null', '-w', '%{http_code}', 'http://localhost:4321' + u], capture_output=True, text=True)\n    res[u] = r.stdout\nprint(json.dumps(res))\n\""), false);
+t("[R4] review 08: [R15] a multi-line script that names no folder outside stays allowed (R9)", bash("node -e \"\nconst fs = require('fs');\nconst html = fs.readFileSync('dist/index.html', 'utf8');\nconst want = ['/projects/', '/articles/', '/about/'];\nconst missing = want.filter(w => !html.includes('href=\\\"' + w));\nfs.writeFileSync('.tmp/missing-links.json', JSON.stringify(missing));\nconsole.log(missing.length > 0 ? 'missing: ' + missing.join(', ') : 'all links present');\n\""), false);
+t("[R4] review 09: [R15] a multi-line script that names no folder outside stays allowed (R9)", bash("node -e \"\nconst fs = require('fs');\nconst redirects = fs.readFileSync('public/_redirects', 'utf8').trim().split('\\n').map(l => l.split(/\\s+/));\nconst bad = redirects.filter(([from, to]) => !from.startsWith('/') || !to.startsWith('/articles/'));\nfs.writeFileSync('.tmp/bad-redirects.json', JSON.stringify(bad, null, 2));\nconsole.log(bad.length);\n\""), false);
+t("[R4] review 10: [R15] a multi-line script that names no folder outside stays allowed (R9)", bash("node -e \"\nconst { execSync } = require('child_process');\nlet out = '';\ntry { out = execSync('npx astro check', { encoding: 'utf8' }); } catch (e) { out = e.stdout || ''; }\nconst ours = out.split('\\n').filter(l => l.includes('/src/') && /error/i.test(l));\nconsole.log(ours.length > 0 ? ours.join('\\n') : 'no errors in src');\n\""), false);
+t("[R4] review 11: [R15] a multi-line script that names no folder outside stays allowed (R9)", bash("python -c \"\nimport re, json\nurls = [l.strip() for l in open('dist/sitemap-0.xml', encoding='utf-8') if '<loc>' in l]\nurls = [re.sub(r'/+$', '', re.sub(r'</?loc>', '', u)) for u in urls]\njson.dump(urls, open('.tmp/sitemap-urls.json', 'w'), indent=2)\nprint(len(urls))\n\""), false);
 t("[R4] review 12: a script that writes only inside, or only reads, stays allowed", bash("node -e \"const fs=require('fs'),os=require('os'),path=require('path'); fs.copyFileSync(path.join(os.homedir(),'Downloads','hero.png'),'public/media/hero.png')\""), false);
 t("[R4] review 13: a script that writes only inside, or only reads, stays allowed", bash("python -c \"import os, shutil; shutil.copy(os.path.expanduser('~/Downloads/report.csv'), '.tmp/report.csv')\""), false);
 t("[R4] review 14: a script that writes only inside, or only reads, stays allowed", bash("node -e \"const fs=require('fs'),os=require('os'),path=require('path'); fs.writeFileSync('.tmp/claude-settings-copy.json', fs.readFileSync(path.join(os.homedir(),'.claude','settings.json'),'utf8'))\""), false);
@@ -320,9 +322,8 @@ t("[R5] Image.open reads a picture", bash("python -c \"\nfrom PIL import Image\n
 // read call, and nothing else in the script could write. So the one-line
 // scripts here that also write or copy into the project, unpack an archive,
 // or name an absolute-looking path in a web route, a pattern or a string they
-// edit are refused, as they were before 2026-10-01. Their two-line forms keep
-// the reading of writes covered: a route, a pattern and a string's replace()
-// are still not writes to it.
+// edit are refused, as they were before 2026-10-01. Since the kit fix list of
+// 2026-10-02 ([R14], T1) their two-line forms are refused the same way.
 console.log('path-guard: one-line scripts name a path outside only to read it');
 t('[R11] node -e that only reads /etc/hostname', bash(`node -e "console.log(require('fs').readFileSync('/etc/hostname','utf8'))"`), false);
 t('[R11] node -e that only reads a settings file in the home folder', bash(`node -e "console.log(require('fs').readFileSync('${HOME}/.claude/settings.json','utf8').length)"`), false);
@@ -339,13 +340,17 @@ t('[R11] python3 -c that copies from outside into the project', bash(`python3 -c
 t('[R11] python3 -c that unpacks an archive from outside into .tmp', bash(`python3 -c "import zipfile; zipfile.ZipFile('${OUT}/x.zip').extractall('.tmp/x')"`), true);
 t('[R11] a pandas pattern that looks like a route is not a folder', bash("python3 -c \"import pandas as pd; print(pd.Series(['/projects/a']).str.extractall(r'/projects/(\\w+)'))\""), true);
 t("[R11] a string's replace is not a move", bash("python3 -c \"print('C:/Users/User/a.txt'.replace('/', '-'))\""), true);
-// The same scripts over two lines, read by their writes alone.
-t('[R13] two lines: node -e that copies from outside into the project', bash(`node -e "\nrequire('fs').copyFileSync('${OUT}/a.png','public/media/a.png')\n"`), false);
-t('[R13] two lines: node -e with web routes in it', bash("node -e \"\nconsole.log(['/projects/','/about/'].map(r => r.length))\n\""), false);
-t('[R13] two lines: python3 -c that copies from outside into the project', bash(`python3 -c "\nimport shutil; shutil.copy('${OUT}/a.txt','.tmp/a.txt')\n"`), false);
-t('[R13] two lines: python3 -c that unpacks an archive from outside into .tmp', bash(`python3 -c "\nimport zipfile; zipfile.ZipFile('${OUT}/x.zip').extractall('.tmp/x')\n"`), false);
-t('[R13] two lines: a pandas pattern that looks like a route is not a folder', bash("python3 -c \"\nimport pandas as pd; print(pd.Series(['/projects/a']).str.extractall(r'/projects/(\\w+)'))\n\""), false);
-t("[R13] two lines: a string's replace is not a move", bash("python3 -c \"\nprint('C:/Users/User/a.txt'.replace('/', '-'))\n\""), false);
+// [R14] The same scripts over two lines follow the same rule since the kit
+// fix list of 2026-10-02 (T1): over several lines too, a script that names a
+// path outside passes only as a plain read. [R15] Round two (R9): over
+// several lines only a path that names a folder on this computer counts, so
+// a web route or a pattern shaped like one is not a path outside there.
+t('[R13] two lines: node -e that copies from outside into the project', bash(`node -e "\nrequire('fs').copyFileSync('${OUT}/a.png','public/media/a.png')\n"`), true);
+t('[R13] [R15] two lines: node -e with web routes in it', bash("node -e \"\nconsole.log(['/projects/','/about/'].map(r => r.length))\n\""), false);
+t('[R13] two lines: python3 -c that copies from outside into the project', bash(`python3 -c "\nimport shutil; shutil.copy('${OUT}/a.txt','.tmp/a.txt')\n"`), true);
+t('[R13] two lines: python3 -c that unpacks an archive from outside into .tmp', bash(`python3 -c "\nimport zipfile; zipfile.ZipFile('${OUT}/x.zip').extractall('.tmp/x')\n"`), true);
+t('[R13] [R15] two lines: a pandas pattern that looks like a route is not a folder', bash("python3 -c \"\nimport pandas as pd; print(pd.Series(['/projects/a']).str.extractall(r'/projects/(\\w+)'))\n\""), false);
+t("[R13] two lines: a string's replace is not a move", bash("python3 -c \"\nprint('C:/Users/User/a.txt'.replace('/', '-'))\n\""), true);
 t('[R11] perl -e that only reads outside', bash("perl -e \"open(my \\$f, '<', 'C:/Users/User/a.txt'); print <\\$f>\""), false);
 t('[R11] ruby -e that only reads outside', bash("ruby -e \"puts File.read('C:/Users/User/a.txt')\""), false);
 t('[R11] node -e writing inside through a join with +', bash("node -e \"const n='a'; require('fs').writeFileSync('.tmp/' + n + '.txt','x')\""), false);
@@ -381,11 +386,12 @@ t('[R11] perl -e open without parentheses, inside', bash("perl -e \"open my \\$f
 t('[R11] deno eval writeTextFileSync outside', bash(`deno eval "Deno.writeTextFileSync('${OUT}/x.txt','a')"`), true);
 t('[R11] ruby -e File.delete outside', bash(`ruby -e "File.delete('${OUT}/x.txt')"`), true);
 
-// The same script on one line and on two lines. The verdicts differ only
-// where the one-line script names a path outside and is not provably a read.
+// The same script on one line and on two lines. Since the kit fix list of
+// 2026-10-02 (T1) the two verdicts are the same: a script that names a path
+// outside and is not provably a read is refused at any length.
 for (const [name, line, oneLine, twoLines] of [
   ['a read of /etc/hostname', "console.log(require('fs').readFileSync('/etc/hostname','utf8'))", false, false],
-  ['a read outside and a write inside', `const fs=require('fs'); fs.writeFileSync('.tmp/a.txt', fs.readFileSync('${OUT}/a.txt'))`, true, false],
+  ['a read outside and a write inside', `const fs=require('fs'); fs.writeFileSync('.tmp/a.txt', fs.readFileSync('${OUT}/a.txt'))`, true, true],
   ['a write outside', `require('fs').writeFileSync('${OUT}/x.txt','a')`, true, true],
   ['a write to each path of a literal list', `['${OUT}/x.txt'].forEach(p => require('fs').writeFileSync(p,'a'))`, true, true],
 ]) {
@@ -405,16 +411,6 @@ const U = 'C:/Users/User';
 function both(name, head, quote, script, block, after = '') {
   t(`[R12] one line: ${name}`, bash(`${head} ${quote}${script}${quote}${after}`), block);
   t(`[R12] two lines: ${name}`, bash(`${head} ${quote}\n${script}\n${quote}${after}`), block);
-}
-// [R13] The scripts whose two readings differ on purpose: on one line each
-// names a path outside the project without being provably a read (it moves
-// its folder there, runs code, starts a program, loads a module this guard
-// does not know, or names the path outside a plain read call), so it is
-// refused as it was before 2026-10-01. Over two lines it is read by its
-// writes alone, and those land inside or nowhere.
-function apart(name, head, quote, script, oneLine, twoLines, after = '') {
-  t(`[R12] one line: ${name}`, bash(`${head} ${quote}${script}${quote}${after}`), oneLine);
-  t(`[R12] two lines: ${name}`, bash(`${head} ${quote}\n${script}\n${quote}${after}`), twoLines);
 }
 // The review's own payloads.
 both('node changes its folder, then writes a relative file', 'node -e', '"', `process.chdir('${U}'); require('fs').writeFileSync('x.txt','a')`, true);
@@ -542,9 +538,11 @@ t('[R12] padding with bare calls does not wear the reading out', bash(`perl -e '
 tWhy('[R12] the refusal after a chdir names the folder the script moved to', bash(`node -e "process.chdir('${U}'); require('fs').writeFileSync('x.txt','a')"`), 'moved its working folder to "c:/users/user"');
 
 // Reads stay allowed, and so do writes that land inside, however they are
-// spelled. A one-line script that names a path outside is allowed only when
-// it is provably a read; the apart() cases are not, and are refused on one
-// line only ([R13]).
+// spelled. A script that names a path outside is allowed only when it is
+// provably a read. The cases below that are not (they move their folder
+// there, run code, start a program, load a module this guard does not know,
+// or name the path outside a plain read call) were refused on one line only
+// until the kit fix list of 2026-10-02 (T1, [R14]); now at any length.
 both('a read with readFileSync', 'node -e', '"', `console.log(require('fs').readFileSync('${U}/a.txt','utf8'))`, false);
 both('a check with existsSync', 'node -e', '"', `console.log(require('fs').existsSync('${U}/a.txt'))`, false);
 both('a stat with statSync', 'node -e', '"', `console.log(require('fs').statSync('${U}/a.txt').size)`, false);
@@ -557,27 +555,27 @@ both('os.listdir', 'python -c', '"', `import os; print(os.listdir('${U}'))`, fal
 both("perl open with '<'", 'perl -e', "'", `open(my $f, "<", "${U}/a.txt"); print <$f>`, false);
 both("perl open with '<' and no parentheses", 'perl -e', "'", `open my $f, "<", "${U}/a.txt" or die; print <$f>`, false);
 both('ruby File.read', 'ruby -e', "'", `puts File.read("${U}/a.txt")`, false);
-apart('a chdir outside that only reads', 'node -e', '"', `process.chdir('${U}'); console.log(require('fs').readdirSync('.'))`, true, false);
-apart('a python chdir outside that only reads', 'python -c', '"', `import os; os.chdir('${U}'); print(os.listdir('.'))`, true, false);
-apart('a ruby chdir outside that only reads', 'ruby -e', "'", `Dir.chdir("${U}"); puts Dir.glob("*")`, true, false);
-apart('an eval that only reads', 'node -e', '"', String.raw`eval(\"console.log(require('fs').readFileSync('C:/Users/User/a.txt','utf8'))\")`, true, false);
-apart('a python exec that only reads', 'python -c', '"', String.raw`exec(\"print(open('C:/Users/User/a.txt').read())\")`, true, false);
+both('a chdir outside that only reads', 'node -e', '"', `process.chdir('${U}'); console.log(require('fs').readdirSync('.'))`, true);
+both('a python chdir outside that only reads', 'python -c', '"', `import os; os.chdir('${U}'); print(os.listdir('.'))`, true);
+both('a ruby chdir outside that only reads', 'ruby -e', "'", `Dir.chdir("${U}"); puts Dir.glob("*")`, true);
+both('an eval that only reads', 'node -e', '"', String.raw`eval(\"console.log(require('fs').readFileSync('C:/Users/User/a.txt','utf8'))\")`, true);
+both('a python exec that only reads', 'python -c', '"', String.raw`exec(\"print(open('C:/Users/User/a.txt').read())\")`, true);
 both('a read named by a string key', 'node -e', '"', `console.log(require('node:fs')['readFileSync']('${U}/a.txt','utf8'))`, false);
-apart('cat of a file outside through an argument list', 'python -c', '"', `import subprocess; print(subprocess.run(['cat','${U}/a.txt'], capture_output=True).stdout)`, true, false);
-apart('git -C outside through an argument list', 'node -e', '"', `console.log(require('child_process').execFileSync('git',['-C','${U}/repo','status']).toString())`, true, false);
+both('cat of a file outside through an argument list', 'python -c', '"', `import subprocess; print(subprocess.run(['cat','${U}/a.txt'], capture_output=True).stdout)`, true);
+both('git -C outside through an argument list', 'node -e', '"', `console.log(require('child_process').execFileSync('git',['-C','${U}/repo','status']).toString())`, true);
 both('sqlite3 in memory', 'python -c', '"', "import sqlite3; print(sqlite3.connect(':memory:'))", false);
 both('sqlite3 read-only URI', 'python -c', '"', `import sqlite3; print(sqlite3.connect('file:${U}/x.db?mode=ro', uri=True))`, false);
 both('sqlite3 inside', 'python -c', '"', "import sqlite3; sqlite3.connect('.tmp/x.db')", false);
 both('tempfile with dir inside', 'python -c', '"', "import tempfile; print(tempfile.mkstemp(dir='.tmp'))", false);
-apart('Deno.openSync for reading', 'deno eval', '"', `console.log(Deno.openSync('${U}/a.txt', { read: true }))`, true, false);
+both('Deno.openSync for reading', 'deno eval', '"', `console.log(Deno.openSync('${U}/a.txt', { read: true }))`, true);
 both("pickle with 'rb'", 'python -c', '"', `import pickle; print(pickle.load(open('${U}/a.pkl','rb')))`, false);
-apart("a model's eval() is not code", 'python -c', '"', `import torch; m = torch.load('${U}/m.pt'); m.eval(); print(m)`, true, false);
+both("a model's eval() is not code", 'python -c', '"', `import torch; m = torch.load('${U}/m.pt'); m.eval(); print(m)`, true);
 both('re.compile is not code', 'python -c', '"', `import re; p = re.compile(r'x'); print(p.findall(open('${U}/a.txt').read()))`, false);
 both('ast.literal_eval is not code', 'python -c', '"', `import ast; print(ast.literal_eval(open('${U}/a.txt').read()))`, false);
-apart("pandas' DataFrame.eval is not code", 'python -c', '"', `import pandas as pd; df = pd.read_csv('${U}/a.csv'); print(df.eval('a + b'))`, true, false);
+both("pandas' DataFrame.eval is not code", 'python -c', '"', `import pandas as pd; df = pd.read_csv('${U}/a.csv'); print(df.eval('a + b'))`, true);
 both('an eval of code from the command line in a script that writes nothing', 'node -e', '"', 'console.log(eval(process.argv[1]))', false, " '1+2'");
 both('an exec of a project script', 'python -c', '"', "exec(open('scripts/x.py').read())", false);
-apart('a perl eval block', 'perl -e', "'", `eval { open(my $f, "<", "${U}/a.txt") or die; print <$f> }; print $@`, true, false);
+both('a perl eval block', 'perl -e', "'", `eval { open(my $f, "<", "${U}/a.txt") or die; print <$f> }; print $@`, true);
 both('a key named eval', 'node -e', '"', 'const x = {eval: 1}; console.log(x.eval)', false);
 both("a class's constructor", 'node -e', '"', 'class A { constructor(x) { this.x = x } }; console.log(new A(1))', false);
 both('perl unlink inside', 'perl -e', "'", 'unlink ".tmp/x.txt"', false);
@@ -589,10 +587,10 @@ both('a command started with cwd inside', 'python -c', '"', "import subprocess; 
 both('a command started with cwd=os.getcwd()', 'python -c', '"', "import os, subprocess; subprocess.run(['git','status'], cwd=os.getcwd())", false);
 both('a command started with cwd=None', 'python -c', '"', "import subprocess; subprocess.run(['git','status'], cwd=None)", false);
 both('mkdir through an argument list, of a joined path inside', 'python -c', '"', "import os, subprocess; d = os.path.join('.tmp', 'x'); subprocess.run(['mkdir', '-p', d])", false);
-apart('cp from outside into the project through an argument list', 'python -c', '"', `import subprocess; subprocess.run(['cp', '${U}/Downloads/a.png', 'public/media/a.png'])`, true, false);
-apart('perl chmod of a project file in a script that reads outside', 'perl -e', "'", `chmod 0755, "scripts/x.sh"; open(my $f, "<", "${U}/a.txt")`, true, false);
+both('cp from outside into the project through an argument list', 'python -c', '"', `import subprocess; subprocess.run(['cp', '${U}/Downloads/a.png', 'public/media/a.png'])`, true);
+both('perl chmod of a project file in a script that reads outside', 'perl -e', "'", `chmod 0755, "scripts/x.sh"; open(my $f, "<", "${U}/a.txt")`, true);
 t('[R12] PowerShell: a read outside', ps(`node -e "console.log(require('fs').readFileSync('${U}/a.txt','utf8'))"`), false);
-t('[R12] a heredoc python script that changes its folder and only reads', bash(`python3 - <<'EOF'\nimport os\nos.chdir('${U}')\nprint(os.listdir('.'))\nEOF`), false);
+t('[R12] [R14] a heredoc python script that changes its folder outside is not provably a read', bash(`python3 - <<'EOF'\nimport os\nos.chdir('${U}')\nprint(os.listdir('.'))\nEOF`), true);
 
 // [R13] The final review of 2026-10-01: with the one-line scan gone, these
 // one-line writes went through, each spelled in a way the reading of writes
@@ -715,8 +713,9 @@ console.log('path-guard: a one-line script names a path outside only to read it'
     ['POSIX: python open of /etc/hostname', { ...bash(`python3 -c "print(open('/etc/hostname').read())"`), cwd: '/home/u/app' }],
   ]) t(`[R13] one-line read allowed: ${name}`, payload, false);
 
-  // A one-line read that also writes inside the project is refused, as it was
-  // before 2026-10-01; over two lines it is read by its writes, which land inside.
+  // A read that also writes inside the project is refused, as it was before
+  // 2026-10-01 on one line, and since the kit fix list of 2026-10-02 (T1,
+  // [R14]) over two lines as well.
   for (const [name, head, script] of [
     ['node', 'node -e', `const fs=require('fs'); fs.writeFileSync('.tmp/a.txt', fs.readFileSync('${A}'))`],
     ['python', 'python -c', `open('.tmp/a.txt','w').write(open('${A}').read())`],
@@ -726,7 +725,7 @@ console.log('path-guard: a one-line script names a path outside only to read it'
   ]) {
     const q = quote(script);
     t(`[R13] one line: a ${name} read outside that also writes inside`, bash(`${head} ${q}${script}${q}`), true);
-    t(`[R13] two lines: a ${name} read outside that also writes inside`, bash(`${head} ${q}\n${script}\n${q}`), false);
+    t(`[R13] two lines: a ${name} read outside that also writes inside`, bash(`${head} ${q}\n${script}\n${q}`), true);
   }
   t('[R13] POSIX: a one-line read outside that also writes inside', { ...bash(`node -e "const fs=require('fs'); fs.writeFileSync('.tmp/a', fs.readFileSync('/etc/hostname'))"`), cwd: '/home/u/app' }, true);
 
@@ -931,7 +930,9 @@ t('[R6] everyday: git commit with 2>&1', bash('git commit -m "Fix the header" 2>
 t('[R6] everyday: git log -c', bash('git log -c -- src/lib/media.ts'), false);
 t('[R6] everyday: git -c setting before status', bash('git -c core.quotepath=off status'), false);
 t('[R6] everyday: git -C the project folder', bash('git -C "J:/Projects/Rotem E" status'), false);
-t('[R6] everyday: git -C the kit folder, pull', bash('git -C "C:/Users/User/.claude/skills/projectos" pull'), false);
+// [R14] git changing another folder's repository is refused (T18); the
+// install already names this pull as the owner's to run.
+t('[R6] [R14] git -C the kit folder, pull, is the owner\'s to run', bash('git -C "C:/Users/User/.claude/skills/projectos" pull'), true);
 t('[R6] everyday: checkout -b and switch -c', bash('git checkout -b feat && git switch -c feat2'), false);
 t('[R6] everyday: push -u with 2>&1', ps('git push -u origin main 2>&1'), false);
 t('[R6] everyday: a bare cd, then a read', bash('cd; ls'), false);
@@ -1346,11 +1347,281 @@ t('[R10] from shutil import copy as cp, to an outside folder', bash("python3 -c 
 t('[R10] open with keyword arguments only', bash("python3 -c \"\nf = open(file='C:/Users/User/x.txt', mode='w')\nf.write('x')\n\""), true);
 t('[R10] pandas to_csv inside', bash("python3 -c \"\nimport pandas as pd\ndf = pd.DataFrame()\ndf.to_csv('.tmp/r.csv')\n\""), false);
 t('[R10] pandas to_csv to a relative name is not read', bash("python3 -c \"\nimport pandas as pd\ndf = pd.DataFrame()\ndf.to_csv('r.csv')\n\""), false);
-t('[R10] a ZipFile opened for reading', bash("python3 -c \"\nimport zipfile\nz = zipfile.ZipFile('C:/Users/User/x.zip')\nprint(z.namelist())\n\""), false);
-t('[R10] a tarfile opened for reading', bash("python3 -c \"\nimport tarfile\nt = tarfile.open('C:/Users/User/x.tgz', 'r:gz')\nprint(t.getnames())\n\""), false);
+// [R14] Over several lines too, a path outside passes only in a plain read
+// call, and ZipFile and tarfile.open are not on that list (T1).
+t('[R10] [R14] a ZipFile opened for reading outside', bash("python3 -c \"\nimport zipfile\nz = zipfile.ZipFile('C:/Users/User/x.zip')\nprint(z.namelist())\n\""), true);
+t('[R10] [R14] a tarfile opened for reading outside', bash("python3 -c \"\nimport tarfile\nt = tarfile.open('C:/Users/User/x.tgz', 'r:gz')\nprint(t.getnames())\n\""), true);
 t('[R10] an aliased writeFileSync writing inside', bash("node -e \"\nconst { writeFileSync: w } = require('fs');\nw('.tmp/x.txt', 'a');\n\""), false);
 t('[R10] a model saved under a name inside', bash("python3 -c \"\nimport torch\ntorch.save(model, '.tmp/m.pt')\n\""), false);
 t('[R10] pd.to_datetime is not a file', bash("python3 -c \"\nimport pandas as pd\nprint(pd.to_datetime('2020-01-01'))\n\""), false);
+
+// [R14] The kit fix list of 2026-10-02. T8: the command after a loop or a
+// condition word is read, and a rename loop over literal names in the project
+// stays allowed. T9: a PowerShell here-string and a here-document inside a
+// quoted $( ) are text. T10: a PowerShell writer with no path of its own
+// writes to what its pipeline hands it, and find's {} sits in the folders it
+// searches. T18: git may only read another folder's repository. T138: sed's
+// -e value is its script. T1: more ways a script reaches an interpreter.
+console.log('path-guard: loops and conditions (T8)');
+t('[R14] a one-line for loop copying to the Desktop', bash('for f in a.txt b.txt; do cp "$f" /c/Users/User/Desktop/; done'), true);
+t('[R14] a one-line for loop deleting outside', bash('for f in a b; do rm /c/Users/User/x; done'), true);
+t('[R14] an if-block copying outside', bash('if [ -f a ]; then cp a /c/Users/User/x; fi'), true);
+t('[R14] an else branch touching outside', bash('if true; then echo; else touch /c/y; fi'), true);
+t('[R14] an elif branch copying outside', bash('if false; then :; elif true; then cp a /c/x; fi'), true);
+t('[R14] a while-read loop moving outside', bash('while read f; do mv "$f" /c/x/; done < list.txt'), true);
+t('[R14] an until loop deleting outside', bash('until false; do rm -f /c/x/a; done'), true);
+t('[R14] a case pattern copying outside', bash('case x in x) cp a /c/x;; esac'), true);
+t('[R14] a case pattern after a | copying outside', bash('case $x in a|b) cp a /c/x;; esac'), true);
+t('[R14] a case pattern in parentheses copying outside', bash('case $x in (a) cp a /c/x;; esac'), true);
+t('[R14] a case over several lines', bash('case "$1" in\n  a) cp a /c/x ;;\n  *) echo no ;;\nesac'), true);
+t('[R14] a clone inside a loop', bash('for f in a; do git clone https://x/r /c/x; done'), true);
+t('[R14] an inline shell inside a loop', bash('for f in a; do bash -c "cp a /c/x"; done'), true);
+t('[R14] an inline script inside a loop', bash(`for f in a; do node -e "require('fs').writeFileSync('C:/Users/x.txt','')"; done`), true);
+t('[R14] a cd inside an if moves the folder', bash('if cd /c/Users/User; then echo hi > y.txt; fi'), true);
+t('[R14] PowerShell: a write after if', ps('if (Test-Path x) { Copy-Item a C:\\Users\\User\\x }'), true);
+// The rename loop the owner keeps: literal names or globs in the project.
+t('[R14] everyday: a rename loop over a glob', bash('for f in *.jpeg; do mv "$f" "${f%.jpeg}.jpg"; done'), false);
+t('[R14] everyday: a rename loop over several lines', bash('for f in *.jpeg\ndo\n  mv "$f" "${f%.jpeg}.jpg"\ndone'), false);
+t('[R14] everyday: sed -i over a glob in src', bash('for f in src/*.ts; do sed -i "s/a/b/" "$f"; done'), false);
+t('[R14] everyday: numbered files into .tmp', bash('for i in 1 2 3; do echo $i > .tmp/out$i.txt; done'), false);
+t('[R14] everyday: copies into .tmp', bash('for f in a.txt b.txt; do cp "$f" .tmp/; done'), false);
+t('[R14] everyday: a backup beside each file', bash('for f in ./*.md; do cp "$f" "$f.bak"; done'), false);
+t('[R14] everyday: a loop over a brace list', bash('for f in {a,b}.txt; do touch ".tmp/$f"; done'), false);
+t('[R14] everyday: git add in a loop', bash('for f in *.md; do git add "$f"; done'), false);
+t('[R14] everyday: a build in an if-block', bash('if [ -f package.json ]; then npm run build; fi'), false);
+t('[R14] everyday: a while-read loop that only prints', bash('while read -r l; do echo "$l"; done < list.txt'), false);
+t('[R14] everyday: a case that builds', bash('case "$1" in build) npm run build;; *) echo no;; esac'), false);
+t('[R14] everyday: a cd into src inside an if', bash('if cd src; then echo hi > x.ts; fi'), false);
+// Everything else built from a loop is refused, as before.
+t('[R14] a rename loop over an absolute glob', bash('for f in /c/x/*.jpeg; do mv "$f" "${f%.jpeg}.jpg"; done'), true);
+t('[R14] a rename loop over a glob that climbs', bash('for f in ../*.jpeg; do mv "$f" "${f%.jpeg}.jpg"; done'), true);
+t('[R14] a rename loop over a substitution', bash('for f in $(ls); do mv "$f" "${f%.jpeg}.jpg"; done'), true);
+t('[R14] a loop variable given another value', bash('for f in *.jpeg; do f=/c/x; mv a "$f"; done'), true);
+t('[R14] a loop variable read into', bash('for f in a; do read f; mv a "$f"; done'), true);
+t('[R14] a loop value made absolute', bash('for f in *.jpeg; do mv a "/$f"; done'), true);
+t('[R14] a loop value made to climb', bash('for f in *.jpeg; do mv a "../$f"; done'), true);
+t('[R14] a glob that can match ..', bash('for f in .*; do mv a "$f"; done'), true);
+t('[R14] a cut value that can end in a dot, then a dot', bash('for f in a.; do mv x "${f%a}."; done'), true);
+t('[R14] a cut value that can be empty, then a slash', bash('for f in *.jpeg; do mv "$f" "${f%%*}/x"; done'), true);
+t('[R14] a rename loop after a cd out', bash('cd /c/x && for f in *.jpeg; do mv "$f" "${f%.jpeg}.jpg"; done'), true);
+t('[R14] a second loop over the same name with an outside list', bash('for f in a; do while true; do cp z "$f"; for f in /c/x; do :; done; done; done'), true);
+t('[R14] a loop variable used before its loop', bash('mv x "$f"; for f in a; do :; done'), true);
+t('[R14] a loop variable inside an inline shell', bash('for f in a; do bash -c "mv x $f"; done'), true);
+t("[R14] a script's own $f is not the loop's", bash(`for f in a; do perl -e 'my $f = "C:/x"; unlink "$f"'; done`), true);
+
+console.log('path-guard: here-strings and quoted here-documents are text (T9)');
+t("[R14] an apostrophe in a here-string hides no later copy", ps("@'\nIt's a note\n'@ | Set-Content .tmp\\note.md\nWrite-Host saved; Copy-Item .tmp\\note.md C:\\Users\\User\\Desktop"), true);
+t("[R14] an apostrophe in a here-string hides no later Out-File", ps("@'\nIt's a note\n'@ | Set-Content .tmp\\note.md\nWrite-Host ok | Out-File C:\\Users\\User\\x.txt"), true);
+t('[R14] a quote in a double-quoted here-string hides no later delete', ps('$t = @"\nsay "hi\n"@\nGet-Date; Remove-Item C:\\Users\\User\\x.txt'), true);
+t('[R14] a quote in a commit message hides no later copy', bash("git commit -m \"$(cat <<'EOF'\nsay \"hi\nEOF\n)\"\ntrue; cp a /c/Users/User/Desktop"), true);
+t('[R14] everyday: a commit message whose lines start like commands', bash("git commit -m \"$(cat <<'EOF'\nInstall the thing\nrm the old > files\nmkdir it's fine\nRemove-Item C:/x\nEOF\n)\""), false);
+t('[R14] everyday: a PowerShell commit message in a here-string', ps("$msg = @'\nInstall it\nRemove-Item C:\\x\nIt's > C:\\y\n'@\ngit commit -m $msg"), false);
+t('[R14] everyday: a here-string written into .tmp', ps("@'\nhello, it's me\n'@ | Set-Content .tmp\\note.md -Encoding utf8"), false);
+t('[R14] everyday: a here-string as a -Value', ps("Set-Content -Path .tmp\\note.md -Value @\"\nline one\nline \"two\"\n\"@"), false);
+t('[R14] everyday: a captured here-document written inside', bash("x=\"$(cat <<'EOF'\nhi\nEOF\n)\"; echo \"$x\" > .tmp/a.txt"), false);
+// Text that is run as commands is still read as commands.
+t('[R14] a here-string piped into Invoke-Expression', ps("@'\nRemove-Item C:\\Users\\User\\x\n'@ | Invoke-Expression"), true);
+t('[R14] a here-string kept in a variable, then run', ps("$s = @'\nRemove-Item C:\\Users\\User\\x\n'@\nInvoke-Expression $s"), true);
+t('[R14] a here-string given to iex', ps("iex @'\nRemove-Item C:\\Users\\User\\x\n'@"), true);
+t('[R14] a here-string given to node -e', ps("node -e @'\nrequire('fs').writeFileSync('C:/Users/User/x.txt','a')\n'@"), true);
+t('[R14] a cat here-document run by bash -c', bash("bash -c \"$(cat <<'EOF'\ncd /c/Users/User\necho hi > pg.txt\nEOF\n)\""), true);
+t('[R14] a cat here-document run by eval', bash("eval \"$(cat <<'EOF'\ncp a /c/Users/User/x\nEOF\n)\""), true);
+t('[R14] a cat here-document run by node -e', bash("node -e \"$(cat <<'EOF'\nrequire('fs').writeFileSync('C:/Users/User/x.txt','a')\nEOF\n)\""), true);
+t('[R14] an arithmetic shift is not a here-document', bash('echo "$((1<<2))"\nrm -rf /c/x'), true);
+t('[R14] a quoted here-document whose string closes on its line hides no command after it', bash("echo \"$(cat <<'EOF')\"; cp a /c/x\nbody\nEOF"), true);
+t('[R14] a copy after the closing of a commit message', bash("git commit -m \"$(cat <<'EOF'\nline \"one\nEOF\n)\" && cp a /c/x"), true);
+t('[R14] a copy after a piped here-document in a quoted $( )', bash("x=\"$(cat <<'EOF' | tr a b\nhi\nEOF\n)\"; cp a /c/x"), true);
+t('[R14] a quoted here-document kept in a variable, then run by bash -c', bash("s=\"$(cat <<'EOF'\ncp a /c/Users/User/x\nEOF\n)\"; bash -c \"$s\""), true);
+t('[R14] a quoted here-document echoed into bash', bash("echo \"$(cat <<'EOF'\ncp a /c/Users/User/x\nEOF\n)\" | bash"), true);
+t('[R14] a here-string written to a script, then run', ps("@'\nRemove-Item C:\\Users\\User\\x\n'@ | Set-Content .tmp\\x.ps1\n.\\.tmp\\x.ps1"), true);
+t('[R14] a join from the current folder with a part built at run time stays unproven', bash(`python -c "import os; h = os.path.expanduser('~'); open(os.path.join(os.getcwd(), h), 'w')"`), true);
+
+console.log('path-guard: what a pipeline hands a writer (T10)');
+t('[R14] files listed in Downloads, deleted', ps('Get-ChildItem C:\\Users\\User\\Downloads -Filter *.tmp | Remove-Item'), true);
+t('[R14] files listed in Downloads, renamed', ps('Get-ChildItem C:\\Users\\User\\Downloads\\*.jpeg | Rename-Item -NewName { $_.Name -replace "jpeg","jpg" }'), true);
+t('[R14] files listed in Downloads, overwritten', ps('Get-ChildItem C:\\Users\\User\\Downloads\\*.txt | Set-Content -Value ""'), true);
+t('[R14] files listed in Downloads, emptied', ps('Get-ChildItem C:\\Users\\User\\Downloads\\*.txt | Clear-Content'), true);
+t('[R14] a quoted path piped into a delete', ps('"C:\\Users\\User\\x.txt" | Remove-Item'), true);
+t('[R14] a list from a file piped into a delete', ps('Get-Content list.txt | Remove-Item'), true);
+t('[R14] a variable piped into a delete', ps('$files | Remove-Item'), true);
+t('[R14] a filter between the list and the delete', ps('gci C:\\x | Where-Object { $_.Length -gt 0 } | Remove-Item'), true);
+t('[R14] a stage that makes new paths', ps('gci .tmp | ForEach-Object { "C:\\x\\" + $_.Name } | Remove-Item'), true);
+t('[R14] a rename of a named item with a script-block name', ps('Rename-Item C:\\Users\\User\\a.png -NewName { $_.Name + ".bak" }'), true);
+t('[R14] find -exec sed -i on files in Downloads', bash("find /c/Users/User/Downloads -name '*.md' -exec sed -i 's/a/b/' {} +"), true);
+t('[R14] find -exec touch on files in Downloads', bash('find /c/Users/User/Downloads -type f -exec touch {} +'), true);
+t('[R14] find -execdir runs in the folder it finds', bash('find /c/x -execdir touch y \\;'), true);
+t('[R14] everyday: .tmp files deleted from a listing', ps('Get-ChildItem .tmp -Filter *.tmp | Remove-Item'), false);
+t('[R14] everyday: a filtered delete inside', ps('gci .tmp | Where-Object { $_.Length -gt 0 } | Remove-Item'), false);
+t('[R14] everyday: a rename in .tmp from a listing', ps('Get-ChildItem .tmp | Rename-Item -NewName { $_.Name + ".bak" }'), false);
+t('[R14] everyday: a rename in the current folder', ps('Get-ChildItem *.jpeg | Rename-Item -NewName { $_.Name -replace "jpeg","jpg" }'), false);
+t('[R14] everyday: a recursive delete of .tmp files from here', ps('Get-ChildItem -Recurse -Filter *.tmp | Remove-Item'), false);
+t('[R14] everyday: quoted paths inside, deleted', ps('".tmp\\a.txt", ".tmp\\b.txt" | Remove-Item'), false);
+t('[R14] everyday: a sorted, cut listing deleted', ps('Get-ChildItem .tmp\\*.log | Sort-Object LastWriteTime | Select-Object -First 3 | Remove-Item'), false);
+t('[R14] everyday: copies from Downloads into the project', ps('Get-ChildItem C:\\Users\\User\\Downloads\\*.png | Copy-Item -Destination public\\media'), false);
+t('[R14] everyday: find -exec sed -i in the project', bash("find . -name '*.md' -exec sed -i 's/a/b/' {} +"), false);
+t('[R14] everyday: find -exec rm in src', bash("find src -name '*.bak' -exec rm {} +"), false);
+
+console.log('path-guard: git in another folder only reads (T18)');
+t('[R14] git -C outside, commit', bash('git -C /c/x commit -am wip'), true);
+t('[R14] git -C outside, checkout', bash('git -C /c/x checkout -- .'), true);
+t('[R14] a cd outside, then git pull', bash('cd /c/x && git pull'), true);
+t('[R14] a cd outside, then git checkout', bash('cd /c/x && git checkout -- .'), true);
+t('[R14] --work-tree outside, checkout', bash('git --work-tree=/c/x checkout HEAD -- .'), true);
+t('[R14] --git-dir outside, commit', bash('git --git-dir=/c/x/.git commit -m x'), true);
+t('[R14] git -C outside, stash', bash('git -C /c/x stash'), true);
+t('[R14] git -C outside, a new branch', bash('git -C /c/x branch feature'), true);
+t('[R14] git -C outside, a deleted tag', bash('git -C /c/x tag -d v1'), true);
+t('[R14] git -C outside, clean', bash('git -C /c/x clean -fd'), true);
+t('[R14] git -C a folder built at run time, commit', bash('git -C "$REPO" commit -m x'), true);
+t('[R14] PowerShell: Set-Location outside, then git reset', ps('Set-Location C:\\x; git reset --hard'), true);
+t('[R14] git diff --output outside', bash('git diff --output=/c/x.patch'), true);
+t('[R14] git log --output outside', bash('git log -p --output /c/x.patch'), true);
+t('[R14] git config --file outside', bash('git config --file /c/x/cfg a.b c'), true);
+t('[R14] everyday: git -C outside, status', bash('git -C /c/x status'), false);
+t('[R14] everyday: git -C outside, log', bash('git -C /c/x log --oneline -5'), false);
+t('[R14] everyday: git -C outside, diff', bash('git -C /c/x diff HEAD~1'), false);
+t('[R14] everyday: a cd outside, then git status', bash('cd /c/x && git status'), false);
+t('[R14] everyday: git -C outside, branch listing', bash('git -C /c/x branch -a'), false);
+t('[R14] everyday: git -C outside, remote -v', bash('git -C /c/x remote -v'), false);
+t('[R14] everyday: git -C outside, rev-parse', bash('git -C /c/x rev-parse --short HEAD'), false);
+t('[R14] everyday: git -C outside, ls-files', bash('git -C /c/x ls-files'), false);
+t('[R14] everyday: git -C outside, blame and grep', bash('git -C /c/x blame a.txt && git -C /c/x grep -n TODO'), false);
+t('[R14] everyday: git -C outside, config --get', bash('git -C /c/x config --get user.name'), false);
+t('[R14] everyday: git -C outside, stash list', bash('git -C /c/x stash list'), false);
+t('[R14] everyday: a commit in the project', bash('git add -A && git commit -m "Fix the header"'), false);
+t('[R14] everyday: git diff --output inside', bash('git diff --output=.tmp/x.patch'), false);
+t('[R14] everyday: a commit in a repository inside the project', bash('git -C .tmp/repo commit -m x'), false);
+t('[R14] everyday: the install reads the fetched kit', bash('git -C .tmp/projectos-kit rev-parse --short HEAD'), false);
+
+console.log("path-guard: sed's -e value is its script (T138)");
+t("[R14] the install's placeholder step", bash("sed -i -e 's/{{OWNER_NAME}}/Rotem/g' CLAUDE.md"), false);
+t('[R14] two -e with braces', bash("sed -i -e 's/{{A}}/x/' -e 's/{{B}}/y/' CLAUDE.md"), false);
+t('[R14] --expression= with braces', bash("sed -i --expression='s/{{A}}/x/' CLAUDE.md"), false);
+t('[R14] --expression with braces', bash("sed -i --expression 's/{{A}}/x/' CLAUDE.md"), false);
+t('[R14] -e glued to its script', bash("sed -i -e's/{{A}}/x/' CLAUDE.md"), false);
+t('[R14] -f names a script file', bash('sed -i -f .tmp/edit.sed CLAUDE.md'), false);
+t('[R14] perl -pi -e with braces', bash("perl -pi -e 's/{{A}}/x/' CLAUDE.md"), false);
+t('[R14] PowerShell: the placeholder step', ps("sed -i -e 's/{{OWNER_NAME}}/Rotem/g' CLAUDE.md"), false);
+t('[R14] sed -i -e on a file outside', bash("sed -i -e 's/{{A}}/x/' /c/Users/User/x.md"), true);
+t('[R14] two -e on a file outside', bash("sed -i -e 's/a/b/' -e 's/c/d/' /c/Users/User/.bashrc"), true);
+t('[R14] -ie keeps a backup and edits the file outside', bash("sed -ie 's/a/b/' /c/Users/User/.bashrc"), true);
+t('[R14] -f with a file outside', bash('sed -i -f .tmp/edit.sed /c/Users/User/.bashrc'), true);
+
+console.log('path-guard: more ways a script reaches an interpreter (T1)');
+t('[R14] node -pe writing outside', bash(`node -pe "require('fs').writeFileSync('${U}/x.txt','a')"`), true);
+t('[R14] python -Bc writing outside', bash(`python -Bc "open('${U}/x.txt','w').write('a')"`), true);
+t('[R14] node --eval= writing outside', bash(`node --eval="require('fs').writeFileSync('${U}/x.txt','a')"`), true);
+t('[R14] node --eval= over several lines', bash(`node --eval="\nrequire('fs').writeFileSync.call(null, '${U}/x.txt', 'a')\n"`), true);
+t('[R14] python -c glued to its script', bash(`python -c"import shutil; shutil.rmtree('${U}/d')"`), true);
+t('[R14] perl -e glued to its script', bash(`perl -e'unlink "${U}/x"'`), true);
+t('[R14] perl -lne writing outside', bash(`perl -lne 'unlink "${U}/x"' a.txt`), true);
+t('[R14] echo piped into node', bash(`echo "require('fs').writeFileSync('${U}/x.txt','a')" | node`), true);
+t('[R14] PowerShell: a string piped into node', ps(`"require('fs').writeFileSync('${U}/x.txt','a')" | node`), true);
+t('[R14] printf piped into python -', bash(`printf '%s' "import shutil; shutil.rmtree('${U}/d')" | python -`), true);
+t('[R14] a cat here-document piped into node', bash(`cat <<'EOF' | node\nrequire('fs').writeFileSync('${U}/x.txt','a')\nEOF`), true);
+t('[R14] echo piped into bash', bash('echo "cp a /c/x" | bash'), true);
+t('[R14] PowerShell: a string piped into iex', ps('"Remove-Item C:\\x" | iex'), true);
+t('[R14] a path from $HOME after the script', bash(`node -e "require('fs').writeFileSync(process.argv[1],'a')" "$HOME/x.txt"`), true);
+t('[R14] PowerShell: a path from $env:USERPROFILE after the script', ps(`node -e "require('fs').writeFileSync(process.argv[1],'a')" "$env:USERPROFILE\\x.txt"`), true);
+t('[R14] a python here-document with rmtree imported by name', bash(`python - <<'EOF'\nfrom shutil import rmtree\nrmtree('${U}/d')\nEOF`), true);
+t('[R14] a subprocess module under another name', bash(`python -c "import subprocess as sp; sp.run('echo a > ${U}/x.txt', shell=True)"`), true);
+t('[R14] run imported from subprocess', bash(`python -c "from subprocess import run; run('echo a > ${U}/x.txt', shell=True)"`), true);
+t('[R14] a climb out of os.getcwd() through os.path.join', bash(`python -c "import os; open(os.path.join(os.getcwd(),'..','x.txt'),'w').write('a')"`), true);
+t('[R14] a climb out of process.cwd() through an aliased path.join', bash(`node -e "const p=require('path'); require('fs').writeFileSync(p.join(process.cwd(),'..','x.txt'),'a')"`), true);
+t('[R14] Path.cwd().parent', bash(`python -c "from pathlib import Path; (Path.cwd().parent/'x.txt').write_text('a')"`), true);
+t('[R14] a file URL', bash(`node -e "require('fs').writeFileSync(new URL('file:///${U}/x.txt'),'a')"`), true);
+t('[R14] a path joined from a list', bash(`node -e "require('fs').writeFileSync(['C:','Users','User','x.txt'].join('/'),'a')"`), true);
+t('[R14] everyday: node -pe that prints', bash('node -pe "1+1"'), false);
+t('[R14] everyday: python -Bc that prints', bash('python -Bc "print(1)"'), false);
+t('[R14] everyday: perl -lne that prints', bash("perl -lne 'print if /x/' src/a.txt"), false);
+t('[R14] everyday: echo piped into node that prints', bash('echo "console.log(1)" | node'), false);
+t('[R14] everyday: a file piped into node is not read', bash('cat x.js | node'), false);
+t('[R14] everyday: echo piped into a node script', bash('echo hi | node scripts/x.mjs'), false);
+t('[R14] everyday: a path inside after the script', bash(`node -e "require('fs').writeFileSync(process.argv[1],'a')" .tmp/x.txt`), false);
+t('[R14] everyday: a write beside the script in the project', bash(`node -e "require('fs').writeFileSync(require('path').join(process.cwd(), '.tmp', 'x.txt'),'a')"`), false);
+t('[R14] everyday: a multi-line script that reads inside', bash("node -e \"\nconst fs = require('fs');\nconsole.log(fs.readdirSync('src').length);\n\""), false);
+t('[R14] everyday: a multi-line script that reads outside only', bash(`node -e "\nconst t = require('fs').readFileSync('${U}/a.txt', 'utf8');\nconsole.log(t.length);\n"`), false);
+t('[R14] POSIX: git -C another folder, commit', { ...bash('git -C /srv/other commit -m x'), cwd: '/home/u/app' }, true);
+t('[R14] POSIX: a rename loop in the project', { ...bash('for f in *.jpeg; do mv "$f" "${f%.jpeg}.jpg"; done'), cwd: '/home/u/app' }, false);
+
+// [R15] Round two of the kit fix list, 2026-10-02. R8: a quoted text over
+// several lines is one word when its program takes it as data (a commit or
+// tag message, gh's title and body, what echo, printf, Write-Host or
+// Write-Output prints, a -Value or -Message), the way the delete guard reads
+// it. Cut at newlines, a message line that began with a command name and
+// named a folder outside had the whole command refused. The same text given
+// to eval, bash -c or iex is still read line by line, and so is printed text
+// a later pipe can carry into a shell, or text kept in a variable.
+console.log('path-guard: a multi-line message is one word of text (round two, R8)');
+const MSG1 = 'Plugin: hooks read the new folder\n\nInstall now copies the plugin into ~/.claude/skills';
+const MSG2 = 'Guard docs\n\nTouch ~/.claude/settings.json only by hand';
+const MSG3 = 'Summary\n\nmkdir ~/.claude/x is refused now';
+const MSG4 = 'Steps:\ncp the kit to ~/.claude/skills/projectos';
+const MSG5 = 'Guards\n\nNew-Item C:\\Users\\User\\x is refused now';
+const MSG6 = 'Steps:\nCopy-Item the kit to C:\\Users\\User\\.claude';
+t('[R15] a commit message whose line starts with install', bash(`git commit -m "${MSG1}"`), false);
+t('[R15] a commit message whose line starts with touch', bash(`git commit -m "${MSG2}"`), false);
+t('[R15] a gh body whose line starts with mkdir', bash(`gh pr create --title "Guards" --body "${MSG3}"`), false);
+t('[R15] echo of steps whose line starts with cp', bash(`echo "${MSG4}"`), false);
+t('[R15] PowerShell: a commit message whose line starts with New-Item', ps(`git commit -m "${MSG5}"`), false);
+t('[R15] PowerShell: Write-Host of steps whose line starts with Copy-Item', ps(`Write-Host "${MSG6}"`), false);
+t('[R15] git add . first, then the commit', bash(`git add . && git commit -m "${MSG1}"`), false);
+t('[R15] a single-quoted message with a quoted apostrophe', bash("git commit -m 'Fix it\n\nIt'\"'\"'s done\nmkdir /c/x is text'"), false);
+t('[R15] git commit -am', bash('git commit -am "Release\n\ncp a /c/Users/User/x"'), false);
+t('[R15] git commit --message=', bash('git commit --message="Release\n\ncp a /c/Users/User/x"'), false);
+t('[R15] git -C . commit -m', bash('git -C . commit -m "Release\n\ncp a /c/Users/User/x"'), false);
+t('[R15] git tag -m', bash('git tag -a v1 -m "Release\n\ncp a /c/Users/User/x"'), false);
+t('[R15] gh --title= and --body=', bash(`gh pr create --title="Guards" --body="${MSG3}"`), false);
+t('[R15] gh -t and -b', bash(`gh issue create -t "Guards" -b "${MSG3}"`), false);
+t('[R15] printf of text', bash('printf "a\ncp x /c/y\n"'), false);
+t('[R15] PowerShell: Write-Output of text', ps(`Write-Output "${MSG6}"`), false);
+t('[R15] PowerShell: a -Value', ps('Set-Content -Path .tmp\\a.md -Value "one\nNew-Item C:\\x"'), false);
+t('[R15] PowerShell: a -Message', ps('Write-Warning -Message "one\nNew-Item C:\\x"'), false);
+t('[R15] PowerShell: a -Value: glued', ps('Add-Content .tmp\\a.md -Value:"one\nNew-Item C:\\x"'), false);
+// The same text where it is run: refused, as before.
+t('[R15] the commit text run by eval', bash(`eval "${MSG1}"`), true);
+t('[R15] the commit text run by bash -c', bash(`bash -c "${MSG2}"`), true);
+t('[R15] the gh text run by bash -c', bash(`bash -c "${MSG3}"`), true);
+t('[R15] the echo text run by eval', bash(`eval echo "${MSG4}"`), true);
+t('[R15] the echo text piped into bash', bash(`echo "${MSG4}" | bash`), true);
+t('[R15] PowerShell: the commit text run by iex', ps(`iex "${MSG5}"`), true);
+t('[R15] PowerShell: the Write-Output text piped into iex', ps(`Write-Output "${MSG6}" | iex`), true);
+t('[R15] PowerShell: the text run by Invoke-Expression', ps(`Invoke-Expression "${MSG6}"`), true);
+// Text the line reading still catches being run later, and what the joined word does not hide.
+t('[R15] echo text piped on through tee into bash', bash('echo "a\ncp a /c/Users/User/x" | tee x.sh | bash'), true);
+t('[R15] echo text in a group piped into bash', bash('{ echo "a\ncp a /c/Users/User/x"; } | bash'), true);
+t('[R15] echo text sent into bash through >( )', bash('echo "a\ncp a /c/Users/User/x" > >(bash)'), true);
+t('[R15] echo text after the output went into bash', bash('exec > >(bash)\necho "a\ncp a /c/Users/User/x"'), true);
+t('[R15] printf -v keeps the text to run', bash('printf -v m "a\ncp a /c/Users/User/x"; eval "$m"'), true);
+t('[R15] PowerShell: Write-Output kept in a variable, then run', ps('$m = Write-Output "a\nRemove-Item C:\\Users\\User\\x"; iex $m'), true);
+t('[R15] a quote mark in a comment is no message', bash("echo start #'\ntouch /c/Users/User/x\necho end #'"), true);
+t('[R15] PowerShell: a quote mark in a block comment is no message', ps("Write-Host x <# it's #>\nRemove-Item C:\\Users\\User\\x\nWrite-Host done # it's"), true);
+t('[R15] echo text kept by a substitution, then run', bash('x=$( echo "a\ncp a /c/Users/User/x"); eval "$x"'), true);
+t('[R15] a substitution inside the message still runs', bash('echo "Steps:\n$(cp a /c/Users/User/x)"'), true);
+t('[R15] backticks inside a double-quoted message still run', bash('git commit -m "Steps:\n`cp a /c/Users/User/x`"'), true);
+t('[R15] a redirection after the message', bash('echo "a\nb" > /c/Users/User/x.txt'), true);
+t('[R15] a copy after the commit', bash('git commit -m "a\nb" && cp a /c/Users/User/x'), true);
+
+// [R15] R9: over several lines, only a path that names a folder on this
+// computer counts as naming outside (FS_ABSOLUTE), so a check over the built
+// pages that holds a web route passes when it reads and writes only inside.
+// A one-line script keeps its rule (`[R11] node -e with web routes in it`).
+console.log('path-guard: a web route is no folder in a multi-line script (round two, R9)');
+const ROUTE_READ = "node -e \"\nconst fs=require('fs');\nconst html=fs.readFileSync('dist/index.html','utf8');\nconsole.log(html.includes('/projects/'));\n\"";
+t('[R15] a multi-line route check over dist/', bash(ROUTE_READ), false);
+t('[R15] the same check, writing its answer into .tmp', bash("node -e \"\nconst fs=require('fs');\nconst html=fs.readFileSync('dist/index.html','utf8');\nfs.writeFileSync('.tmp/r.txt', String(html.includes('/projects/')));\n\""), false);
+t('[R15] PowerShell: a multi-line route check over dist/', ps("node -e '\nconst fs = require(\"fs\");\nconsole.log(fs.readFileSync(\"dist/about/index.html\", \"utf8\").includes(\"/about\"));\n'"), false);
+t('[R15] a python route check over the sitemap', bash("python -c \"\nxml = open('dist/sitemap-0.xml', encoding='utf-8').read()\nprint(xml.count('/articles/'))\n\""), false);
+t('[R15] POSIX: a multi-line route check', { ...bash(ROUTE_READ), cwd: '/home/u/app' }, false);
+t('[R15] a multi-line write to a Git Bash drive path by another spelling', bash("node -e \"\nconst fs=require('fs');\nfs.writeFileSync.call(null, '/c/Users/User/x.txt', 'a');\n\""), true);
+t('[R15] a multi-line write to a drive path by another spelling', bash(`node -e "\nconst fs=require('fs');\nReflect.apply(fs.writeFileSync, null, ['${U}/x.txt', 'a']);\n"`), true);
+t('[R15] a multi-line route check that also writes to the home folder', bash(`node -e "\nconst fs=require('fs');\nconst ok=fs.readFileSync('dist/index.html','utf8').includes('/projects/');\nfs.writeFileSync.call(null, '${U}/r.txt', String(ok));\n"`), true);
+t('[R15] a multi-line write to a path built from OneDrive, ending in a slash literal', bash("node -e \"\nrequire('fs').writeFileSync(process.env.OneDrive + '/x.txt', 'a');\n\""), true);
+t('[R15] a multi-line write to a path built from HOMEDRIVE and HOMEPATH', ps("node -e \"\nrequire('fs').writeFileSync(process.env.HOMEDRIVE + process.env.HOMEPATH + '/x.txt', 'a');\n\""), true);
+t('[R15] a multi-line python write to a path built from an environment value', bash("python -c \"\nimport os\nopen(os.environ['OneDrive'] + '/x.txt', 'w').write('a')\n\""), true);
+t('[R15] a multi-line read of a file outside that looks for a web route in it', bash(`node -e "\nconst t=require('fs').readFileSync('${U}/a.html','utf8');\nconsole.log(t.includes('/projects/'));\n"`), false);
+t('[R15] a multi-line route check writing to a .tmp path it builds',bash("node -e \"\nconst fs=require('fs'), path=require('path');\nconst ok=fs.readFileSync('dist/index.html','utf8').includes('/projects/');\nfs.writeFileSync(path.join('.tmp', 'routes.txt'), String(ok));\n\""), false);
+t('[R15] POSIX: a multi-line write to /srv by another spelling',{ ...bash("node -e \"\nrequire('fs').writeFileSync.call(null, '/srv/other/x.txt', 'a');\n\""), cwd: '/home/u/app' }, true);
 
 console.log('path-guard: the Monitor tool runs shell commands too');
 t('[R] Monitor writing outside', mon(`echo hi > ${OUT}/x.txt`), true);

@@ -51,7 +51,7 @@ Each one ships with its structure already in place and a worked example at the e
 |---|---|
 | `project-os/Hooks.md` | What the hooks do, how they get wired, and how to check they work. |
 | `project-os/Hooks-settings.json` | The ready setup: the reminder text and the two guard lines. |
-| `project-os/Install-project-hooks.mjs` | Writes that setup into the project's own settings, on a computer without the plugin below. |
+| `project-os/Install-project-hooks.mjs` | Writes that setup into the project's own settings, on a computer without the plugin below, or one whose plugin carries older guards than the project. |
 | `project-os/guards/Path-guard.mjs` | The folder guard: refuses the writes it recognises outside the project. |
 | `project-os/guards/Destructive-guard.mjs` | The destructive-command guard: refuses the one-way commands it recognises. |
 
@@ -106,51 +106,74 @@ environment refuses that write.
 ## Install
 
 Under ten minutes of your time. The assistant's part is longer, mostly
-reading, and it runs while you do something else.
+reading. What you will see while it runs:
+
+- **Approval prompts.** In Claude Code's usual permission mode it asks before
+  most commands and every file change, so an install left alone waits at the
+  first one. The check that proves the guards are live is a harmless `echo`.
+- **Its questions, near the start, in one sitting.** Each one marks the
+  option it recommends.
+- **A short set of decisions after its report**, for what is waiting on you.
 
 The complete install law lives in `Installation.md`: the merge rules for an
 existing `CLAUDE.md`, the placeholders, the setup steps, and the report the
 install must end with, problems and clashes included.
 
-1. Copy `CLAUDE.md`, `Installation.md` and the `project-os/` folder into the
-   root of your project.
-   Already have a `CLAUDE.md`? Keep yours: bring the kit's in as `CLAUDE-kit.md`
-   beside it, and the install has your assistant merge the two.
-   Already have a `project-os/` folder from an earlier install? Never copy over
-   it: that replaces your History and Decisions with empty templates. To bring
-   it up to a newer kit, say `Go update kit` instead: your assistant fetches the
-   new kit, shows you what would change, and applies it on your word, leaving
-   your records and your own edits alone. A project installed before that phrase
+1. Open Claude Code in your project's own folder and paste the install prompt
+   below. It carries the kit's link: your assistant fetches the kit into
+   `.tmp/projectos-kit` inside your project, never into the project itself or
+   beside it, copies `CLAUDE.md`, `Installation.md` and the `project-os/`
+   folder in, writes down which kit version they came from, and deletes the
+   fetch.
+   Already have a `CLAUDE.md`? It stays: the kit's comes in beside it as
+   `CLAUDE-kit.md`, and the install merges the two, your rules winning every
+   clash until you rule otherwise.
+   Already have a `project-os/` folder from an earlier install? To bring it up
+   to a newer kit, say `Go update kit` instead: your assistant fetches the new
+   kit, shows you what would change, and applies it on your word, leaving your
+   records and your own edits alone. A project installed before that phrase
    existed does not know it yet: give your assistant this link with it, and it
-   follows the shortcut as the kit's `CLAUDE.md` writes it.
-2. Paste the install prompt below into your assistant. Or skip step 1, and
-   just tell it to install ProjectOS and give it this link: it reads
-   `Installation.md` either way, and brings the files in itself when they are
-   not there yet (its step 0). That fetch goes into `.tmp/projectos-kit`
-   inside your project, never into the project itself or beside it, and is
-   deleted once the files are copied.
-3. Answer its questions. It asks once, in one batch.
-4. Read its closing report: what was set, what broke, and where your existing
-   rules clash with the kit's process.
-5. Say `Go commit`, and your assistant commits the result.
-6. Start a new session. With the once-per-computer step done, the hooks switch
-   on as soon as the kit is in the folder. Without it the install switches them on
-   for you, and they are read when a session opens, so the next one is where
-   they take effect. See `project-os/Hooks.md` for what they do and how to
-   check they worked.
+   follows the shortcut as the kit's `CLAUDE.md` writes it. Either way the
+   update finishes with the steps of the newest kit's `CLAUDE.md`, whatever
+   version your project started from.
+2. Approve what Claude Code asks, and answer the questions.
+3. Read its closing report: what was set, what broke, and where your existing
+   rules clash with the kit's process. Then answer the decisions after it.
+4. Start a new session, in the project's own folder, never in a folder above
+   it: the rules and guards switch on only there. With the once-per-computer
+   step done, the hooks switch on as soon as the kit is in the folder. Without
+   it the install switches them on for you, and they are read when a session
+   opens, so the next one is where they take effect. See
+   `project-os/Hooks.md` for what they do and how to check they worked.
+5. In that new session, say `Go commit`, and your assistant commits the
+   result with the rules and guards on. In a cloud session, say it before
+   step 4 instead: a new cloud session starts without this one's uncommitted
+   files.
+
+**Copying the files in by hand** works too, as a fallback: put `CLAUDE.md`
+(as `CLAUDE-kit.md` when you already have one), `Installation.md` and the
+`project-os/` folder at your project's root, never over an existing
+`project-os/`, which would replace your History and Decisions with empty
+templates. Then paste the same prompt. It costs one thing: the install cannot
+write down which kit version the files came from. The first `Go update kit`
+then has to work it out by matching the kit's scripts in your project against
+the kit's history, and if one of them was changed in between it cannot: every
+file that differs from the kit is then compared by hand.
 
 ## The install prompt
 
-Copy this whole block and paste it into your assistant, in your project.
+Copy this whole block and paste it into your assistant, in your project's own
+folder.
 
 ```
-Set up ProjectOS: the files I just copied into this project.
+Install ProjectOS from https://github.com/rotem914/ProjectOS
 
-Read Installation.md at the project root and follow it exactly, every step,
-in order. Do not change anything before its reading step is complete.
+Read Installation.md and follow it exactly, every step, in order. Do not
+change anything before its reading step is complete.
 
-If the files are not here yet, fetch the kit into .tmp/projectos-kit first,
-never into the project root or beside it, and read Installation.md there.
+If the files are not in this project yet, fetch the kit into
+.tmp/projectos-kit first, never into the project root or beside it, and read
+Installation.md there.
 
 The install ends with the report Installation.md defines: what was set, every
 problem you hit, every clash between this project's existing rules and the

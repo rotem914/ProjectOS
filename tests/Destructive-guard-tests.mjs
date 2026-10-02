@@ -21,10 +21,14 @@
 // scripts, function bodies, compact PowerShell blocks, bash brace lists, a
 // `)` glued to a delete target, PowerShell backslashes, continued lines,
 // PowerShell common parameters and comma lists, Monitor read as bash, git rm
-// and worktree remove, wrapped shells and git options with a value, and a
-// stale Path-guard.mjs beside the guard. That last group is the
-// one part that writes: a scratch folder inside tests/, removed at the end.
-import { execFileSync } from 'node:child_process';
+// and worktree remove, wrapped shells and git options with a value, text
+// blocks (here-documents, here-strings, block comments), interpreter switches
+// and scripts fed through a pipe, wildcard and piped deletes, the install's
+// live probe, and a stale Path-guard.mjs beside the guard. Three groups read
+// the disk, and they are the parts that write: a scratch folder inside tests/
+// holding a git repository and a folder with links, and a copy of the guard
+// beside a stub Path-guard.mjs, all removed at the end.
+import { execFileSync, spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -33,17 +37,22 @@ import { fileURLToPath } from 'node:url';
 
 const SCRIPT = fileURLToPath(new URL('../project-os/guards/Destructive-guard.mjs', import.meta.url));
 
+// The session folder a hook may inherit is left out, so a case without a cwd
+// reads the folder the suite runs from, wherever it is run.
+const ENV = { ...process.env };
+delete ENV.CLAUDE_PROJECT_DIR;
+
 function run(input, script = SCRIPT) {
   try {
-    execFileSync(process.execPath, [script], { input, stdio: ['pipe', 'pipe', 'pipe'] });
+    execFileSync(process.execPath, [script], { input, stdio: ['pipe', 'pipe', 'pipe'], env: ENV });
     return { status: 0, stderr: '' };
   } catch (e) {
     return { status: e.status, stderr: String(e.stderr || '') };
   }
 }
 
-function payload(command, tool) {
-  return JSON.stringify({ tool_name: tool, tool_input: { command } });
+function payload(command, tool, cwd) {
+  return JSON.stringify(cwd ? { tool_name: tool, tool_input: { command }, cwd } : { tool_name: tool, tool_input: { command } });
 }
 
 const TMP = os.tmpdir().replace(/\\/g, '/');
@@ -566,6 +575,152 @@ const cases = [
   ['Bash', "python3 - <<'EOF'\nprint('rm -rf src')\nEOF", 0],
   ['Bash', "python3 tool.py <<'EOF'\nshutil.rmtree('src')\nEOF", 0],
   ['Bash', "cat <<'EOF'\nshutil.rmtree('src')\nEOF", 0],
+
+  // --- 23. text blocks are text (kit review 2026-10-02, T9) ---
+  // An apostrophe or a stray quote inside a here-string, a here-document or a
+  // block comment used to open a quote that hid every command after the block.
+  ['PowerShell', "@'\nIt's a note\n'@ | Set-Content .tmp\\note.md\nWrite-Host saved; Remove-Item -Recurse -Force C:\\Users\\User\\Documents", 2, 'non-disposable'],
+  ['PowerShell', "@'\nIts a note\n'@ | Set-Content .tmp\\note.md\nWrite-Host saved; Remove-Item -Recurse -Force C:\\Users\\User\\Documents", 2, 'non-disposable'],
+  ['PowerShell', '$t = @"\nsay "hi\n"@\nGet-Date; Remove-Item -Recurse -Force src', 2, 'non-disposable'],
+  ['PowerShell', "$t = @'\ndon't\n'@; git reset --hard", 2, 'reset'],
+  ['Bash', 'git commit -m "$(cat <<\'EOF\'\nsay "hi\nEOF\n)"\ntrue; rm -rf src', 2, 'non-disposable'],
+  ['Bash', "cat > notes.md <<'EOF'\nIt's a note\nEOF\nrm -rf src", 2, 'non-disposable'],
+  ['Bash', "cat <<-EOF\n\tIt's indented\n\tEOF\ngit reset --hard", 2, 'reset'],
+  ['Bash', "cat <<A <<B\nIt's\nA\nmore\nB\nrm -rf src", 2, 'non-disposable'],
+  ['PowerShell', "<# don't\nworry #> Remove-Item -Recurse -Force src", 2, 'non-disposable'],
+  // A delimiter is read with bash's quote removal, and a here-document that
+  // never closes is read line by line, so a misread end can hide nothing.
+  ['Bash', 'cat <<E"O"F\nIt\'s\nEOF\nrm -rf src', 2, 'non-disposable'],
+  ['Bash', 'cat <<EOF\nnever closed\nrm -rf src', 2, 'non-disposable'],
+  ['Bash', 'echo $((1<<2)); rm -rf src', 2, 'non-disposable'], // a shift, not a here-document
+  // ...and the text itself is never read as commands.
+  ['Bash', 'git commit -m "$(cat <<\'EOF\'\nFix: rm -rf the old dist logic\nInstall step; It\'s done\n\nCo-Authored-By: x\nEOF\n)"', 0],
+  ['Bash', "cat > notes.md <<'EOF'\nrm -rf src\ngit reset --hard\nEOF", 0],
+  ['Bash', 'gh pr create --title x --body "$(cat <<\'EOF\'\n## Summary\n- rm -rf the dist logic\n- It\'s fine\nEOF\n)"', 0],
+  ['Bash', "git commit -F - <<'EOF'\nrm -rf src\nEOF", 0],
+  ['PowerShell', "@'\nRemove-Item src -Recurse -Force\nIt's a note\n'@ | Set-Content notes.md", 0],
+  ['PowerShell', "$msg = @'\nFix: Remove-Item -Recurse -Force src was wrong\nIt's done\n'@\ngit commit -m $msg", 0],
+  ['PowerShell', "<# don't worry #> Write-Host ok", 0],
+  ['Bash', 'echo $((1<<2))', 0],
+  // A text block fed to a shell or an interpreter is its script, and is read.
+  ['Bash', "cat <<'EOF' | bash\nrm -rf src\nEOF", 2, 'non-disposable'],
+  ['Bash', 'x="$(bash <<\'EOF\'\nrm -rf src\nEOF\n)"', 2, 'non-disposable'],
+  ['Bash', 'bash -c "$(cat <<\'EOF\'\nrm -rf src\nEOF\n)"', 2, 'non-disposable'],
+  ['Bash', "s=$(cat <<'EOF'\nrm -rf src\nEOF\n)\neval \"$s\"", 2, 'non-disposable'],
+  ['Bash', "cat > .tmp/x.sh <<'EOF'\nrm -rf src\nEOF\nbash .tmp/x.sh", 2, 'non-disposable'],
+  ['Bash', "cat > .tmp/x.sh <<'EOF'\ngit reset --hard\nEOF\n./.tmp/x.sh", 2, 'reset'],
+  ['PowerShell', "@'\nRemove-Item src -Recurse -Force\n'@ | Set-Content x.ps1\n.\\x.ps1", 2, 'non-disposable'],
+  ['PowerShell', "Set-Content -Path x.ps1 -Value 'Remove-Item src -Recurse -Force'; powershell -File x.ps1", 2, 'non-disposable'],
+  ['PowerShell', "$s = @'\nRemove-Item src -Recurse -Force\n'@\niex $s", 2, 'non-disposable'],
+  ['PowerShell', "$s = @'\ngit reset --hard\n'@\n$s | powershell -Command -", 2, 'reset'],
+  ['PowerShell', "@'\ngit reset --hard\n'@ | Invoke-Expression", 2, 'reset'],
+  ['PowerShell', "node -e @'\nrequire('fs').rmSync('src', { recursive: true })\n'@", 2, 'rmSync'],
+  ['PowerShell', "@'\nrequire('fs').rmSync('src', { recursive: true })\n'@ | node", 2, 'rmSync'],
+  ['Bash', "cat > .tmp/x.sh <<'EOF'\nrm -rf node_modules\nEOF\nbash .tmp/x.sh", 0],
+  ['PowerShell', "$s = @'\nGet-ChildItem src\n'@\niex $s", 0],
+
+  // --- 24. interpreter switches and scripts fed in (kit review 2026-10-02, T1) ---
+  // The guard keeps its own list of switches: joined, glued and `=` forms
+  // carried a script that was never read.
+  ['Bash', `node -pe "require('fs').rmSync('src',{recursive:true})"`, 2, 'rmSync'],
+  ['Bash', `node -p "require('fs').rmSync('src',{recursive:true})"`, 2, 'rmSync'],
+  ['Bash', `node --eval="require('fs').rmSync('src',{recursive:true})"`, 2, 'rmSync'],
+  ['Bash', `node --input-type=module -e "import fs from 'fs'; fs.rmSync('src',{recursive:true})"`, 2, 'rmSync'],
+  ['Bash', `python -Bc "import shutil; shutil.rmtree('src')"`, 2, 'rmtree'],
+  ['Bash', `python -uBc "import shutil; shutil.rmtree('src')"`, 2, 'rmtree'],
+  ['Bash', `python -c"import shutil; shutil.rmtree('src')"`, 2, 'rmtree'],
+  ['Bash', `python3 -X utf8 -c "import shutil; shutil.rmtree('src')"`, 2, 'rmtree'],
+  ['PowerShell', `py -3 -Bc "import shutil; shutil.rmtree('src')"`, 2, 'rmtree'],
+  ['Bash', `perl -le 'use File::Path; rmtree("src")'`, 2, 'rmtree'],
+  ['Bash', `perl -MFile::Path -e 'rmtree("src")'`, 2, 'rmtree'],
+  ['Bash', `ruby -rfileutils -e "FileUtils.rm_rf('src')"`, 2, 'rm_rf'],
+  ['Bash', `echo "import shutil; shutil.rmtree('src')" | python3`, 2, 'rmtree'],
+  ['Bash', `echo "require('fs').rmSync('src',{recursive:true})" | node -`, 2, 'rmSync'],
+  ['Bash', `python3 - <<< "import shutil; shutil.rmtree('src')"`, 2, 'rmtree'],
+  ['Bash', "python3 -X utf8 - <<'EOF'\nimport shutil\nshutil.rmtree('src')\nEOF", 2, 'rmtree'],
+  ['Bash', 'echo "rm -rf src" | bash', 2, 'non-disposable'],
+  ['Bash', "printf 'rm -rf src\\n' | sh", 2, 'non-disposable'],
+  ['Bash', 'bash <<< "git reset --hard"', 2, 'reset'],
+  ['PowerShell', '"git reset --hard" | powershell -NoProfile -Command -', 2, 'reset'],
+  ['PowerShell', '"Remove-Item src -Recurse -Force" | pwsh -NoProfile -ExecutionPolicy Bypass', 2, 'non-disposable'],
+  ['Bash', 'node -pe "1+1"', 0],
+  ['Bash', 'python -Bc "print(1)"', 0],
+  ['Bash', 'python -m pip install requests', 0],
+  ['Bash', `python -Bc "import shutil; shutil.rmtree('dist')"`, 0],
+  ['Bash', 'echo "rm -rf node_modules" | bash', 0],
+  ['Bash', `echo "shutil.rmtree('src')" | python3 tool.py`, 0], // a script file: the pipe is its data
+  ['Bash', 'echo "rm -rf src" | node build.mjs', 0],
+  ['Bash', "cat data.json | node -e \"let s='';process.stdin.on('data',d=>s+=d)\"", 0],
+  ['PowerShell', '"rm -rf src" | Set-Content notes.md', 0],
+
+  // --- 25. git checkout that names files or folders (kit review 2026-10-02, T27) ---
+  // The five spellings that discarded edits unseen; more in the disk group below.
+  ['Bash', 'git checkout ./', 2, 'checkout'],
+  ['Bash', 'git checkout :/', 2, 'checkout'],
+  ['Bash', 'git checkout HEAD src/a.txt', 2, 'checkout'],
+  ['Bash', 'git checkout src/', 2, 'checkout'],
+  ['Bash', 'git checkout --pathspec-from-file=list.txt', 2, 'checkout'],
+  ['PowerShell', 'git checkout main src\\a.txt', 2, 'checkout'],
+  ['Bash', "git checkout '*.md'", 2, 'checkout'],
+  ['Bash', 'git checkout .github/workflows', 2, 'checkout'],
+  ['Bash', 'git checkout --ours a b', 2, 'checkout'],
+  ['Bash', 'git checkout feature/login', 0], // no such path: a branch
+  ['Bash', 'git checkout -', 0],
+  ['Bash', 'git checkout HEAD~1', 0],
+  ['Bash', 'git checkout main@{1}', 0],
+  ['Bash', 'git checkout -b feature/x origin/main', 0],
+  ['Bash', 'git checkout -B main origin/main', 0],
+  ['Bash', 'git checkout -t origin/feature', 0],
+  ['Bash', 'git checkout --track origin/feature/login', 0],
+  ['Bash', 'git checkout --detach v1.2.3', 0],
+  ['Bash', 'git checkout --orphan gh-pages', 0],
+  ['Bash', 'git checkout $(git rev-parse HEAD~1)', 0], // one word once the shell runs it
+  ['Bash', 'git checkout "$branch"', 0], // built at runtime: cannot be read, passes as before
+  ['Bash', 'git checkout ./$f', 2, 'checkout'],
+
+  // --- 26. many files at once, flags or not (kit review 2026-10-02, T36) ---
+  // A wildcard, a PowerShell pipeline ending in a delete, and xargs rm are
+  // judged like a recursive delete: allowed only inside throwaway folders.
+  ['Bash', 'rm src/content/*.yaml', 2, 'wildcard'],
+  ['Bash', 'rm *.log', 2, 'wildcard'],
+  ['PowerShell', 'Remove-Item src\\content\\*.yaml', 2, 'wildcard'],
+  ['PowerShell', "Remove-Item 'src\\content\\*.yaml'", 2, 'wildcard'], // PowerShell expands it quoted too
+  ['PowerShell', 'del src\\*.yaml', 2, 'wildcard'],
+  ['Monitor', 'cmd /c del src\\*.yaml', 2, 'wildcard'],
+  ['PowerShell', 'Get-ChildItem src -Recurse -File | Remove-Item', 2, 'pipe'],
+  ['PowerShell', 'Get-ChildItem src | Where-Object { $_.Length -gt 0 } | Remove-Item', 2, 'pipe'],
+  ['PowerShell', 'Get-Item src | Remove-Item -Recurse -Force', 2, 'non-disposable'],
+  ['PowerShell', 'Get-ChildItem *.log | Remove-Item', 2, 'pipe'],
+  ['PowerShell', '$old | Remove-Item', 2, 'cannot be read'],
+  ['Bash', 'find src -type f -name "*.yaml" | xargs rm', 2, 'xargs'],
+  ['Bash', 'find src -type f | grep -v keep | xargs rm', 2, 'xargs'],
+  ['Bash', 'find . -name "*.log" | xargs rm', 2, 'xargs'],
+  ['Bash', 'xargs rm < list.txt', 2, 'cannot be read'],
+  ['Bash', 'git ls-files -z | xargs -0 rm', 2, 'cannot be read'],
+  ['Bash', 'echo src | xargs rm -rf node_modules', 2, 'non-disposable'],
+  ['Bash', 'echo ../src | xargs -I{} rm -rf node_modules/{}', 2, 'non-disposable'],
+  ['Bash', 'rm .tmp/*.log', 0],
+  ['Bash', 'rm *.tmp', 0],
+  ['Bash', 'rm -f .tmp/*', 0],
+  ['PowerShell', 'Remove-Item .tmp\\*', 0],
+  ['PowerShell', 'Get-ChildItem .tmp -Filter *.log | Remove-Item', 0],
+  ['PowerShell', 'Get-ChildItem .tmp | Where-Object { $_.Length -gt 0 } | Remove-Item', 0],
+  ['PowerShell', "'node_modules','dist' | Remove-Item", 0],
+  ['PowerShell', 'Get-ChildItem dist -Recurse -File | Remove-Item', 0],
+  ['Bash', "find node_modules -name '*.map' | xargs rm", 0],
+  ['Bash', 'find dist -type f | xargs rm', 0],
+  ['Bash', "find node_modules -name '*.map' | xargs -I{} rm {}", 0],
+  ['Bash', 'echo node_modules dist | xargs rm', 0],
+  // A recursive or forced delete still needs written targets that are all
+  // disposable, as before: names fed in only ever add a refusal.
+  ['PowerShell', "'node_modules','dist' | Remove-Item -Recurse -Force", 2, 'non-disposable'],
+  ['Bash', 'find dist -type f | xargs rm -f', 2, 'non-disposable'],
+  ['Bash', "rm 'a*b.txt'", 0], // quoted in bash: one file with a star in its name
+  ['PowerShell', "Remove-Item -LiteralPath 'src/[slug].astro'", 0],
+  ['Bash', 'rm src/a.txt', 0],
+  ['PowerShell', 'Remove-Item src\\a.txt', 0],
+  ['PowerShell', 'Get-ChildItem src | Select-Object Name', 0],
+  ['Bash', 'ls src/*.md', 0],
 ];
 
 let failures = 0;
@@ -586,6 +741,136 @@ for (const [tool, command, expected, reasonPart] of cases) {
     failures++;
     console.error(e.message);
   }
+}
+
+// --- the install's live probe (kit review 2026-10-02, T118) ---
+// Refused with exactly this line and nothing else, so the install can read it
+// back; every other echo is untouched.
+const PROBE_LINE = 'ProjectOS live probe: the guards are on in this session. Nothing was run.\n';
+const probeCases = [
+  ['Bash', 'echo projectos-live-probe', 2],
+  ['Bash', 'echo "projectos-live-probe"', 2],
+  ['Bash', 'echo projectos-live-probe && git status', 2],
+  ['Monitor', 'echo projectos-live-probe', 2],
+  ['PowerShell', 'Write-Output projectos-live-probe', 2],
+  ['PowerShell', "Write-Host 'projectos-live-probe'; Get-Date", 2],
+  ['PowerShell', 'echo projectos-live-probe', 2],
+  ['Bash', 'echo projectos-live-probe-1234', 0],
+  ['Bash', 'echo projectos-live-probe extra', 0],
+  ['Bash', 'ls; echo projectos-live-probe', 0],
+  ['Bash', 'printf projectos-live-probe', 0],
+  ['Bash', 'echo hello', 0],
+  ['PowerShell', 'Write-Host done', 0],
+];
+for (const [tool, command, expected] of probeCases) {
+  const { status, stderr } = run(payload(command, tool));
+  ran++;
+  try {
+    assert.equal(status, expected, `probe [${tool}] "${command}" -> exit ${status}, expected ${expected}\n${stderr}`);
+    if (expected === 2) assert.equal(stderr, PROBE_LINE, `probe [${tool}] "${command}" printed: ${stderr}`);
+  } catch (e) {
+    failures++;
+    console.error(e.message);
+  }
+}
+
+// --- the disk: a git repository and a folder with links (kit review 2026-10-02, T27 and T30) ---
+// A word after `git checkout` that names something on disk is a path, and a
+// dotted word git does not know is one too. A link inside node_modules that
+// leads to a real source folder is not throwaway when the delete reaches
+// through it. Built in a scratch folder inside tests/, so no disposable
+// folder name sits above it, and removed at the end.
+const scratchRoot = path.dirname(fileURLToPath(import.meta.url));
+const diskDir = fs.mkdtempSync(path.join(scratchRoot, 'scratch-destructive-disk-'));
+try {
+  const repo = path.join(diskDir, 'repo');
+  fs.mkdirSync(path.join(repo, 'docs'), { recursive: true });
+  fs.mkdirSync(path.join(repo, 'sub'), { recursive: true });
+  fs.writeFileSync(path.join(repo, 'README.md'), 'x');
+  fs.writeFileSync(path.join(repo, 'docs', 'guide'), 'x');
+  fs.writeFileSync(path.join(repo, 'sub', 'a.txt'), 'x');
+  fs.writeFileSync(path.join(repo, 'Makefile'), 'x');
+  const git = (...args) => spawnSync('git', ['-c', 'user.email=t@example.com', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', ...args], { cwd: repo, stdio: 'ignore' });
+  const gitReady = git('init', '-q').status === 0 && git('add', '-A').status === 0 && git('commit', '-q', '-m', 'init').status === 0
+    && git('branch', 'release-1.0').status === 0 && git('tag', 'v1.2.3').status === 0;
+
+  const links = path.join(diskDir, 'links');
+  for (const d of ['packages/lib/sub', 'node_modules/real', 'node_modules/.pnpm/foo/node_modules/foo', 'web/node_modules']) {
+    fs.mkdirSync(path.join(links, d), { recursive: true });
+  }
+  fs.writeFileSync(path.join(links, 'packages/lib/index.js'), 'x');
+  let linksReady = true;
+  try {
+    // 'junction' needs no rights on Windows, and is a plain folder link elsewhere.
+    fs.symlinkSync(path.join(links, 'packages/lib'), path.join(links, 'node_modules/lib'), 'junction');
+    fs.symlinkSync(path.join(links, 'node_modules/.pnpm/foo/node_modules/foo'), path.join(links, 'node_modules/foo'), 'junction');
+    fs.symlinkSync(path.join(links, 'packages/lib'), path.join(links, 'web/node_modules/lib'), 'junction');
+  } catch {
+    linksReady = false;
+  }
+
+  // [tool, command, expected, reason, folder, needs]
+  const diskCases = [
+    ['Bash', 'git checkout docs', 2, 'checkout', repo],
+    ['Bash', 'git checkout Makefile', 2, 'checkout', repo],
+    ['Bash', 'git checkout README.md', 2, 'checkout', repo],
+    ['Bash', 'cd sub && git checkout a.txt', 2, 'checkout', repo],
+    ['PowerShell', 'Set-Location sub; git checkout a.txt', 2, 'checkout', repo],
+    ['Bash', 'git -C sub checkout a.txt', 2, 'checkout', repo],
+    ['Bash', 'git checkout notes.md', 2, 'checkout', repo, 'git'], // not on disk, not a ref: a path
+    ['Bash', 'git checkout v9.9.9', 2, 'checkout', repo, 'git'],
+    ['Bash', 'git checkout v1.2.3', 0, '', repo, 'git'], // a tag
+    ['Bash', 'git checkout release-1.0', 0, '', repo, 'git'],
+    ['Bash', 'git checkout feature/login', 0, '', repo],
+    ['Bash', 'git checkout main', 0, '', repo],
+    ['Bash', 'git switch docs', 0, '', repo],
+    ['Bash', 'rm -rf node_modules/lib/', 2, 'link', links, 'links'],
+    ['Bash', 'rm -rf node_modules/lib/*', 2, 'link', links, 'links'],
+    ['Bash', 'rm node_modules/lib/*.js', 2, 'link', links, 'links'],
+    ['Bash', 'find node_modules/lib/ -delete', 2, 'link', links, 'links'],
+    ['Bash', 'find node_modules/lib -delete', 2, 'link', links, 'links'],
+    ['Bash', 'rm -rf node_modules/lib/sub', 2, 'link', links, 'links'],
+    ['Bash', 'rm -rf node_modules/*/sub', 2, 'link', links, 'links'],
+    ['Bash', 'rm -rf node_modules/*/', 2, 'link', links, 'links'],
+    ['Bash', 'cd web && rm -rf node_modules/lib/', 2, 'link', links, 'links'],
+    ['PowerShell', 'Remove-Item -Recurse -Force node_modules\\lib\\*', 2, 'link', links, 'links'],
+    ['PowerShell', 'Get-ChildItem node_modules\\lib | Remove-Item', 2, 'link', links, 'links'],
+    ['PowerShell', 'cmd /c del /s /q node_modules\\lib', 2, 'link', links, 'links'],
+    ['Bash', `node -e "require('fs').rmSync('node_modules/lib/sub',{recursive:true,force:true})"`, 2, 'link', links, 'links'],
+    ['Bash', 'rm -rf node_modules/lib', 0, '', links, 'links'], // the link itself goes, not what it points to
+    ['Bash', 'rm -rf node_modules', 0, '', links, 'links'],
+    ['Bash', 'rm -rf node_modules/*', 0, '', links, 'links'],
+    ['Bash', 'rm -rf node_modules/real/', 0, '', links, 'links'],
+    ['Bash', 'rm -rf node_modules/foo/dist', 0, '', links, 'links'], // a pnpm link back into node_modules
+    ['PowerShell', 'Remove-Item -Recurse -Force node_modules\\lib', 0, '', links, 'links'],
+    ['PowerShell', 'cmd /c rd /s /q node_modules\\lib', 0, '', links, 'links'],
+    ['PowerShell', 'Get-ChildItem node_modules | Remove-Item', 0, '', links, 'links'],
+  ];
+  for (const [tool, command, expected, reasonPart, cwd, needs] of diskCases) {
+    if ((needs === 'git' && !gitReady) || (needs === 'links' && !linksReady)) {
+      console.log(`skipped (no ${needs} here): [${tool}] "${command}"`);
+      continue;
+    }
+    const { status, stderr } = run(payload(command, tool, cwd));
+    ran++;
+    try {
+      assert.equal(status, expected, `disk [${tool}] "${command}" -> exit ${status}, expected ${expected}\n${stderr}`);
+      if (expected === 2) {
+        assert.ok(stderr.toLowerCase().includes(reasonPart), `disk [${tool}] "${command}" stderr missing "${reasonPart}": ${stderr}`);
+      }
+    } catch (e) {
+      failures++;
+      console.error(e.message);
+    }
+  }
+  // Nothing the guard read was changed: the real folder behind the links is whole.
+  ran++;
+  if (!fs.existsSync(path.join(links, 'packages/lib/index.js'))) {
+    failures++;
+    console.error('disk: packages/lib/index.js is gone; the guard must only read');
+  }
+} finally {
+  fs.rmSync(diskDir, { recursive: true, force: true });
 }
 
 // --- fail-open guards (intentional and observable) ---
@@ -626,7 +911,6 @@ const stubCases = [
   ['Bash', 'find src -delete', 2],
   ['Bash', `node -e "require('fs').rmSync('src',{recursive:true,force:true})"`, 0], // the one check skipped
 ];
-const scratchRoot = path.dirname(fileURLToPath(import.meta.url));
 const stubDir = fs.mkdtempSync(path.join(scratchRoot, 'scratch-destructive-guard-'));
 try {
   const guardCopy = path.join(stubDir, 'Destructive-guard.mjs');
@@ -652,4 +936,4 @@ if (failures > 0) {
   console.error(`Destructive-guard-tests.mjs: ${failures} of ${ran} cases FAILED`);
   process.exit(1);
 }
-console.log(`Destructive-guard-tests.mjs: all ${ran} cases passed (${cases.length} command cases + ${failOpen.length} fail-open cases + ${ran - cases.length - failOpen.length} stale Path-guard cases)`);
+console.log(`Destructive-guard-tests.mjs: all ${ran} cases passed (${cases.length} command cases + ${probeCases.length} live-probe cases + ${failOpen.length} fail-open cases + ${ran - cases.length - probeCases.length - failOpen.length} disk and stale Path-guard cases)`);

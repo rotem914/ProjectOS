@@ -36,6 +36,14 @@
 // as `[IO.File]::WriteAllText`; a cmdlet after `$null =` or `[void](`; and a
 // `#` comment, which ends the words of a command.
 //
+// Read as well (kit fix list, 2026-10-02): the command after a loop or a
+// condition word (`do`, `then`, `else`, a case pattern), with a rename loop over
+// literal names in the project still allowed; a PowerShell here-string and a
+// here-document inside a quoted `$( )` as text; a script piped into an
+// interpreter or a shell; the paths a PowerShell writer takes from its
+// pipeline, and the files `find` hands to `-exec`; git changing a repository
+// in another folder; and sed's `-e` value as its script, never a file.
+//
 // What it does NOT cover, stated plainly: it recognises the common ways a
 // command writes a file, and a command it does not recognise runs unchecked, so
 // it is a safety net, not a wall. The assistant's own storage (session
@@ -104,6 +112,13 @@ const EXTRA_ROOTS = [
  * caught them only by cutting at newlines. Anything that is not a multi-line
  * interpreter script is read exactly as before.
  *
+ * One more kind of string is kept whole since round two of the kit fix list
+ * (2026-10-02, R8): text its program takes as data, such as a commit message,
+ * a gh body or what echo prints (see takesDataText). Cut at newlines, a
+ * message line like "Install now copies the plugin into ~/.claude/skills" was
+ * read as a command and the commit refused. The same text given to eval,
+ * `bash -c` or iex is still read line by line.
+ *
  * Two more rules, read per shell (review 2026-09-25):
  *  - The escape character is the shell's own: a backslash in bash, a backtick
  *    in PowerShell. PowerShell does not treat a backslash as special, so
@@ -148,22 +163,89 @@ function heredocOpener(line, i, comment) {
  * as commands here; analyze() reads it as a script when the program is an
  * interpreter or a shell (review 2026-09-28: `python3 - <<'EOF'` used to run
  * unread). A body opened on a line that pushed no segment belongs to nobody.
+ *
+ * Two more things ride along (kit fix list, 2026-10-02). `strings` are the
+ * PowerShell here-strings written in the segment, each with the text that
+ * stands in for it (see hereString), and the bodies of here-documents opened
+ * inside a quoted `$( )` (see quotedStep). `prev` is the stage a `|` feeds
+ * into this one, so a script piped into an interpreter, and the paths a
+ * writer takes from its pipeline, can be read. push() is told what ended the
+ * segment (`sep`); a `{ }` block keeps the pipeline of the command around it
+ * apart, so in `Get-ChildItem x | Where-Object { ... } | Remove-Item` the
+ * delete is fed by Where-Object, which Get-ChildItem feeds.
  */
 function segmentList() {
   const segs = [];
   let unowned = [];
+  let strings = [];
+  let level = { last: null, piped: false };
+  const levels = [];
   return {
     segs,
-    push(text) {
-      if (!text.trim()) return;
-      const seg = { text, docs: [] };
-      segs.push(seg);
-      for (const d of unowned) d.seg = seg;
-      unowned = [];
+    push(text, sep) {
+      if (text.trim()) {
+        const seg = { text, docs: [], strings, prev: level.piped ? level.last : null };
+        strings = [];
+        segs.push(seg);
+        for (const d of unowned) d.seg = seg;
+        unowned = [];
+        level.last = seg;
+        level.piped = false;
+      }
+      if (sep === '|') level.piped = level.last !== null;
+      else if (sep === '{') { levels.push(level); level = { last: null, piped: false }; }
+      else if (sep === '}') level = levels.pop() ?? { last: null, piped: false };
+      // A line that ends in `|` goes on in the next one, in both shells.
+      else if (sep !== undefined && (text.trim() || sep !== '\n')) level = { last: null, piped: false };
     },
     open(doc) { unowned.push(doc); },
     close(doc) { if (doc.seg) doc.seg.docs.push(doc.lines.join('\n')); },
+    string(s) { strings.push(s); },
   };
+}
+
+/**
+ * A PowerShell here-string that opens at `i` of `line`: `@'` or `@"` with
+ * nothing after it on the line. Its body runs to the line that starts with
+ * `'@` or `"@`. Null when none opens here.
+ */
+function hereStringOpener(line, i) {
+  if (line[i] !== '@' || (line[i + 1] !== "'" && line[i + 1] !== '"')) return null;
+  if (line.slice(i + 2).trim() !== '') return null;
+  return { close: `${line[i + 1]}@`, lines: [] };
+}
+
+/**
+ * The text that stands in for a here-string in its segment: one single-quoted
+ * PowerShell string holding the body, its own quotes doubled the way
+ * PowerShell escapes them. So the body is one word of text, whatever quote
+ * marks it holds (kit fix list, 2026-10-02, T9: an apostrophe in "It's" put
+ * the reading of quotes out of step for every line after the block, and the
+ * commands after a `;` on those lines ran unread).
+ */
+function hereString(hs) {
+  const body = hs.lines.join('\n');
+  return { body, placeholder: `'${body.replace(/'/g, "''")}'` };
+}
+
+/**
+ * Where the bodies of the here-documents `docs` end, read one after another
+ * from `from`, the start of the line after their opener: the index of the
+ * line break after the last closing line, or the end of the text. Used for
+ * one opened inside a quoted `$( )`, whose body is text inside that string.
+ */
+function heredocBodiesEnd(text, from, docs) {
+  let at = from;
+  for (const doc of docs) {
+    for (;;) {
+      const next = text.indexOf('\n', at);
+      if (next < 0) return text.length;
+      const line = text.slice(at, next);
+      at = next + 1;
+      if (closesDoc(doc, line)) break;
+    }
+  }
+  return at - 1;
 }
 
 // A `{ }` block holds commands of its own, so its braces end the segment
@@ -208,22 +290,138 @@ function braceEndsSegment(line, i, cur, shell, braces) {
   return braces.length > 0 ? braces.pop() : /[\s;]/.test(prev);
 }
 
-/** Does the quote about to open here start an inline interpreter's script? */
+/**
+ * Does the quote about to open here start an inline interpreter's script? The
+ * quote starts its own word after the script's switch, or is glued to the
+ * switch (`--eval="`, `-c"`, `-e'`), which the interpreters read the same way.
+ */
 function opensInlineScript(before, shell) {
-  if (!/\s$/.test(before)) return false; // the quote must start its own word
+  const word = /\S*$/.exec(before)[0];
+  const tokens = tokenize(before.slice(0, before.length - word.length), shell);
+  const pi = programIndex(tokens, shell);
+  if (pi < 0) return false;
+  const prog = programName(tokens[pi]);
+  const flag = INLINE_SCRIPT[prog];
+  if (!flag) return false;
+  if (word) return prog === 'node' ? /^--(?:eval|print)=$/.test(word) : flag.test(word);
+  const last = tokens[tokens.length - 1];
+  return tokens.length - 1 > pi && isWord(last) && flag.test(last.text);
+}
+
+// Programs that print every argument they are given, in each shell.
+const PRINTS_TEXT = { bash: /^(echo|printf)$/, powershell: /^(echo|printf|write-host|write-output|write)$/ };
+// Of those, the ones whose printed text can flow on into a pipeline.
+const PRINTS_TO_PIPE = /^(echo|printf|write-output|write)$/;
+// git's own options that take the next word as their value, before the subcommand.
+const GIT_GLOBAL_VALUE = /^(-C|-c|--git-dir|--work-tree|--namespace|--config-env)$/;
+
+/**
+ * Does the quote about to open hold text the program takes as data, never as
+ * commands (kit fix list round two, 2026-10-02, R8)? A git commit or tag
+ * message (`-m`, `--message`), gh's `--title` and `--body`, anything echo,
+ * printf, Write-Host or Write-Output prints, and the value of a PowerShell
+ * `-Value` or `-Message`. The delete guard beside this file reads every
+ * quoted word that way; read line by line here, a message line that began
+ * with a command name and named a folder outside had the whole commit refused.
+ *
+ * `before` is the command up to the word the quote sits in, and `word` what
+ * that word holds before the quote: a glued flag (`-m"`, `--body="`) or an
+ * earlier quoted part of the same word. Kept narrow on purpose, since the
+ * line reading catches text that is run later: text inside `$( )`, `<( )` or
+ * backticks, text kept in a variable (`$m = Write-Output "..."`,
+ * `printf -v m "..."`), and a quote this pass cannot read truly (one in a
+ * comment, bash's `$'...'`, PowerShell's `<# #>`) are none of these. Returns
+ * 'pipe' for a printer whose text could flow on into a pipeline, which the
+ * caller watches for.
+ */
+function takesDataText(before, word, shell) {
+  if (shell !== 'bash' && shell !== 'powershell') return false;
+  const upTo = before + word;
+  if (/\$\(|[<>]\(/.test(upTo)) return false;
+  if (shell === 'bash' ? /`|\$'/.test(upTo) : upTo.includes('<#')) return false;
   const tokens = tokenize(before, shell);
   const pi = programIndex(tokens, shell);
   if (pi < 0) return false;
-  const flag = INLINE_SCRIPT[programName(tokens[pi])];
-  const last = tokens[tokens.length - 1];
-  return Boolean(flag) && tokens.length - 1 > pi && isWord(last) && flag.test(last.text);
+  if (shell === 'powershell' && tokens.slice(0, pi).some((t) => /^[-+*/]?=$/.test(t.text))) return false;
+  const last = tokens.length - 1 > pi ? tokens[tokens.length - 1] : null;
+  const prog = programName(tokens[pi]);
+  const args = tokens.slice(pi + 1).filter((t) => !t.redirect);
+  if (PRINTS_TEXT[shell].test(prog)) {
+    if (prog === 'printf' && args.some((t) => /^-v/.test(t.text))) return false;
+    return PRINTS_TO_PIPE.test(prog) ? 'pipe' : true;
+  }
+  const glued = /^[^'"]*/.exec(word)[0];
+  const flag = glued.startsWith('-') ? glued.replace(/[=:]$/, '') : last && isWord(last) ? last.text : '';
+  if (shell === 'powershell' && /^-(value|message)$/i.test(flag)) return true;
+  if (prog === 'gh') return /^(--title|--body|-t|-b)$/.test(flag);
+  if (prog !== 'git') return false;
+  let sub = '';
+  for (let k = 0; k < args.length && !sub; k++) {
+    if (!args[k].text.startsWith('-')) sub = args[k].text;
+    else if (GIT_GLOBAL_VALUE.test(args[k].text)) k++;
+  }
+  return /^(commit|tag)$/.test(sub) && /^(-[a-z]*m|--message)$/.test(flag);
+}
+
+/** The separator a `;`, `|` or `&` at `i` starts, as one: `||` and `&&` end a pipeline, `|&` goes on with it. */
+function separatorAt(line, i) {
+  const ch = line[i];
+  if ((ch === '|' || ch === '&') && line[i + 1] === ch) return ch + ch;
+  if (ch === '|' && line[i + 1] === '&') return '|&';
+  return ch;
 }
 
 /**
+ * One step inside a bash double-quoted string, for the `$( )` it holds.
+ * `subs` is the stack of what is open there: c a command substitution, a an
+ * arithmetic `$(( ))`, p a parenthesis. Returns how many characters the step
+ * takes (0 for an ordinary character), and the here-document that a `<<`
+ * inside a command substitution opens. In arithmetic `<<` is a shift.
+ *
+ * Kit fix list, 2026-10-02 (T9): the usual commit message,
+ * `git commit -m "$(cat <<'EOF' ... EOF )"`, had its body read for quote
+ * marks, so one stray `"` in the message hid every command after it. The
+ * body is passed over as text only when the string is still open at the end
+ * of the opener's line, the way that message is written; when it closes on
+ * that line (`"$(cat <<EOF)"`), the lines after it are read as before.
+ */
+function quotedStep(line, i, subs) {
+  const ch = line[i];
+  if (ch === '$' && line[i + 1] === '(') {
+    const arith = line[i + 2] === '(';
+    subs.push(arith ? 'a' : 'c');
+    return { take: arith ? 3 : 2 };
+  }
+  if (ch === '(' && subs.length > 0) { subs.push('p'); return { take: 1 }; }
+  if (ch === ')' && subs.length > 0) return { take: subs.pop() === 'a' && line[i + 1] === ')' ? 2 : 1 };
+  if (ch === '<' && subs.includes('c') && !subs.includes('a')) {
+    const nl = line.indexOf('\n', i);
+    const doc = heredocOpener(nl < 0 ? line : line.slice(0, nl), i, false);
+    if (doc) return { take: doc.len, doc };
+  }
+  return { take: 0 };
+}
+
+/** Does this line close the here-document `doc`? */
+const closesDoc = (doc, line) => (doc.stripTabs ? line.replace(/^\t+/, '') : line).trim() === doc.delim;
+
+/**
  * The joining pass. Returns null (read the old way) unless every string that
- * crosses a line is an inline interpreter's script and every quote closes.
- * Escapes are read per shell: backslash in bash, backtick in PowerShell, and
- * PowerShell's typographic quotes count as quotes, as they do in PowerShell.
+ * crosses a line is an inline interpreter's script or text its program takes
+ * as data (see takesDataText), and every quote closes. Escapes are read per
+ * shell: backslash in bash, backtick in PowerShell, and PowerShell's
+ * typographic quotes count as quotes, as they do in PowerShell.
+ *
+ * Two kinds of lines are text and are passed over whole (kit fix list,
+ * 2026-10-02, T9): a PowerShell here-string's body, which becomes one quoted
+ * word in its segment (see hereString), and the body of a here-document
+ * opened inside a quoted `$( )`, which stays inside that string.
+ *
+ * Text that echo, printf or Write-Output printed over several lines is read
+ * the old way once a `|` follows it anywhere in the command (round two, R8):
+ * a shell or iex down that pipe runs each line, and the old reading is what
+ * catches the ones that write outside. (A redirection into `>( )` is refused
+ * on its own, as a file name built at run time.)
  */
 function splitJoiningInlineScripts(command, shell) {
   const text = shell === 'powershell'
@@ -234,10 +432,19 @@ function splitJoiningInlineScripts(command, shell) {
   const braces = [];
   const queue = [];
   let cur = '';
+  let wordStart = 0; // where the word being read starts in `cur`
   let q = null;
   let qInline = false;
+  let qData = null; // does the open quote hold data text? null until a line ends inside it
+  let qAt = 0; // where the open quote starts in `cur`
+  let qWord = 0; // and where its word starts
+  let printed = false; // printed text was joined, so a later `|` sends the command to the line reading
   let joined = false;
   let heredoc = null;
+  let hs = null; // an open here-string
+  const qsubs = []; // what is open inside the current double-quoted string
+  const qdocs = []; // here-documents opened inside it on this line
+  let qbody = null; // the one whose body is being passed over
   const lines = text.split(/\r?\n/);
 
   for (let li = 0; li < lines.length; li++) {
@@ -248,17 +455,54 @@ function splitJoiningInlineScripts(command, shell) {
       else heredoc.lines.push(probe);
       continue;
     }
+    if (qbody) {
+      cur += `${line}\n`;
+      if (!closesDoc(qbody, line)) { qbody.lines.push(line); continue; }
+      list.string({ body: qbody.lines.join('\n'), placeholder: null });
+      qbody = qdocs.shift() ?? null;
+      continue;
+    }
+    let from = 0;
+    if (hs) {
+      if (!line.startsWith(hs.close)) { hs.lines.push(line); continue; }
+      const s = hereString(hs);
+      cur += s.placeholder;
+      list.string(s);
+      hs = null;
+      from = 2;
+    }
     let comment = false;
     let continues = false;
-    for (let i = 0; i < line.length; i++) {
+    for (let i = from; i < line.length; i++) {
       const ch = line[i];
       if (q) {
         if (q === '"' && esc && ch === esc) { cur += ch + (line[i + 1] ?? ''); i++; continue; }
-        if (ch === q) { q = null; qInline = false; }
+        if (q === '"' && shell === 'bash') {
+          const step = quotedStep(line, i, qsubs);
+          if (step.take) {
+            if (step.doc) qdocs.push(step.doc);
+            cur += line.slice(i, i + step.take);
+            i += step.take - 1;
+            continue;
+          }
+        }
+        if (ch === q) { q = null; qInline = false; qsubs.length = 0; qdocs.length = 0; }
         cur += ch;
         continue;
       }
-      if (ch === "'" || ch === '"') { qInline = opensInlineScript(cur, shell); q = ch; cur += ch; continue; }
+      if (shell === 'powershell' && !comment) {
+        const open = hereStringOpener(line, i);
+        if (open) { hs = open; break; }
+      }
+      if (ch === "'" || ch === '"') {
+        qInline = opensInlineScript(cur, shell);
+        qData = comment ? false : null; // a quote mark in a comment is no quote
+        qAt = cur.length;
+        qWord = wordStart;
+        q = ch;
+        cur += ch;
+        continue;
+      }
       if (esc && ch === esc) {
         if (i === line.length - 1 && !comment) { continues = true; break; }
         cur += ch + (line[i + 1] ?? '');
@@ -287,36 +531,55 @@ function splitJoiningInlineScripts(command, shell) {
         continue;
       }
       if (!comment && (ch === '{' || ch === '}') && braceEndsSegment(line, i, cur, shell, braces)) {
-        list.push(cur);
+        list.push(cur, ch);
         cur = '';
+        wordStart = 0;
         continue;
       }
       if (ch === ';' || ch === '|' || ch === '&') {
-        list.push(cur);
+        const sep = separatorAt(line, i);
+        i += sep.length - 1;
+        if (printed && (sep === '|' || sep === '|&')) return null;
+        list.push(cur, sep === '|&' ? '|' : sep);
         cur = '';
+        wordStart = 0;
         continue;
       }
       cur += ch;
+      if (/\s/.test(ch)) wordStart = cur.length;
     }
+    if (hs) continue; // a here-string opened on this line holds the segment open
+    if (qdocs.length > 0) { qbody = qdocs.shift(); cur += '\n'; continue; }
     if (q) {
-      if (!qInline) return null; // a multi-line string that is not an interpreter script
+      if (!qInline) {
+        if (qData === null) qData = takesDataText(cur.slice(0, qWord), cur.slice(qWord, qAt), shell);
+        if (!qData) return null; // a multi-line string that is neither an interpreter script nor data
+        if (qData === 'pipe') printed = true;
+      }
       cur += '\n';
       joined = true;
       continue;
     }
-    if (continues) { cur += continuationGap(shell); continue; }
-    list.push(cur);
+    if (continues) {
+      cur += continuationGap(shell);
+      if (/\s$/.test(cur)) wordStart = cur.length;
+      continue;
+    }
+    list.push(cur, '\n');
     cur = '';
+    wordStart = 0;
   }
-  if (q || !joined || heredoc) return null;
-  list.push(cur);
+  if (q || !joined || heredoc || hs || qbody) return null;
+  list.push(cur, '\n');
   return list.segs;
 }
 
 /**
  * The original reading: every line is a fresh command, unless it ends in a
  * line continuation (see splitSegments). The escape character is the shell's
- * own; 'other' (cmd) keeps the backslash it always had.
+ * own; 'other' (cmd) keeps the backslash it always had. A here-string's body
+ * and a here-document inside a quoted `$( )` are text here too (see
+ * splitJoiningInlineScripts).
  */
 function splitSegmentsByLine(command, shell = 'bash') {
   const esc = shell === 'powershell' ? '`' : '\\';
@@ -326,6 +589,10 @@ function splitSegmentsByLine(command, shell = 'bash') {
   let cur = '';
   let q = null;
   let heredoc = null;
+  let hs = null;
+  const qsubs = [];
+  const qdocs = [];
+  let qbody = null;
   const lines = String(command).split(/\r?\n/);
 
   for (let li = 0; li < lines.length; li++) {
@@ -336,15 +603,44 @@ function splitSegmentsByLine(command, shell = 'bash') {
       else heredoc.lines.push(probe);
       continue; // body is data, never a command; analyze() reads it as a script where it is one
     }
+    if (qbody) {
+      cur += `${line}\n`;
+      if (!closesDoc(qbody, line)) { qbody.lines.push(line); continue; }
+      list.string({ body: qbody.lines.join('\n'), placeholder: null });
+      qbody = qdocs.shift() ?? null;
+      continue;
+    }
+    let from = 0;
+    if (hs) {
+      if (!line.startsWith(hs.close)) { hs.lines.push(line); continue; }
+      const s = hereString(hs);
+      cur += s.placeholder;
+      list.string(s);
+      hs = null;
+      from = 2;
+    }
     let comment = false;
     let continues = false;
-    for (let i = 0; i < line.length; i++) {
+    for (let i = from; i < line.length; i++) {
       const ch = line[i];
       if (q) {
         if (q === '"' && ch === esc) { cur += ch + (line[i + 1] ?? ''); i++; continue; }
-        if (ch === q) q = null;
+        if (q === '"' && shell === 'bash') {
+          const step = quotedStep(line, i, qsubs);
+          if (step.take) {
+            if (step.doc) qdocs.push(step.doc);
+            cur += line.slice(i, i + step.take);
+            i += step.take - 1;
+            continue;
+          }
+        }
+        if (ch === q) { q = null; qsubs.length = 0; qdocs.length = 0; }
         cur += ch;
         continue;
+      }
+      if (shell === 'powershell' && !comment) {
+        const open = hereStringOpener(line, i);
+        if (open) { hs = open; break; }
       }
       if (ch === "'" || ch === '"') { q = ch; cur += ch; continue; }
       if (ch === esc) {
@@ -376,22 +672,32 @@ function splitSegmentsByLine(command, shell = 'bash') {
         continue;
       }
       if (!comment && (ch === '{' || ch === '}') && braceEndsSegment(line, i, cur, shell, braces)) {
-        list.push(cur);
+        list.push(cur, ch);
         cur = '';
         continue;
       }
       if (ch === ';' || ch === '|' || ch === '&') {
-        list.push(cur);
+        const sep = separatorAt(line, i);
+        i += sep.length - 1;
+        list.push(cur, sep === '|&' ? '|' : sep);
         cur = '';
         continue;
       }
       cur += ch;
     }
+    if (hs) continue;
+    if (qdocs.length > 0) { qbody = qdocs.shift(); cur += '\n'; continue; }
     if (continues) { cur += continuationGap(shell); continue; }
-    list.push(cur);
+    list.push(cur, '\n');
     cur = '';
   }
-  list.push(cur);
+  // A here-string nothing closes is text to the end.
+  if (hs) {
+    const s = hereString(hs);
+    cur += s.placeholder;
+    list.string(s);
+  }
+  list.push(cur, '\n');
   return list.segs;
 }
 /**
@@ -416,6 +722,8 @@ function tokenize(segment, shell) {
   let cut = -1; // where the first unquoted ) that closes nothing in this word sits
   let has = false;
   let q = null;
+  const subs = []; // what is open inside a double-quoted string (see quotedStep)
+  const docs = []; // here-documents opened inside it on the current line
   const add = (s, how = 0) => {
     cur += s;
     lit.push(how);
@@ -455,7 +763,26 @@ function tokenize(segment, shell) {
         add(ch, 1);
         continue;
       }
-      if (ch === q) { q = null; continue; }
+      // PowerShell writes a quote inside a single-quoted string as two.
+      if (q === "'" && shell === 'powershell' && ch === "'" && segment[i + 1] === "'") { add("'", 1); i++; continue; }
+      // A here-document opened inside a quoted `$( )` is text from the end
+      // of its line to its closing line, whatever quote marks it holds.
+      if (q === '"' && bashEscapes) {
+        const step = quotedStep(segment, i, subs);
+        if (step.take) {
+          if (step.doc) docs.push(step.doc);
+          for (let k = i; k < i + step.take; k++) add(segment[k], 1);
+          i += step.take - 1;
+          continue;
+        }
+        if (ch === '\n' && docs.length > 0) {
+          const stop = heredocBodiesEnd(segment, i + 1, docs.splice(0));
+          for (let k = i; k < stop; k++) add(segment[k], 1);
+          i = stop - 1;
+          continue;
+        }
+      }
+      if (ch === q) { q = null; subs.length = 0; docs.length = 0; continue; }
       add(ch, 1);
       continue;
     }
@@ -773,6 +1100,104 @@ function isExtraRoot(full, rootKey) {
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// Rename loops over literal names (kit fix list, 2026-10-02, T8)
+// ---------------------------------------------------------------------------
+//
+// Once the guard read the command after `do`, the everyday rename loop,
+// `for f in *.jpeg; do mv "$f" "${f%.jpeg}.jpg"; done`, would have been refused
+// as a path built at run time. The owner's call: a target built from a loop
+// variable counts as inside when the loop's list is literal relative names or
+// globs (no `..`, no absolute path, no variable), the target keeps it
+// relative with no `..` and no leading slash, and the working folder is inside
+// the project. Everything else built at run time is refused as before.
+
+// The loop variables of the bash command being read that hold only safe
+// values (see loopRules), or null. Set by analyze() around checkSegment, and
+// cleared while a script is read: a `$f` in a script is the script's own.
+let LOOP_VARS = null;
+
+/**
+ * Can a loop over this list word only ever give a relative name with no `..`
+ * in it? A literal or a glob, relative, with no `..`, no variable, no `~`, and
+ * no part that is or can match a name of dots only (`.*` matches `..`). Its
+ * last part must hold something other than dots, so the value never ends in
+ * `.` and a `.` written after it cannot make `..`.
+ */
+function safeLoopWord(w) {
+  if (!w || /[$`\u0000\\~]/.test(w) || w.includes('..') || /^(?:\/|[A-Za-z]:)/.test(w)) return false;
+  if (/[@!+*?]\(/.test(w)) return false; // an extended glob
+  const parts = w.split('/').filter((p) => p !== '');
+  while (parts.length > 1 && parts[0] === '.') parts.shift();
+  if (parts.length === 0) return false;
+  for (const p of parts) {
+    if (!/[*?[]/.test(p)) continue;
+    const plain = p.replace(/\[[^\]]*\]/g, '').replace(/[*?]/g, '');
+    if (!/[^.]/.test(plain)) return false;
+  }
+  return /[^.]/.test(parts[parts.length - 1]);
+}
+
+/**
+ * Which loop variables of a bash command hold only safe values: name -> true
+ * when every `for` or `select` over it walks a list of safe words
+ * (safeLoopWord) and nothing else in the command gives it a value (an
+ * assignment, `read`, `local`, `${f:=x}`, arithmetic). A loop can run its
+ * body again after a later line changed the variable, so one other binding
+ * anywhere makes it unsafe everywhere.
+ */
+function loopRules(command) {
+  const rules = new Map();
+  for (const m of command.matchAll(/(?:^|[;&|\n({\s])(?:for|select)\s+([A-Za-z_]\w*)(?:\s+in\b([^;&|\n]*))?/g)) {
+    const words = m[2] === undefined ? [] : tokenize(m[2], 'bash').filter((t) => !t.redirect).map((t) => t.text);
+    rules.set(m[1], (rules.get(m[1]) ?? true) && words.length > 0 && words.every(safeLoopWord));
+  }
+  for (const [name, ok] of rules) {
+    if (!ok) continue;
+    const bound = new RegExp(`(?<![\\w$-])(?<!\\$\\{)${name}(?:\\[[^\\]]*\\])?\\s*(?:[-+*/%&|^]?=(?!=)|\\+\\+|--)`
+      + `|\\$\\{${name}:?=`
+      + `|(?:^|[;&|\\n({\\s])(?:read|getopts|mapfile|readarray|declare|typeset|local|export|readonly|unset|let|printf)\\b[^;&|\\n]*?(?<![\\w$-])(?<!\\$\\{)${name}\\b`);
+    if (bound.test(command)) rules.set(name, false);
+  }
+  return rules;
+}
+
+/**
+ * A write target built from safe loop variables, as a path that stands for
+ * every value it can take, or null when it is not one. Each `$f`, `${f}`,
+ * `${f%pattern}` or `${f%%pattern}` becomes one plain name; the rest of the
+ * target must be literal, relative and free of `..`. A `${f%...}` can be cut
+ * down to nothing or to `.`, so it may not begin the target before a `/`,
+ * nor be followed by `.` and then a dot or a slash; and no value may follow a
+ * part made of dots only, where it could close a `..`.
+ */
+function loopValue(target) {
+  if (!LOOP_VARS || LOOP_VARS.size === 0 || !target.includes('$')) return null;
+  if (target.includes('..') || /^(?:[\\/~]|[A-Za-z]:)|[`\u0000]/.test(target)) return null;
+  let out = '';
+  let part = ''; // the literal part being written since the last slash
+  let cut = false; // the last thing written was a value that can be cut short
+  for (let i = 0; i < target.length;) {
+    if (target[i] !== '$') {
+      if (cut && target[i] === '.' && !/^\.[^./\\$]/.test(target.slice(i))) return null;
+      cut = false;
+      part = /[\\/]/.test(target[i]) ? '' : part + target[i];
+      out += target[i];
+      i++;
+      continue;
+    }
+    const m = /^\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)(?:(%%?)([^}$`'"]*))?\})/.exec(target.slice(i));
+    if (!m || !LOOP_VARS.has(m[1] ?? m[2])) return null;
+    if (cut || (part !== '' && /^\.+$/.test(part))) return null;
+    i += m[0].length;
+    cut = Boolean(m[3]);
+    if (cut && out === '' && /^[\\/]/.test(target.slice(i))) return null;
+    out += 'loopvalue';
+    part = 'loopvalue';
+  }
+  return out;
+}
+
 /**
  * Verdict for one write target: null = fine, string = the reason to refuse.
  *
@@ -787,7 +1212,7 @@ function checkTarget(target, root, what, base = root) {
   if (!target) return null;
   if (SINKS.has(target.toLowerCase())) return null;
   const rootKey = root.toLowerCase();
-  const r = resolveStatic(target, base.toLowerCase());
+  const r = resolveStatic(loopValue(target) ?? target, base.toLowerCase());
   if (r.dynamic) {
     return `${what} writes to "${target.replace(/\u0000/g, '')}", a path built at runtime, so it cannot be proven to be inside the project folder. Use a literal path under the project, or the Write tool`;
   }
@@ -831,8 +1256,47 @@ const BASH_FLAG_TARGETS = {
 // cp, mv and install name their destination folder first with -t.
 const TARGET_DIR_FLAG = { letters: 't', stops: 'Smog', long: ['target-directory'] };
 // Programs that carry a whole script in an argument. The script is scanned as
-// text, since a real parse is out of reach.
-const INLINE_SCRIPT = { node: /^(-e|--eval|-p|--print)$/, python: /^-c$/, python3: /^-c$/, py: /^-c$/, perl: /^-e$/, ruby: /^-e$/, deno: /^eval$/ };
+// text, since a real parse is out of reach. The switch can sit in a cluster
+// with others that take no value (kit fix list, 2026-10-02, T1: `node -pe`
+// and `python -Bc` ran unread): python's `-Bc`, perl's `-lne`, ruby's `-ne`.
+// A letter that takes a value of its own (python -W, perl -i, ruby -r) ends
+// a cluster, so it is left out: perl's `-pie` is -p with -i given "e".
+const PY_SCRIPT = /^-[bBdEhiIOPqRsSuvx]*c$/;
+const INLINE_SCRIPT = { node: /^(-e|--eval|-p|--print|-pe)$/, python: PY_SCRIPT, python3: PY_SCRIPT, py: PY_SCRIPT, perl: /^-[aclnpsStTuUwWX0-9]*[eE]$/, ruby: /^-[acdlnpsSvwWy0-9]*e$/, deno: /^eval$/ };
+// The same switches with the script glued on: node's `--eval=...`, and the
+// rest of a python, perl or ruby cluster after its script letter, which each
+// of them reads as the script (`-c"..."`, `-e'...'`).
+const INLINE_GLUED = {
+  node: /^--(?:eval|print)=([\s\S]*)$/,
+  python: /^-[bBdEhiIOPqRsSuvx]*c([\s\S]+)$/,
+  perl: /^-[aclnpsStTuUwWX0-9]*[eE]([\s\S]+)$/,
+  ruby: /^-[acdlnpsSvwWy0-9]*e([\s\S]+)$/,
+};
+INLINE_GLUED.python3 = INLINE_GLUED.python;
+INLINE_GLUED.py = INLINE_GLUED.python;
+
+/**
+ * The scripts a command line hands to an inline interpreter `prog`, read from
+ * the words after it: [{ body, after }], `after` being the index of the last
+ * word the script used. Empty when there is none.
+ */
+function inlineScripts(prog, rest) {
+  const flag = INLINE_SCRIPT[prog];
+  const glued = INLINE_GLUED[prog];
+  const out = [];
+  if (!flag) return out;
+  for (let k = 0; k < rest.length; k++) {
+    const t = rest[k];
+    if (t.redirect || (k > 0 && rest[k - 1].redirect)) continue;
+    if (isWord(t) && flag.test(t.text)) {
+      if (rest[k + 1] && !rest[k + 1].redirect) out.push({ body: rest[k + 1].text, after: k + 1 });
+      continue;
+    }
+    const g = glued && !(t.lit && t.lit[0]) ? glued.exec(t.text) : null;
+    if (g) out.push({ body: g[1], after: k });
+  }
+  return out;
+}
 
 // PowerShell. Aliases included: `cp`/`mv`/`rni` really are Copy/Move/Rename-Item.
 // `mkdir` and `md` make folders, from PowerShell and from `cmd /c` alike, and
@@ -849,6 +1313,26 @@ const PS_WRITE_LAST = new Set(['copy-item', 'move-item', 'rename-item', 'cpi', '
 // against the item's own folder, not the current one (review 2026-09-28:
 // `Rename-Item C:\Users\x\Downloads\a.png b.png` read b.png as inside).
 const PS_RENAME = new Set(['rename-item', 'rni', 'ren', 'rename']);
+const PS_MOVE = new Set(['move-item', 'mi', 'move', 'mv']);
+// Writers that take the paths they write from their pipeline when they name
+// none: a delete, an overwrite, an emptying (kit fix list, 2026-10-02, T10).
+const PS_PIPE_TARGET = new Set([
+  'remove-item', 'ri', 'rm', 'del', 'erase', 'rd', 'rmdir',
+  'clear-content', 'clc', 'set-content', 'sc', 'add-content', 'ac',
+]);
+// The start of a pipeline whose items can be read: a command that lists the
+// path it is given (the current folder when none is), and the stages that
+// only filter or sort what passes through.
+const PS_LISTERS = new Set(['get-childitem', 'gci', 'ls', 'dir', 'get-item', 'gi', 'resolve-path', 'rvpa']);
+const PS_FILTERS = new Set(['where-object', 'where', '?', 'sort-object', 'sort', 'select-object', 'select', 'get-unique', 'gu']);
+// A lister's switches; any other parameter takes the next word as its value.
+const PS_LIST_SWITCH = /^(recurse|force|file|directory|hidden|readonly|system|name|followsymlink|ad|af|ah|ar|as|verbose|vb|debug|db)$/;
+// Words that make PowerShell run text as commands: Invoke-Expression, a
+// script block, a job, a new PowerShell, the call or dot-source operator in
+// front of something to run, and a script file named to be run.
+const PS_RUNS_TEXT = /(?:^|[^\w-])(?:invoke-expression|iex|invoke-command|icm|start-job|sajb|powershell|pwsh|scriptblock)(?![\w-])|(?:^|[\s;|({])&\s*[^\s&>]|(?:^|[;|({\n])\s*\.\s+\S|[\w)\]]\.(?:ps1|psm1|cmd|bat)\b/i;
+// The same in bash: eval, source and its dot, and a shell given a script.
+const BASH_RUNS_TEXT = /(?:^|[\s;&|(!{`])(?:eval|source|\.)\s|(?:^|[^\w-])(?:bash|sh|zsh|dash|ksh)(?:\s+-[A-Za-z]+)*\s+-[A-Za-z]*c\b|\|\s*(?:bash|sh|zsh|dash|ksh)\b/;
 // Start-Process writes only where it is told to send the output.
 const PS_START = new Set(['start-process', 'saps', 'start']);
 const PS_START_DEST = /^-(redirectstandardoutput|redirectstandarderror|rso|rse)(:|=|$)/i;
@@ -888,6 +1372,30 @@ const WRAPPER_VALUE_FLAGS = {
 // splitter left in place, a negation, PowerShell dot-sourcing (or the bash
 // `source` dot), a subshell. The command comes after it.
 const LEADING_WORDS = /^([{}!.]|\(+)$/;
+// Words that open or continue a loop or a condition: the command comes after
+// them, as the delete guard beside this file reads them (kit fix list,
+// 2026-10-02, T8: after `do`, `then` or `else` the word itself was taken for
+// the program, so a copy, a delete or a script inside a one-line loop or
+// if-block ran unread).
+const SHELL_KEYWORDS = /^(if|then|else|elif|while|until|do)$/;
+
+/**
+ * Is this word a bash case pattern, `x)`, `*)`, `b)` after a `|`, or `(x)`
+ * right after `case WORD in`? A word whose `)` closes nothing it opened, and
+ * not a `$( )` or `<( )`.
+ */
+function casePattern(t, afterCase) {
+  if (t.redirect || !t.text.endsWith(')') || (t.lit && t.lit[t.text.length - 1])) return false;
+  if (/^[$<>]\(/.test(t.text)) return false;
+  let opens = 0;
+  let closes = 0;
+  for (let i = 0; i < t.text.length; i++) {
+    if (t.lit && t.lit[i]) continue;
+    if (t.text[i] === '(') opens++;
+    else if (t.text[i] === ')') closes++;
+  }
+  return closes > opens || (afterCase && t.text.startsWith('(') && !(t.lit && t.lit[0]));
+}
 
 // A PowerShell cast in front of a command (`[void](New-Item ...)`), or an
 // assignment glued to it (`$null=New-Item ...`), is not the command's name
@@ -899,7 +1407,17 @@ function programIndex(tokens, shell) {
   let i = 0;
   for (let hops = 0; hops < 8 && i < tokens.length; hops++) {
     while (i < tokens.length && (tokens[i].redirect
-      || (isWord(tokens[i]) && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i].text) || LEADING_WORDS.test(tokens[i].text))))) i++;
+      || (isWord(tokens[i]) && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i].text) || LEADING_WORDS.test(tokens[i].text) || SHELL_KEYWORDS.test(tokens[i].text))))) i++;
+    // In bash, `case WORD in` and a pattern come before the command they pick.
+    if (shell === 'bash' && i < tokens.length) {
+      if (tokens[i].text === 'case' && !(tokens[i].lit && tokens[i].lit[0])) {
+        if (!tokens[i + 2] || tokens[i + 2].text !== 'in') return -1;
+        i += 3;
+        if (i < tokens.length && casePattern(tokens[i], true)) i++;
+        continue;
+      }
+      if (casePattern(tokens[i], false)) { i++; continue; }
+    }
     // PowerShell runs the command after `$null =` or `$x +=` and keeps its
     // output (review 2026-09-28: `$null = New-Item ...` is the usual way to
     // make a folder quietly, and `$null` was read as the program).
@@ -950,7 +1468,8 @@ function programIndex(tokens, shell) {
  * The review of 2026-10-01 found writes that only the old literal scan of
  * one-line scripts had been stopping, so the reading grew (see prepareScript
  * and inlineScriptRisk), and a final review that day brought the scan back
- * for one-line scripts as well (see oneLineRisk). The reading now also sees a
+ * for one-line scripts as well, extended to every script on 2026-10-02 (see
+ * outsidePathRisk). The reading now also sees a
  * script that changes its own folder (`process.chdir`, `os.chdir`,
  * `Dir.chdir`), code run through eval, exec or new Function, a method named by
  * a string (`fs['writeFileSync']`), Perl and Ruby calls written without
@@ -1683,6 +2202,8 @@ function writeShape(expr, body, depth = 0) {
   const shape = destShape(expr, body);
   if (shape.full !== undefined || shape.prefix !== undefined) return shape;
   const e = String(expr).trim();
+  const built = depth < 6 ? builtShape(e, body, depth) : null;
+  if (built) return built;
   // A variable given one value that is not a plain literal is read through
   // that value: `out = os.path.join('.tmp', name)` lands in .tmp.
   if (/^[A-Za-z_$][\w$]*$/.test(e)) {
@@ -1704,6 +2225,120 @@ function writeShape(expr, body, depth = 0) {
     known += s.full;
   }
   return { full: known };
+}
+
+// The path modules, under the names a script reaches them by.
+const PATH_MODULE = /^(?:path(?:\.posix|\.win32)?|os\.path|posixpath|ntpath|require\(\s*['"`](?:node:)?path(?:\/posix|\/win32)?['"`]\s*\))$/;
+
+/**
+ * More shapes a write destination is built in (kit fix list, 2026-10-02,
+ * T1), each read from the parts it is made of; null when `e` is none of them:
+ *  - the folder the script runs in, `process.cwd()`, `os.getcwd()`,
+ *    `Path.cwd()` and `__dirname` (which `node -e` sets to it), as `.`, so a
+ *    climb out of it (`process.cwd() + '/../x'`) is seen;
+ *  - a parent, `x.parent` and `os.path.dirname(x)`, as `x/..`;
+ *  - a join by a path module under another name (`const p = require('path');
+ *    p.join(...)`), or of parts that are known but not all literals;
+ *  - pathlib's `/` operator, `Path.cwd().parent / 'x.txt'`;
+ *  - `new URL('file:///C:/x')`, and a list of literals joined into a path.
+ */
+function builtShape(e, body, depth) {
+  const sub = (x) => writeShape(x, body, depth + 1);
+  // Only a path whose every part is known: a part built at run time can be
+  // absolute and restart the path (Python's os.path.join does), so a known
+  // start proves nothing here, and the reading of a path built at run time
+  // stays as it was.
+  const joinParts = (parts) => {
+    if (!parts.every((p) => p.full !== undefined)) return null;
+    let full = '';
+    for (const p of parts) full = full === '' || /^([A-Za-z]:)?[\\/]/.test(p.full) ? p.full : `${full}/${p.full}`;
+    return { full };
+  };
+  if (CWD_CALL.test(e) || /^(?:__dirname|os\.curdir)$/.test(e)) return { full: '.' };
+  if (e.startsWith('(')) {
+    const inner = callArgs(e, 0);
+    if (inner.end === e.length && inner.length === 1 && inner[0]) return sub(inner[0]);
+  }
+  const parent = /^([\s\S]+?)\s*\.\s*parent$/.exec(e);
+  if (parent) {
+    const s = sub(parent[1]);
+    return s.full !== undefined ? { full: `${s.full}/..` } : null;
+  }
+  const dir = /^(?:os\.path|path(?:\.posix|\.win32)?|posixpath|ntpath)\.dirname\s*\(/.exec(e);
+  if (dir) {
+    const args = callArgs(e, dir[0].length - 1);
+    const s = args.end === e.length && args[0] ? sub(args[0]) : {};
+    return s.full !== undefined ? { full: `${s.full}/..` } : null;
+  }
+  const join = /^([\w$.]+|require\([^()]*\))\s*\.\s*(?:join|resolve)\s*\(/.exec(e);
+  if (join) {
+    const value = /^[A-Za-z_$][\w$]*$/.test(join[1]) ? soleValue(join[1], body) : null;
+    if (PATH_MODULE.test(join[1]) || PATH_MODULE.test(value ?? '')) {
+      const args = callArgs(e, join[0].length - 1);
+      return args.end === e.length && args[0] ? joinParts(args.map(sub)) : null;
+    }
+  }
+  const slash = topLevelSplit(e, '/');
+  if (slash.length >= 2 && /^(?:\(\s*)?(?:(?:pathlib\.)?(?:Pure)?(?:Windows|Posix)?Path\s*[.(]|os\.getcwd\s*\()/.test(slash[0])) {
+    return joinParts(slash.map(sub));
+  }
+  const url = /^new\s+URL\s*\(/.exec(e);
+  if (url) {
+    const args = callArgs(e, url[0].length - 1);
+    const t = args.end === e.length && args.length === 1 ? wholeLiteral(args[0]) : null;
+    return t !== null && /^file:/i.test(t) ? { full: t.replace(/^file:(?:\/\/(?:localhost)?)?/i, '').replace(/^\/(?=[A-Za-z]:)/, '') } : null;
+  }
+  // ['C:', 'Users', 'x'].join('/'), and Python's '/'.join([...]).
+  let items = null;
+  let sep = null;
+  if (e.startsWith('[')) {
+    const list = callArgs(e, 0);
+    const call = /^\s*\.\s*join\s*\(/.exec(e.slice(list.end));
+    if (call) {
+      const rest = e.slice(list.end);
+      const args = callArgs(rest, call[0].length - 1);
+      if (args.end === rest.length) { items = list; sep = args[0] ? wholeLiteral(args[0]) : ','; }
+    }
+  } else {
+    const lit = stringLiteralAt(e, 0);
+    const call = lit && lit.prefix === null ? /^\s*\.\s*join\s*\(/.exec(e.slice(lit.end)) : null;
+    if (call) {
+      const rest = e.slice(lit.end);
+      const args = callArgs(rest, call[0].length - 1);
+      if (args.end === rest.length && args.length === 1 && /^[[(]/.test(args[0].trim())) { items = callArgs(args[0].trim(), 0); sep = lit.text; }
+    }
+  }
+  if (items && sep !== null) {
+    const texts = items.filter((a) => a !== '').map(wholeLiteral);
+    return texts.every((t) => t !== null) ? { full: texts.join(sep) } : null;
+  }
+  return null;
+}
+
+/** The parts of `e` at its top level split at `ch`, outside strings and brackets; a doubled `ch` splits nothing. */
+function topLevelSplit(e, ch) {
+  const parts = [];
+  let depth = 0;
+  let q = null;
+  let start = 0;
+  for (let i = 0; i < e.length; i++) {
+    const c = e[i];
+    if (q) {
+      if (c === '\\') i++;
+      else if (c === q) q = null;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') q = c;
+    else if ('([{'.includes(c)) depth++;
+    else if (')]}'.includes(c)) depth--;
+    else if (c === ch && depth === 0) {
+      if (e[i + 1] === ch) return [];
+      parts.push(e.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  parts.push(e.slice(start).trim());
+  return parts.some((p) => p === '') ? [] : parts;
 }
 
 /**
@@ -1771,8 +2406,10 @@ const FS_ABSOLUTE = /^(?:[A-Za-z]:[\\/]|[\\/]{2}[^\\/]|~[\\/]|\/(?:[A-Za-z]|home
  * also names a folder outside, the same as when it uses the home folder:
  * `['C:/x/a.txt'].forEach((p) => fs.writeFileSync(p, ''))` writes there. This
  * keeps such writes refused in a script of any length and lets its reads
- * through; a one-line script is also refused for the path itself unless it is
- * provably a read (oneLineRisk, 2026-10-01).
+ * through; a script is also refused for the path itself unless it is
+ * provably a read (outsidePathRisk). A word after the script that is built
+ * at run time (`"$HOME/x.txt"`) counts the same way (kit fix list,
+ * 2026-10-02, T1): the script can write to it through process.argv.
  */
 function namedOutside(body, root, base) {
   for (let i = 0; i < body.length; i++) {
@@ -2079,6 +2716,41 @@ function unprovableKeys(text, fam) {
   return out;
 }
 
+// Python modules whose calls this guard reads by the module's own name.
+const PY_NAMED_MODULES = /^(?:os|os\.path|shutil|subprocess|pathlib|io|tempfile|sqlite3|zipfile|tarfile|logging)$/;
+
+/**
+ * A Python script with its imports spelled out (kit fix list, 2026-10-02,
+ * T1): after `import shutil as s`, `s.rmtree(p)` is read as
+ * `shutil.rmtree(p)`; after `from shutil import rmtree`, `rmtree(p)` is; and
+ * `__import__('os')` is `os`. The calls are then found by the names the rest
+ * of this file reads, in a script of any length. The import lines themselves
+ * keep their words, which the read check (foreignModule) reads.
+ */
+function pyImports(text) {
+  let out = text.replace(/\b(?:__import__|importlib\.import_module)\s*\(\s*(['"])([\w.]+)\1\s*\)/g, '$2');
+  const code = maskStrings(out);
+  const names = new Map();
+  const imports = [];
+  for (const m of code.matchAll(/(?:^|[;\n])[ \t]*(?:from[ \t]+([\w.]+)[ \t]+)?import[ \t]+([^;\n]+)/g)) {
+    imports.push([m.index, m.index + m[0].length]);
+    for (const item of m[2].replace(/[()]/g, '').split(',')) {
+      const [name, as, alias] = item.trim().split(/\s+/);
+      const local = as === 'as' && alias ? alias : null;
+      if (m[1] !== undefined) {
+        if (PY_NAMED_MODULES.test(m[1]) && /^\w+$/.test(name ?? '')) names.set(local ?? name, `${m[1]}.${name}`);
+      } else if (local && PY_NAMED_MODULES.test(name)) {
+        names.set(local, name);
+      }
+    }
+  }
+  if (names.size === 0) return out;
+  const re = new RegExp(`(?<![\\w.$])(${[...names.keys()].join('|')})(?![\\w$])`, 'g');
+  const edits = [...code.matchAll(re)].filter((m) => !imports.some(([a, b]) => m.index >= a && m.index < b));
+  for (const m of edits.reverse()) out = out.slice(0, m.index) + names.get(m[1]) + out.slice(m.index + m[1].length);
+  return out;
+}
+
 /**
  * The script as this guard reads it (2026-10-01): Perl and Ruby calls given
  * their parentheses, members named by a literal read as names, and every
@@ -2088,7 +2760,7 @@ function unprovableKeys(text, fam) {
  * run time and the methods of a write module chosen at run time.
  */
 function prepareScript(body, fam) {
-  let text = String(body);
+  let text = fam === 'py' ? pyImports(String(body)) : String(body);
   const unprovable = [];
   let from = 0;
   let budget = EVAL_BUDGET;
@@ -2266,9 +2938,21 @@ function spawnCalls(text, code, prog) {
  * Why a script passed to an interpreter cannot be proven to write only inside
  * the project folder, or null. `argv` are the words after the script on its
  * command line, which the script can read as paths or as code
- * (process.argv, sys.argv).
+ * (process.argv, sys.argv). A `$f` in the script is the script's own, never
+ * a loop variable of the shell around it (see loopValue).
  */
 function inlineScriptRisk(body, prog, root, base, argv = []) {
+  const saved = LOOP_VARS;
+  LOOP_VARS = null;
+  try {
+    return scriptWriteRisk(body, prog, root, base, argv);
+  } finally {
+    LOOP_VARS = saved;
+  }
+}
+
+/** The reading inlineScriptRisk makes. */
+function scriptWriteRisk(body, prog, root, base, argv) {
   const what = `the script passed to \`${prog}\``;
   const fam = scriptFamily(prog);
   const { text, unprovable } = prepareScript(body, fam);
@@ -2320,14 +3004,22 @@ function inlineScriptRisk(body, prog, root, base, argv = []) {
     if (reason) return reason;
   }
   // The first absolute path outside the project the script, or a word after
-  // it, names. Worked out once, and only when it is needed.
+  // it, names. Worked out once, and only when it is needed. A word after it
+  // that is built at run time (`"$HOME/x.txt"`, `$env:USERPROFILE`) counts
+  // too (kit fix list, 2026-10-02, T1): the script can write there through
+  // process.argv or sys.argv.
   let named;
   const nameOutside = () => {
     if (named === undefined) {
-      named = namedOutside(text, root, base) ?? argv.find((w) => FS_ABSOLUTE.test(w) && checkTarget(w, root, '', base)) ?? null;
+      named = namedOutside(text, root, base)
+        ?? argv.find((w) => (FS_ABSOLUTE.test(w) || resolveStatic(w, base.toLowerCase()).dynamic) && checkTarget(w, root, '', base))
+        ?? null;
     }
     return named;
   };
+  const namedPhrase = () => (resolveStatic(named, base.toLowerCase()).dynamic
+    ? `"${named}", a path built at run time`
+    : `"${named}", outside the project folder`);
   for (const d of written.dests) {
     if (d.temp) {
       return `${what} makes a file in the system temp folder, which is outside the project folder. Make it under the project's own .tmp/ folder instead`;
@@ -2356,7 +3048,7 @@ function inlineScriptRisk(body, prog, root, base, argv = []) {
       return `${what} writes to a path built at run time while the command runs outside the project folder, so it cannot be proven inside`;
     }
     if (nameOutside()) {
-      return `${what} writes to a path built at run time in a script that also names "${named}", outside the project folder, so it cannot be proven to be inside the project folder`;
+      return `${what} writes to a path built at run time in a script that also names ${namedPhrase()}, so it cannot be proven to be inside the project folder`;
     }
   }
   // Code built at run time, and a write module's method chosen at run time
@@ -2367,7 +3059,7 @@ function inlineScriptRisk(body, prog, root, base, argv = []) {
   const calls = spawnCalls(text, code, prog);
   let writes;
   for (const u of unprovable) {
-    const why = nameOutside() ? `it also names "${named}", outside the project folder`
+    const why = nameOutside() ? `it also names ${namedPhrase()}`
       : usesHome ? 'it also uses the home, temp or environment folders'
         : outsideAt(u.at) ? 'it runs outside the project folder'
           : null;
@@ -2412,7 +3104,7 @@ function inlineScriptRisk(body, prog, root, base, argv = []) {
 }
 
 // ---------------------------------------------------------------------------
-// One-line scripts: a path outside the project is named only to be read
+// Inline scripts: a path outside the project is named only to be read
 // ---------------------------------------------------------------------------
 //
 // Until 2026-10-01 every absolute path literal in a one-line inline script was
@@ -2421,16 +3113,34 @@ function inlineScriptRisk(body, prog, root, base, argv = []) {
 // reading of a script's writes was left to judge one-line scripts alone, and a
 // review found 31 one-line writes it let through, each spelled in a way that
 // reading does not know (`fs.writeFileSync.call`, `__import__('os').remove`,
-// Perl's `qx`, a mode kept in a variable). So the scan is back for one-line
+// Perl's `qx`, a mode kept in a variable). So the scan came back for one-line
 // scripts, and a script that names a path outside the project passes it only
-// when it is provably a read (see whyNotARead). Multi-line scripts are judged
-// by their writes alone, as before; their own gaps are a separate matter.
+// when it is provably a read (see whyNotARead).
+//
+// The kit fix list of 2026-10-02 (T1) found the same writes passing in a
+// script written over several lines, which was judged by its writes alone.
+// The owner's call: a script of any length follows this rule, and he accepts
+// that some harmless multi-line scripts that read outside and write inside
+// are refused. Round two of that list (R9) narrowed it for multi-line scripts
+// to paths that name a folder on this computer, unless the script builds a
+// path to write to, so a web route like '/projects/' in a script that reads
+// and writes only inside passes (see outsidePathRisk).
 
 /**
- * Absolute-looking path literals in a one-line inline script, found the way
- * the scan before 2026-10-01 found them: every quoted text that starts with a
- * drive or a slash. `at` is its opening quote and `end` is just past its
- * closing one.
+ * Why a script handed to an interpreter cannot be proven to write only inside
+ * the project folder, by where it writes or by a path outside it names, or
+ * null. Every reading of an inline script, a here-document script and a
+ * piped one goes through here.
+ */
+function scriptRisk(body, prog, root, base, argv = []) {
+  return inlineScriptRisk(body, prog, root, base, argv) ?? outsidePathRisk(body, prog, root, base, argv);
+}
+
+/**
+ * Absolute-looking path literals in an inline script, found the way the scan
+ * before 2026-10-01 found them: every quoted text on one line that starts
+ * with a drive or a slash. `at` is its opening quote and `end` is just past
+ * its closing one.
  *
  * The quantifier must have no minimum: with `{3,}` the engine skipped the
  * short literal `'fs'` and then paired the WRONG quotes, the closing one of
@@ -2443,14 +3153,14 @@ function scriptLiterals(text) {
     .map((m) => ({ text: m[2], at: m.index, end: m.index + m[0].length }));
 }
 
-// The names a one-line script must not hold anywhere, its strings included,
-// to pass as a read (2026-10-01): each writes, starts a program or runs code
-// this guard cannot read. Case does not matter. The first list is found
-// anywhere in a word (`writeFileSync`, `createWriteStream` and `os.unlink`
-// each hold one), the second only as a whole word or a call, where a longer
-// word is harmless (`literal_eval`, `System32`). The lists err wide on
-// purpose: a read refused costs one retry, and a write let through is what
-// this guard exists to stop.
+// The names a script naming a path outside must not hold anywhere, its
+// strings included, to pass as a read (2026-10-01): each writes, starts a
+// program or runs code this guard cannot read. Case does not matter. The
+// first list is found anywhere in a word (`writeFileSync`, `createWriteStream`
+// and `os.unlink` each hold one), the second only as a whole word or a call,
+// where a longer word is harmless (`literal_eval`, `System32`). The lists err
+// wide on purpose: a read refused costs one retry, and a write let through is
+// what this guard exists to stop.
 const NOT_A_READ_PART = /write|append|unlink|remove|rmtree|rmdir|rm_rf|rmsync|mkdir|makedirs|rename|copy|move|link|chmod|chown|truncate|utime|fileio|os\.open|exec|spawn|fork|popen|__import__|getattr|importlib|subprocess|child_process|shutil|sqlite|tempfile|set-content|out-file|new-item|remove-item|copy-item|move-item|rename-item|add-content|start-process|invoke-expression/i;
 const NOT_A_READ_WORD = /\b(?:system|eval|function|reflect|qx|iex)\b|\.\s*(?:call|apply|bind)\s*\(|%x\s*[^\w\s]/i;
 // More of the same kind, looked for in the script's code only, since a folder
@@ -2478,7 +3188,7 @@ const NOT_A_READ_SHAPES = {
   py: /\bfrom\s+[\w.]+\s+import\s+\*|__(?!name__|file__|main__|doc__)\w+__|\b(?:attrgetter|methodcaller)\b/,
   js: /\bimport\s*\(|__\w+__|\bObject\s*\.\s*(?:values|entries|getOwnProperty\w*|defineProperty|defineProperties|assign|setPrototypeOf|getPrototypeOf|fromEntries)\b/,
 };
-// The modules a one-line script may load and still pass as a read. Each one
+// The modules such a script may load and still pass as a read. Each one
 // writes only through calls the rest of this check refuses; a module not
 // listed (a third-party library, a database, a process pool) may write by a
 // name this guard has never heard of.
@@ -2760,8 +3470,35 @@ function hiddenSpelling(text, code, fam) {
 }
 
 /**
- * Why a one-line script that names the paths `outside` (outside the project)
- * is not provably a read, as { lit, why }, or null when it is one: every such
+ * The path literals in a script that name a place outside the project; with
+ * `onlyFolders`, only the ones shaped like a folder on this computer
+ * (FS_ABSOLUTE). See outsidePathRisk for when that applies.
+ */
+function outsideLiterals(text, onlyFolders, root, base, what = '') {
+  return scriptLiterals(text).filter((l) => (!onlyFolders || FS_ABSOLUTE.test(l.text)) && checkTarget(l.text, root, what, base));
+}
+
+/**
+ * Does a script write to a path it builds at run time, or run code it
+ * builds? Then a literal shaped like a web route can be the end of that path
+ * (`process.env.OneDrive + '/x.txt'`), not a route.
+ */
+function buildsWritePath(body, prog) {
+  const fam = scriptFamily(prog);
+  const { text, unprovable } = prepareScript(body, fam);
+  if (unprovable.length > 0) return true;
+  return writeDestinations(text, fam).dests.some((d) => {
+    const expr = d.expr ?? '';
+    // A number is a mode or a count, as in the reading of writes.
+    if (d.temp || /^(?:0[xob])?[\d_]+$/i.test(expr.trim())) return false;
+    const shape = d.shape ?? writeShape(expr, text);
+    return shape.full === undefined && !shape.prefix;
+  });
+}
+
+/**
+ * Why a script that names the paths `outside` (outside the project) is not
+ * provably a read, as { lit, why }, or null when it is one: every such
  * path is the path argument of a known read call (READ_CALL_BEFORE), and the
  * script holds nothing that could write. "Nothing that could write" is read
  * wide: no name from the NOT_A_READ lists, no module outside
@@ -2770,7 +3507,7 @@ function hiddenSpelling(text, code, fam) {
  * at all, wherever it lands), no hidden spelling, and no file opened in a mode
  * that is not a plain read.
  */
-function whyNotARead(body, prog, root, base, argv, outside) {
+function whyNotARead(body, prog, root, base, argv, outside, onlyFolders) {
   const fam = scriptFamily(prog);
   const no = (why, lit = outside[0].text) => ({ lit, why });
   if (!READ_CALL_BEFORE[fam]) return no('a script in this language is never read as one that only reads');
@@ -2789,7 +3526,7 @@ function whyNotARead(body, prog, root, base, argv, outside) {
   const hidden = hiddenSpelling(text, code, fam);
   if (hidden) return no(hidden);
   if (!opensOnlyToRead(text, code, fam)) return no('it opens a file in a way that is not a plain read');
-  const lits = scriptLiterals(text).filter((l) => checkTarget(l.text, root, '', base));
+  const lits = outsideLiterals(text, onlyFolders, root, base);
   const missing = outside.find((o) => !lits.some((l) => l.text === o.text));
   if (missing) return no('that path is not the path of a plain read call', missing.text);
   const loose = lits.find((l) => !readCallHolds(text, l, fam));
@@ -2798,22 +3535,41 @@ function whyNotARead(body, prog, root, base, argv, outside) {
 }
 
 /**
- * Why a one-line inline script naming a path outside the project is refused,
- * or null. The paths are the ones scriptLiterals finds; a script naming none,
- * or one that is provably a read (whyNotARead), passes. The reason names the
- * path, as the scan before 2026-10-01 did, and says what kept the script
- * from passing as a read.
+ * Why an inline script naming a path outside the project is refused, or
+ * null. The paths are the ones scriptLiterals finds; a script naming none, or
+ * one that is provably a read (whyNotARead), passes. The reason names the
+ * path, as the scan before 2026-10-01 did, and says what kept the script from
+ * passing as a read. A script's own `$f` is never a loop variable of the
+ * shell around it (see loopValue).
+ *
+ * In a script written over several lines, a literal that is not shaped like
+ * a folder on this computer (FS_ABSOLUTE) counts only when the script writes
+ * to a path it builds at run time (kit fix list round two, 2026-10-02, R9).
+ * A web route such as '/projects/' names no folder, and a check over the
+ * built pages in dist/ that held one was refused although it read and wrote
+ * only inside. Where a path is built, `process.env.OneDrive + '/x.txt'`, the
+ * same literal can end a path outside, and it is read as one. A one-line
+ * script keeps the rule it has followed since 2026-10-01: every
+ * absolute-looking literal counts.
  */
-function oneLineRisk(body, prog, root, base, argv) {
-  const what = `the script passed to \`${prog}\``;
-  const outside = scriptLiterals(body).filter((l) => checkTarget(l.text, root, what, base));
-  if (outside.length === 0) return null;
-  const blocked = whyNotARead(body, prog, root, base, argv, outside);
-  if (!blocked) return null;
-  const where = resolveStatic(blocked.lit, base.toLowerCase()).dynamic
-    ? 'which cannot be proven to be inside the project folder'
-    : `which is outside the project folder (${root})`;
-  return `${what} names "${blocked.lit}", ${where}, and ${blocked.why}. A one-line script may name a path outside the project only as the path of a plain read call (readFileSync, open(path), os.listdir, File.read and the like), in a script with nothing else in it that could write`;
+function outsidePathRisk(body, prog, root, base, argv) {
+  const saved = LOOP_VARS;
+  LOOP_VARS = null;
+  try {
+    const what = `the script passed to \`${prog}\``;
+    const named = outsideLiterals(body, false, root, base, what);
+    const onlyFolders = body.includes('\n') && named.some((l) => !FS_ABSOLUTE.test(l.text)) && !buildsWritePath(body, prog);
+    const outside = onlyFolders ? named.filter((l) => FS_ABSOLUTE.test(l.text)) : named;
+    if (outside.length === 0) return null;
+    const blocked = whyNotARead(body, prog, root, base, argv, outside, onlyFolders);
+    if (!blocked) return null;
+    const where = resolveStatic(blocked.lit, base.toLowerCase()).dynamic
+      ? 'which cannot be proven to be inside the project folder'
+      : `which is outside the project folder (${root})`;
+    return `${what} names "${blocked.lit}", ${where}, and ${blocked.why}. An inline script may name a path outside the project only as the path of a plain read call (readFileSync, open(path), os.listdir, File.read and the like), in a script with nothing else in it that could write`;
+  } finally {
+    LOOP_VARS = saved;
+  }
 }
 
 /**
@@ -2881,7 +3637,126 @@ function psList(first, words, k) {
   return { values, end: k };
 }
 
-function checkSegment(tokens, root, shell, base, depth = 0) {
+/**
+ * How sed or perl is told to edit (kit fix list, 2026-10-02, T138): whether it
+ * edits in place, whether `-e` or `-f` gave the script, and the words that
+ * are files. The value of `-e`, `--expression`, `-f` and `--file` is the
+ * script, never a file it writes: read as a file, the install's own
+ * placeholder step (`sed -i -e 's/<double-braced name>/Rotem/g' CLAUDE.md`)
+ * was refused as a path built at run time. In a cluster, `i` takes the rest
+ * of the word as its backup suffix (`-ie` keeps a copy ending in e), and
+ * perl's -I, -M, -m, -F, -x, -C, -d and -D take the rest of the word as their
+ * value.
+ */
+function editorWords(prog, rest) {
+  let inPlace = false;
+  let scripted = false;
+  const words = [];
+  for (let k = 0; k < rest.length; k++) {
+    const t = rest[k];
+    if (t.redirect) { k++; continue; }
+    if (t.text === '') continue;
+    if (t.text === '--') {
+      for (const u of rest.slice(k + 1)) if (!u.redirect && u.text) words.push(u.text);
+      break;
+    }
+    const long = /^--([\w-]+)(=[\s\S]*)?$/.exec(t.text);
+    if (long) {
+      if (long[1] === 'in-place') inPlace = true;
+      if (long[1] === 'expression' || long[1] === 'file') scripted = true;
+      if (/^(?:expression|file|line-length)$/.test(long[1]) && long[2] === undefined) k++;
+      continue;
+    }
+    if (!/^-./.test(t.text) || (t.lit && t.lit[0])) { words.push(t.text); continue; }
+    for (let i = 1; i < t.text.length; i++) {
+      const c = t.text[i];
+      if (c === 'i') { inPlace = true; break; }
+      const script = prog === 'perl' ? c === 'e' || c === 'E' : c === 'e' || c === 'f';
+      if (script || (prog === 'sed' && c === 'l')) {
+        if (script) scripted = true;
+        if (i === t.text.length - 1) k++; // the value is the next word
+        break;
+      }
+      if (prog === 'perl' && /[IMmFxCdD]/.test(c)) break;
+    }
+  }
+  return { inPlace, scripted, words };
+}
+
+// git subcommands that only read the repository they run in (kit fix list,
+// 2026-10-02, T18). archive and format-patch read it too; where they write
+// is checked on its own.
+const GIT_READS = new Set([
+  'status', 'log', 'diff', 'show', 'rev-parse', 'ls-files', 'ls-tree', 'ls-remote', 'blame', 'annotate',
+  'grep', 'describe', 'rev-list', 'shortlog', 'cat-file', 'for-each-ref', 'show-ref', 'name-rev',
+  'merge-base', 'diff-tree', 'diff-files', 'diff-index', 'whatchanged', 'count-objects', 'var', 'help',
+  'version', 'check-ignore', 'check-attr', 'check-ref-format', 'check-mailmap', 'verify-commit',
+  'verify-tag', 'verify-pack', 'cherry', 'range-diff', 'show-branch', 'difftool', 'get-tar-commit-id',
+  'request-pull', 'archive', 'format-patch',
+]);
+
+/**
+ * Does this git subcommand change files or history in the repository it runs
+ * in? `args` are its other words, lower-cased, and `flags` its flags. clone
+ * and init make a repository of their own and are checked by where it lands.
+ * A subcommand this does not know counts as one that changes.
+ */
+function gitChanges(sub, args, flags) {
+  if (sub === 'clone' || sub === 'init') return false;
+  if (GIT_READS.has(sub)) return false;
+  const first = args[0] ?? '';
+  const has = (re) => flags.some((f) => re.test(f));
+  const dryRun = /^(?:-[a-z]*n[a-z]*|--dry-run)$/;
+  switch (sub) {
+    case 'branch':
+      if (has(/^-[a-z]*[dDmMcCfu]|^--(?:delete|move|copy|force|set-upstream-to|set-upstream|unset-upstream|edit-description|track|no-track|create-reflog)(?:=|$)/)) return true;
+      return args.length > 0 && !has(/^-[a-z]*l|^--(?:list|contains|no-contains|merged|no-merged|points-at|show-current)(?:=|$)/);
+    case 'tag':
+      if (has(/^-[a-z]*[dasumFfe]|^--(?:delete|annotate|sign|local-user|message|file|force|edit|create-reflog)(?:=|$)/)) return true;
+      return args.length > 0 && !has(/^-[a-z]*[lnv]|^--(?:list|verify|contains|no-contains|merged|no-merged|points-at)(?:=|$)/);
+    case 'remote': return /^(?:add|remove|rm|rename|set-url|set-head|set-branches|prune|update)$/.test(first);
+    case 'stash': return !/^(?:list|show)$/.test(first);
+    case 'config':
+      if (/^(?:get|list|get-color|get-colorbool)$/.test(first)) return false;
+      if (/^(?:set|unset|rename-section|remove-section|edit)$/.test(first)) return true;
+      if (has(/^(?:--unset|--unset-all|--add|--replace-all|--rename-section|--remove-section|--edit|-e)$/)) return true;
+      if (has(/^(?:--get|--get-all|--get-regexp|--get-urlmatch|--get-color|--get-colorbool|--list|-l)$/)) return false;
+      return args.length >= 2;
+    case 'worktree': return first !== 'list';
+    case 'notes': return first !== '' && !/^(?:list|show)$/.test(first);
+    case 'submodule': return first !== '' && !/^(?:status|summary)$/.test(first);
+    case 'symbolic-ref': return args.length >= 2 || has(/^(?:-d|--delete)$/);
+    case 'reflog': return /^(?:expire|delete)$/.test(first);
+    case 'bisect': return !/^(?:log|visualize|view|terms)$/.test(first);
+    case 'sparse-checkout': return first !== 'list';
+    case 'lfs': return !/^(?:ls-files|status|env|version)$/.test(first);
+    case 'bundle': return first === 'unbundle';
+    case 'hash-object': return has(/^-w$/);
+    case 'fsck': return has(/^--lost-found$/);
+    case 'apply': return has(/^--apply$/) || !has(/^--(?:check|stat|numstat|summary)$/);
+    case 'clean': case 'add': case 'rm': case 'mv': return !has(dryRun);
+    case 'commit': return !has(/^--dry-run$/);
+    default: return true;
+  }
+}
+
+/** Why git may not change the repository in `folder`, or null when it is inside the project or an approved folder. */
+function gitFolderReason(folder, root, what) {
+  const rootKey = root.toLowerCase();
+  const f = String(folder).toLowerCase();
+  if (f.includes('\u0000unknown')) {
+    return `${what} changes the repository in a folder chosen at run time, so it cannot be proven to be inside the project folder`;
+  }
+  if (inside(f, rootKey) || isExtraRoot(f, rootKey)) return null;
+  return `${what} changes the repository in "${f.replace(/^\u0000msys/, '')}", which is outside the project folder (${root}). Against another folder, git may only read (status, log, diff, show)`;
+}
+
+/**
+ * Why one command cannot be proven to write only inside the project, or null.
+ * `seg` is its segment, whose `prev` is the stage its pipeline feeds it from;
+ * null where no pipeline applies (a command run by find -exec).
+ */
+function checkSegment(tokens, root, shell, base, depth = 0, seg = null) {
   // 1. Redirections, in either shell. `>&` / `&>` followed by a digit or `-` is
   //    a descriptor dup, not a file. Every word the target can be is checked
   //    (a bash brace list, see tokenize), without a `)` that closes a subshell.
@@ -2903,25 +3778,17 @@ function checkSegment(tokens, root, shell, base, depth = 0) {
   let rest = tokens.slice(pi + 1);
 
   // 2. Inline scripts: heuristic, and honest about it. Every script is judged
-  //    by where it writes (inlineScriptRisk). A one-line script is also
-  //    refused for every absolute path literal in it that lands outside the
-  //    project, as it was until 2026-10-01, unless it is provably a read
-  //    (oneLineRisk): dropping that scan that day let one-line writes through
-  //    that the reading of writes does not know. The words after the script
-  //    go along, since the script can read them as paths or as code.
-  const inline = INLINE_SCRIPT[prog];
-  if (inline) {
-    for (let k = 0; k < rest.length; k++) {
-      if (!isWord(rest[k]) || !inline.test(rest[k].text) || !rest[k + 1]) continue;
-      const after = rest.slice(k + 2).filter((t, i, a) => !t.redirect && !(i > 0 && a[i - 1].redirect)).map((t) => t.text);
-      const body = rest[k + 1].text;
-      const risk = inlineScriptRisk(body, prog, root, base, after);
-      if (risk) return risk;
-      if (!body.includes('\n')) {
-        const named = oneLineRisk(body, prog, root, base, after);
-        if (named) return named;
-      }
-    }
+  //    by where it writes, and is also refused for every absolute path literal
+  //    in it that lands outside the project, unless it is provably a read
+  //    (scriptRisk). Until 2026-10-02 only a one-line script was read for its
+  //    paths; the kit fix list that day (T1) found multi-line scripts writing
+  //    outside by spellings the reading of writes does not know. The words
+  //    after the script go along, since the script can read them as paths or
+  //    as code.
+  for (const { body, after: end } of inlineScripts(prog, rest)) {
+    const after = rest.slice(end + 1).filter((t, i, a) => !t.redirect && !(i > 0 && a[i - 1].redirect)).map((t) => t.text);
+    const risk = scriptRisk(shell === 'bash' ? catHeredocs(body) : body, prog, root, base, after);
+    if (risk) return risk;
   }
 
   // 3. git makes a folder of its own, in either shell. PowerShell clones were
@@ -2938,43 +3805,85 @@ function checkSegment(tokens, root, shell, base, depth = 0) {
   //    given or in the current one. `git archive -o`, `git format-patch -o`
   //    and `git bundle create` write a file where they are told to (review
   //    2026-09-28: "export the repo as a zip to my Desktop" ran unread).
+  //
+  //    git working on another folder's repository (kit fix list, 2026-10-02,
+  //    T18): when its working folder is outside the project (`-C`,
+  //    `--work-tree`, `--git-dir`, or a `cd` before it), a subcommand that
+  //    changes files or history (commit, checkout, reset, pull, stash, clean
+  //    and the like) is refused, and one that only reads (status, log, diff,
+  //    show and the like) runs. An approved extra folder still passes. The
+  //    `--output` file is checked for every subcommand, and so is the file a
+  //    `git config --file` writes.
   if (prog === 'git') {
     const VALUE_OPT = /^(-[bBcCjou]|--(?:branch|revision|origin|config|config-env|depth|reference(?:-if-able)?|upload-pack|template|separate-git-dir|jobs|shallow-since|shallow-exclude|server-option|bundle-uri|initial-branch|object-format|ref-format|reason|git-dir|work-tree|namespace|filter|output|output-directory|format|prefix|remote))$/;
     let here = base;
+    const elsewhere = []; // where --git-dir and --work-tree point
     const ps = [];
+    const flags = []; // the subcommand's own flags
     const outputs = [];
+    const shortO = [];
+    const configFiles = [];
+    const folder = (v) => {
+      const moved = resolveStatic(v, here);
+      return moved.dynamic || !moved.full ? UNKNOWN_DIR : moved.full;
+    };
     for (let k = 0; k < rest.length; k++) {
       const t = rest[k];
       if (t.redirect) { k++; continue; }
       if (!t.text) continue;
-      if (!isFlag(t, shell)) { ps.push(t); continue; }
+      if (!isFlag(t, shell)) {
+        // `git config --file <file>`: the file, not a key.
+        if (ps[0] && ps[0].text.toLowerCase() === 'config' && /^(-f|--file|--blob)$/.test(rest[k - 1].text)) { configFiles.push(t.text); continue; }
+        ps.push(t);
+        continue;
+      }
+      if (ps.length > 0) flags.push(t.text);
       const glued = /^--separate-git-dir=(.+)$/.exec(t.text);
       if (glued) { const r = checkTarget(glued[1], root, '`git`', here); if (r) return r; continue; }
       const out = /^--output(?:-directory)?=(.+)$/.exec(t.text);
       if (out) { outputs.push(out[1]); continue; }
-      if (!VALUE_OPT.test(t.text) || !rest[k + 1]) continue;
+      const loc = /^--(?:git-dir|work-tree)=(.+)$/.exec(t.text);
+      if (loc) { if (ps.length === 0) elsewhere.push(folder(loc[1])); continue; }
+      const file = /^--file=(.+)$/.exec(t.text);
+      if (file) { configFiles.push(file[1]); continue; }
+      // A value never starts with a dash: `git diff -C --output=x` is no `-C x`.
+      if (!VALUE_OPT.test(t.text) || !rest[k + 1] || /^-./.test(rest[k + 1].text)) continue;
       const v = rest[++k].text;
       if (t.text === '-C' && ps.length === 0) {
-        const moved = resolveStatic(v, here);
-        here = moved.dynamic || !moved.full ? '\u0000unknown' : moved.full;
+        here = folder(v);
+      } else if (/^--(?:git-dir|work-tree)$/.test(t.text) && ps.length === 0) {
+        elsewhere.push(folder(v));
       } else if (t.text === '--separate-git-dir') {
         const r = checkTarget(v, root, '`git`', here);
         if (r) return r;
-      } else if (/^(-o|--output|--output-directory)$/.test(t.text)) {
+      } else if (/^(--output|--output-directory)$/.test(t.text)) {
         outputs.push(v);
+      } else if (t.text === '-o') {
+        shortO.push(v);
       }
     }
     const sub = ps[0] ? ps[0].text.toLowerCase() : '';
+    const args = ps.slice(1).map((t) => t.text.toLowerCase());
+    const what = `\`git ${sub}\``;
+    // `-o` names the output only for archive and format-patch.
+    for (const o of [...outputs, ...(sub === 'archive' || sub === 'format-patch' ? shortO : [])]) {
+      const r = checkTarget(o, root, what, here);
+      if (r) return r;
+    }
+    if (sub && gitChanges(sub, args, flags)) {
+      for (const f of sub === 'config' ? configFiles : []) {
+        const r = checkTarget(f, root, '`git config --file`', here);
+        if (r) return r;
+      }
+      for (const f of [here, ...elsewhere]) {
+        const r = gitFolderReason(f, root, what);
+        if (r) return r;
+      }
+    }
     if (sub === 'clone' && ps.length >= 2) return checkTarget(ps[2] ? ps[2].text : '.', root, '`git clone`', here);
     if (sub === 'init') return checkTarget(ps[1] ? ps[1].text : '.', root, '`git init`', here);
     if (sub === 'worktree' && ps.length >= 3 && ps[1].text.toLowerCase() === 'add') {
       return checkTarget(ps[2].text, root, '`git worktree add`', here);
-    }
-    if (sub === 'archive' || sub === 'format-patch') {
-      for (const o of outputs) {
-        const r = checkTarget(o, root, `\`git ${sub}\``, here);
-        if (r) return r;
-      }
     }
     if (sub === 'bundle' && ps[1] && ps[1].text.toLowerCase() === 'create' && ps[2]) {
       return checkTarget(ps[2].text, root, '`git bundle create`', here);
@@ -3099,7 +4008,17 @@ function checkSegment(tokens, root, shell, base, depth = 0) {
   //    `find` runs a command on what it finds (`-exec cp {} <folder> \;`), and
   //    writes its own output files with -fprint, -fprintf and -fls. In
   //    PowerShell `find` is find.exe, which only searches text.
+  //    The `{}` it hands the command is a file inside the folders it searches
+  //    (kit fix list, 2026-10-02, T10): read as a name in the current folder,
+  //    `find <outside> -exec sed -i ... {} +` edited files outside unread. So
+  //    the command is read once per folder, with `{}` as a file in it; with
+  //    -execdir the command runs in that folder, and `{}` is a file there.
   if (prog === 'find' && shell !== 'powershell') {
+    let s = 0;
+    while (s < rest.length && /^-([HLP]|O\d*|D)$/.test(rest[s].text)) s += rest[s].text === '-D' ? 2 : 1;
+    const starts = [];
+    for (; s < rest.length && !rest[s].redirect && rest[s].text !== '' && !/^[-(!)]/.test(rest[s].text); s++) starts.push(rest[s].text);
+    if (starts.length === 0) starts.push('.');
     for (let k = 0; k < rest.length; k++) {
       const x = rest[k].text;
       if (/^-(fprint0?|fprintf|fls)$/.test(x) && rest[k + 1]) {
@@ -3109,9 +4028,15 @@ function checkSegment(tokens, root, shell, base, depth = 0) {
       if (/^-(exec|execdir|ok|okdir)$/.test(x)) {
         let end = k + 1;
         while (end < rest.length && !/^[;+]$/.test(rest[end].text)) end++;
-        const inner = rest.slice(k + 1, end);
-        const reason = checkSegment(inner, root, shell, base, depth) || innerShells(inner, root, shell, depth, base);
-        if (reason) return reason;
+        const inDir = /dir$/.test(x);
+        for (const start of starts) {
+          const found = inDir ? './x' : `${start.replace(/[\\/]+$/, '')}/x`;
+          const moved = inDir ? resolveStatic(start, base) : null;
+          const where = !moved ? base : moved.dynamic || !moved.full ? UNKNOWN_DIR : moved.full;
+          const inner = rest.slice(k + 1, end).map((t) => (t.text.includes('{}') ? { text: t.text.split('{}').join(found) } : t));
+          const reason = checkSegment(inner, root, shell, where, depth) || innerShells(inner, root, shell, depth, where);
+          if (reason) return reason;
+        }
         k = end;
       }
     }
@@ -3163,13 +4088,11 @@ function checkSegment(tokens, root, shell, base, depth = 0) {
     // `-i.bak`, perl's `-pi -e`. Only a word starting `-i` used to count
     // (review 2026-09-28).
     if (prog === 'sed' || prog === 'perl') {
-      const inPlace = rest.some((t) => isWord(t) && (/^-[a-zA-Z]*i/.test(t.text) || /^--in-place/.test(t.text)));
+      const { inPlace, scripted, words } = editorWords(prog, rest);
       if (!inPlace) return null;
-      const ps = positionals(rest, shell);
-      // The first word is the script unless -e, -f or a script file gave it.
-      const scripted = rest.some((t) => isWord(t) && /^-[a-zA-Z]*[ef]/.test(t.text) && !/^-[a-zA-Z]*i/.test(t.text));
-      for (const t of scripted ? ps : ps.slice(1)) {
-        const reason = checkTarget(t.text, root, `\`${prog} -i\``, base);
+      // The first word is the script unless -e or -f gave it.
+      for (const w of scripted ? words : words.slice(1)) {
+        const reason = checkTarget(w, root, `\`${prog} -i\``, base);
         if (reason) return reason;
       }
       return null;
@@ -3309,14 +4232,21 @@ function checkSegment(tokens, root, shell, base, depth = 0) {
   }
   if (PS_RENAME.has(prog)) {
     const pos = groups.flat().filter((v) => v !== namedSrc && v !== namedName);
-    const src = namedSrc ?? (namedName !== null ? pos[0] : pos[0]) ?? null;
+    const src = namedSrc ?? pos[0] ?? null;
     const name = namedName ?? (namedSrc !== null ? pos[0] : pos[1]) ?? null;
-    if (!name) return null;
-    if (/[\\/]/.test(name)) return checkTarget(name, root, what, base);
-    if (!src) return checkTarget(name, root, what, base);
+    if (name && /[\\/]/.test(name)) return checkTarget(name, root, what, base);
+    // A rename lands beside its item, so with no new name written out (a
+    // script block, `-NewName { ... }`) the item's folder is still where it
+    // writes. With no item of its own it renames what its pipeline hands it,
+    // each beside where it sits (kit fix list, 2026-10-02, T10: a pipeline
+    // from Downloads renamed every file there unread).
+    const beside = (item) => `${folderOf(item)}/${name ?? 'x'}`;
+    if (!src) {
+      if (seg && seg.prev) return pipeReason(seg, shell, root, what, beside);
+      return name ? checkTarget(name, root, what, base) : null;
+    }
     if (resolveStatic(src, base.toLowerCase()).dynamic) return checkTarget(`\u0000${src}`, root, what, base);
-    const folder = /[\\/]/.test(src) ? src.replace(/[\\/][^\\/]*$/, '') : '.';
-    return checkTarget(`${folder || '/'}/${name}`, root, what, base);
+    return checkTarget(beside(src), root, what, base);
   }
   if (sawNamedDest) return firstReason(named);
 
@@ -3328,7 +4258,13 @@ function checkSegment(tokens, root, shell, base, depth = 0) {
     const dests = namedSource ? groups : groups.slice(1);
     return firstReason(dests.length > 0 ? dests.flat() : ['.']);
   }
-  if (groups.length === 0) return null;
+  if (groups.length === 0) {
+    // A move with no destination moves into the current folder. A delete, an
+    // overwrite or an emptying with no path of its own writes to what its
+    // pipeline hands it (kit fix list, 2026-10-02, T10).
+    if (PS_MOVE.has(prog)) return checkTarget('.', root, what, base);
+    return PS_PIPE_TARGET.has(prog) ? pipeReason(seg, shell, root, what, (item) => item) : null;
+  }
   if (destOnly) return firstReason(groups[groups.length - 1]);
   // The first word is the path, checked in full. A later word is usually the
   // content (`Set-Content x.txt $text`), so one built at run time is passed
@@ -3420,9 +4356,19 @@ function substitutions(text) {
       let depth = 0;
       let iq = null;
       let j = i + 1;
+      const arith = text[i + 2] === '(';
+      const docs = [];
       for (; j < text.length; j++) {
         const c = text[j];
         if (iq) { if (c === '\\') j++; else if (c === iq) iq = null; continue; }
+        // A here-document's body, from the end of its line to its closing
+        // line, is text, whatever quote marks it holds.
+        if (!arith && c === '<' && text[j + 1] === '<' && text[j + 2] !== '<') {
+          const nl = text.indexOf('\n', j);
+          const doc = heredocOpener(nl < 0 ? text : text.slice(0, nl), j, false);
+          if (doc) { docs.push(doc); j += doc.len - 1; continue; }
+        }
+        if (c === '\n' && docs.length > 0) { j = heredocBodiesEnd(text, j + 1, docs.splice(0)) - 1; continue; }
         if (c === "'" || c === '"') { iq = c; continue; }
         if (c === '\\') { j++; continue; }
         if (c === '(') depth++;
@@ -3445,6 +4391,144 @@ const UNKNOWN_DIR = '\u0000unknown';
 const PS_COMMON_VALUE = /^(erroraction|ea|warningaction|wa|informationaction|infa|progressaction|proga|errorvariable|ev|warningvariable|wv|informationvariable|iv|outvariable|ov|outbuffer|ob|pipelinevariable|pv)$/;
 const PS_COMMON_SWITCH = /^(verbose|vb|debug|db)$/;
 
+/** The folder a path sits in: what is before its last slash, `.` when it has none. */
+const folderOf = (p) => (/[\\/]/.test(p) ? p.replace(/[\\/][^\\/]*$/, '') || '/' : '.');
+
+/**
+ * The values of a PowerShell segment that is only strings: `'a'`,
+ * `"a", "b"`, or a here-string standing alone. Null when it is anything
+ * else, a command or a variable.
+ */
+function literalList(tokens) {
+  if (tokens.length === 0) return null;
+  for (const t of tokens) {
+    if (t.redirect || !t.lit || ![...t.text].every((c, i) => t.lit[i] || c === ',')) return null;
+  }
+  const list = psList(tokens[0], tokens, 0);
+  return list.end === tokens.length - 1 ? list.values : null;
+}
+
+/**
+ * Where the items a PowerShell writer takes from its pipeline sit (kit fix
+ * list, 2026-10-02, T10): `{ items, here }`, each item a path standing for
+ * what is listed (a folder Get-ChildItem lists stands for the files in it),
+ * `here` the folder the start ran in; `{ unreadable }` with the stage that
+ * cannot be read; or null when nothing is piped in. The pipeline is read
+ * back to its start through stages that only filter or sort, and the start
+ * must be a lister or strings written out in the command.
+ */
+function pipelineItems(seg, shell) {
+  let stage = seg && seg.prev;
+  if (!stage) return null;
+  for (; stage.prev; stage = stage.prev) {
+    const tokens = stage.tokens ?? [];
+    const pi = programIndex(tokens, shell);
+    if (pi < 0 || !PS_FILTERS.has(programName(tokens[pi])) || tokens.some((t) => t.text.includes('@{'))) return { unreadable: stage.text.trim() };
+  }
+  const tokens = stage.tokens ?? [];
+  const list = literalList(tokens);
+  if (list) return { items: list.flatMap((v) => v.split('\n')).map((v) => v.trim()).filter(Boolean), here: stage.here };
+  const pi = programIndex(tokens, shell);
+  const lister = pi >= 0 ? programName(tokens[pi]) : '';
+  if (!PS_LISTERS.has(lister)) return { unreadable: stage.text.trim() };
+  const rest = psGroupParens(tokens.slice(pi + 1));
+  const paths = [];
+  const loose = [];
+  for (let k = 0; k < rest.length; k++) {
+    const t = rest[k];
+    if (t.redirect) { k++; continue; }
+    if (!isWord(t) || !/^-[A-Za-z]/.test(t.text)) { loose.push(t); continue; }
+    const glued = /^-([A-Za-z]+)[:=](.+)$/.exec(t.text);
+    const name = (glued ? glued[1] : t.text.slice(1)).toLowerCase();
+    const isPath = /^(path|literalpath|pspath|lp)$/.test(name);
+    if (glued) { if (isPath) paths.push(...glued[2].split(',')); continue; }
+    if (PS_LIST_SWITCH.test(name) || !rest[k + 1] || rest[k + 1].redirect) continue;
+    const value = psList(rest[k + 1], rest, k + 1);
+    if (isPath) paths.push(...value.values);
+    k = value.end;
+  }
+  if (paths.length === 0 && loose.length > 0) paths.push(...psList(loose[0], loose, 0).values);
+  if (paths.length === 0) paths.push('.');
+  const children = /^(get-childitem|gci|ls|dir)$/.test(lister);
+  return { items: paths.map((p) => (children && !/[*?[]/.test(p.replace(/^.*[\\/]/, '')) ? `${p}/x` : p)), here: stage.here };
+}
+
+/**
+ * Why the paths a writer takes from its pipeline cannot be proven inside the
+ * project folder, or null (see pipelineItems). `place` turns an item into the
+ * path the writer writes: the item itself, or a rename beside it.
+ */
+function pipeReason(seg, shell, root, what, place) {
+  const src = pipelineItems(seg, shell);
+  if (!src) return null;
+  if (src.unreadable !== undefined) {
+    return `${what} writes to the paths its pipeline hands it, which starts at \`${src.unreadable.slice(0, 80)}\`, a list this guard cannot read, so they cannot be proven to be inside the project folder. Name the paths on the command itself`;
+  }
+  for (const item of src.items) {
+    const reason = checkTarget(place(item), root, what, src.here);
+    if (reason) return reason;
+  }
+  return null;
+}
+
+/**
+ * The text a pipeline stage hands the next one, when it is written out in
+ * the command: an echo, a printf or a Write-Output of words, a `cat` of a
+ * here-document, or in PowerShell strings or a here-string standing alone.
+ * Null for anything else (`cat x.js`, a download).
+ */
+function pipedText(stage, shell) {
+  const tokens = stage.tokens ?? [];
+  if (shell === 'powershell') {
+    const list = literalList(tokens);
+    if (list) return list.join('\n');
+  }
+  const pi = programIndex(tokens, shell);
+  if (pi < 0) return null;
+  const prog = programName(tokens[pi]);
+  const words = tokens.slice(pi + 1).filter((t, i, a) => !t.redirect && !(i > 0 && a[i - 1].redirect)).map((t) => t.text);
+  // A `$(cat <<'EOF' ... EOF)` among the words is its body (see catHeredocs).
+  if (prog === 'echo' || (shell === 'powershell' && (prog === 'write-output' || prog === 'write'))) {
+    const text = words.filter((w) => shell === 'powershell' || !/^-[neE]+$/.test(w)).join(' ');
+    return shell === 'bash' ? catHeredocs(text) : text;
+  }
+  if (prog === 'printf' && shell !== 'powershell') return catHeredocs(words.join('\n'));
+  if (prog === 'cat' && stage.docs.length > 0 && positionals(tokens.slice(pi + 1), shell).length === 0) return stage.docs.join('\n');
+  return null;
+}
+
+/**
+ * A script piped into an interpreter or a shell by the stage before it (kit
+ * fix list, 2026-10-02, T1): `echo "..." | node`, `"..." | python -`,
+ * `cat <<'EOF' | bash`, `"Remove-Item x" | iex`. Read like the same script
+ * given in an argument. A program with a script of its own takes the piped
+ * text as data, and text not written out in the command (`cat x.js | node`)
+ * is not read, as a script file is not.
+ */
+function pipedScriptRisk(seg, prog, rest, root, shell, depth, here) {
+  if (depth >= MAX_DEPTH) return null;
+  const words = positionals(rest, shell === 'bash' ? 'bash' : 'powershell');
+  let run = null;
+  if (INLINE_SCRIPT[prog]) {
+    if (inlineScripts(prog, rest).length > 0 || words.some((t) => t.text !== '-')) return null;
+    run = (text) => scriptRisk(text, prog, root, here);
+  } else if (BASH_SHELLS.has(prog)) {
+    const stdin = rest.some((t) => isWord(t) && /^-[a-z]*s[a-z]*$/.test(t.text));
+    if (!stdin && (words.length > 0 || rest.some((t) => isWord(t) && /^-[a-z]*c/.test(t.text)))) return null;
+    run = (text) => analyze(text, 'bash', root, depth + 1, here);
+  } else if (PS_SHELLS.has(prog)) {
+    const ci = rest.findIndex((t) => isWord(t) && /^-(c(o(m(m(a(n(d)?)?)?)?)?)?|f(i(l(e)?)?)?|e(c|nc(odedcommand)?)?)$/i.test(t.text));
+    if (ci >= 0 ? !(rest[ci + 1] && rest[ci + 1].text === '-') : words.length > 0) return null;
+    run = (text) => analyze(text, 'powershell', root, depth + 1, here);
+  } else if (prog === 'invoke-expression' || prog === 'iex') {
+    if (words.length > 0 || rest.some((t) => isWord(t) && /^-c/i.test(t.text))) return null;
+    run = (text) => analyze(text, 'powershell', root, depth + 1, here);
+  }
+  if (!run) return null;
+  const text = pipedText(seg.prev, shell);
+  return text === null ? null : run(text);
+}
+
 /**
  * A here-document read by an interpreter (`python3 - <<'EOF'`, `node <<'EOF'`)
  * or by a shell (`bash <<'EOF'`) is a script, not data: its body is read the
@@ -3456,10 +4540,9 @@ function heredocRisk(prog, rest, docs, root, shell, depth, base) {
   if (shell === 'powershell' || depth >= MAX_DEPTH) return null;
   const files = positionals(rest, 'bash').filter((t) => t.text !== '-');
   if (files.length > 0) return null;
-  const inline = INLINE_SCRIPT[prog];
-  if (inline && !rest.some((t) => isWord(t) && inline.test(t.text))) {
+  if (INLINE_SCRIPT[prog] && inlineScripts(prog, rest).length === 0) {
     for (const body of docs) {
-      const reason = inlineScriptRisk(body, prog, root, base);
+      const reason = scriptRisk(body, prog, root, base);
       if (reason) return reason;
     }
   } else if (BASH_SHELLS.has(prog) && !rest.some((t) => isWord(t) && /^-[a-z]*c/.test(t.text))) {
@@ -3469,6 +4552,39 @@ function heredocRisk(prog, rest, docs, root, shell, depth, base) {
     }
   }
   return null;
+}
+
+/**
+ * A script given as `$(cat <<'EOF' ... EOF)` is the body of that
+ * here-document, so each such substitution in `text` is spelled out as its
+ * body. Once a here-document inside a quoted `$( )` became text (kit fix
+ * list, 2026-10-02, T9), `bash -c "$(cat <<'EOF' ... EOF)"` would have run
+ * its body unread; this keeps it read as the script it is.
+ */
+function catHeredocs(text) {
+  if (!text.includes('<<')) return text;
+  const open = /\$\(\s*cat\s+<<-?\s*(?:"([^"\n]+)"|'([^'\n]+)'|\\?([\w.-]+))[ \t]*\n/g;
+  let out = '';
+  let from = 0;
+  // Spelled out up to EVAL_BUDGET times, each found in one pass from where it opens.
+  for (let m, n = 0; n < EVAL_BUDGET && (m = open.exec(text)); n++) {
+    const delim = m[1] ?? m[2] ?? m[3];
+    const start = m.index + m[0].length;
+    let end = -1;
+    for (let at = start; at <= text.length;) {
+      const nl = text.indexOf('\n', at);
+      if (text.slice(at, nl < 0 ? text.length : nl).replace(/^\t+/, '').trim() === delim) { end = at; break; }
+      if (nl < 0) break;
+      at = nl + 1;
+    }
+    if (end < 0) break; // nothing closes it, and nothing after it is spelled out
+    const close = /^[^\n]*(?:\n\s*)?\)/.exec(text.slice(end, end + delim.length + 4096));
+    if (!close) continue;
+    out += text.slice(from, m.index) + text.slice(start, Math.max(start, end - 1));
+    from = end + close[0].length;
+    open.lastIndex = from;
+  }
+  return out + text.slice(from);
 }
 
 /**
@@ -3485,16 +4601,16 @@ function innerShells(tokens, root, shell, depth, here) {
   const rest = tokens.slice(pi + 1);
   if (BASH_SHELLS.has(prog)) {
     const ci = rest.findIndex((t) => isWord(t) && /^-[a-z]*c$/.test(t.text));
-    if (ci >= 0 && rest[ci + 1]) return analyze(rest[ci + 1].text, 'bash', root, depth + 1, here);
+    if (ci >= 0 && rest[ci + 1]) return analyze(catHeredocs(rest[ci + 1].text), 'bash', root, depth + 1, here);
     return null;
   }
   if (prog === 'eval' && shell === 'bash') {
-    return analyze(rest.filter((t) => !t.redirect).map((t) => t.text).join(' '), 'bash', root, depth + 1, here);
+    return analyze(catHeredocs(rest.filter((t) => !t.redirect).map((t) => t.text).join(' ')), 'bash', root, depth + 1, here);
   }
   if (PS_SHELLS.has(prog)) {
     const ci = rest.findIndex((t) => isWord(t) && /^-c(o(m(m(a(n(d)?)?)?)?)?)?$/i.test(t.text));
     if (ci >= 0 && rest.length > ci + 1) {
-      const inner = analyze(rest.slice(ci + 1).map((t) => t.text).join(' '), 'powershell', root, depth + 1, here);
+      const inner = analyze(catHeredocs(rest.slice(ci + 1).map((t) => t.text).join(' ')), 'powershell', root, depth + 1, here);
       if (inner) return inner;
     }
     const ei = rest.findIndex((t) => isWord(t) && /^-e(c|nc(odedcommand)?)?$/i.test(t.text));
@@ -3635,9 +4751,22 @@ function analyze(command, shell, root, depth = 0, cwd = root) {
     pushed = [];
     stackKnown = false;
   };
-  for (const seg of splitSegments(command, shell)) {
+  const segs = splitSegments(command, shell);
+  // The loop variables that hold only safe values so far (see loopRules).
+  const loops = shell === 'bash' && /\b(?:for|select)\s+[A-Za-z_]/.test(command) ? loopRules(command) : null;
+  const loopVars = new Set();
+  // A here-string, and a here-document inside a quoted `$( )`, is text,
+  // unless the command can run text as commands (Invoke-Expression, a script
+  // block, a new PowerShell; eval, source, `bash -c`): then its body is read
+  // as commands too, as it was before such text was passed over.
+  const strings = segs.flatMap((s) => s.strings);
+  const runsText = strings.length > 0 && (shell === 'powershell' ? PS_RUNS_TEXT : shell === 'bash' ? BASH_RUNS_TEXT : null)
+    ?.test(strings.reduce((c, s) => c.split(s.body).join(''), command));
+  for (const seg of segs) {
     const segment = seg.text;
     const tokens = tokenize(segment, shell);
+    seg.tokens = tokens;
+    seg.here = here;
     if (tokens.length === 0) continue;
     const parens = shell === 'bash' ? subshellParens(segment) : { opens: 0, closes: 0 };
     for (let k = 0; k < parens.opens; k++) outer.push({ here, pushed: pushed.slice(), stackKnown });
@@ -3653,14 +4782,27 @@ function analyze(command, shell, root, depth = 0, cwd = root) {
         if (reason) return reason;
       }
     } else if (shell === 'powershell') {
-      const reason = dotnetWrites(segment, root, here);
+      // A here-string's text is not code, so its words are not read for calls.
+      const code = seg.strings.reduce((c, s) => c.split(s.placeholder).join("''"), segment);
+      const reason = dotnetWrites(code, root, here);
       if (reason) return reason;
+    }
+    for (const s of runsText && depth < MAX_DEPTH ? seg.strings : []) {
+      const inner = analyze(s.body, shell, root, depth + 1, here);
+      if (inner) return inner;
     }
 
     const pi = programIndex(tokens, shell);
     const prog = pi >= 0 ? programName(tokens[pi]) : '';
     const after = pi >= 0 ? tokens.slice(pi + 1) : [];
     const args = after.filter((t, i) => !t.redirect && !(i > 0 && after[i - 1].redirect));
+
+    // A `for` or `select` over safe words makes its variable safe in the
+    // targets after it (see loopValue).
+    if (loops && (prog === 'for' || prog === 'select') && tokens[pi + 1]) {
+      if (loops.get(tokens[pi + 1].text)) loopVars.add(tokens[pi + 1].text);
+      else loopVars.delete(tokens[pi + 1].text);
+    }
 
     // A directory change relocates every later relative write in the same
     // command. Follow it; if it cannot be followed, later writes are unprovable.
@@ -3694,7 +4836,14 @@ function analyze(command, shell, root, depth = 0, cwd = root) {
       continue;
     }
 
-    const reason = checkSegment(tokens, root, shell === 'bash' ? 'bash' : 'powershell', here, depth);
+    const saved = LOOP_VARS;
+    LOOP_VARS = loopVars;
+    let reason;
+    try {
+      reason = checkSegment(tokens, root, shell === 'bash' ? 'bash' : 'powershell', here, depth, seg);
+    } finally {
+      LOOP_VARS = saved;
+    }
     if (reason) return reason;
 
     if (pi < 0) { leave(); continue; }
@@ -3705,6 +4854,11 @@ function analyze(command, shell, root, depth = 0, cwd = root) {
     if (seg.docs.length > 0) {
       const doc = heredocRisk(prog, tokens.slice(pi + 1), seg.docs, root, shell, depth, here);
       if (doc) return doc;
+    }
+    // A script piped into an interpreter or a shell.
+    if (seg.prev) {
+      const piped = pipedScriptRisk(seg, prog, tokens.slice(pi + 1), root, shell, depth, here);
+      if (piped) return piped;
     }
     leave();
   }
