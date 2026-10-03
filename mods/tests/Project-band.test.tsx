@@ -549,8 +549,25 @@ async function endTurn($: Engine, { clock }: Kit): Promise<void> {
 
 type Drawing = Awaited<ReturnType<typeof bandOn>>
 
+// What the row says, read the same on both surfaces: where the desktop draws
+// its check mark in place of "All committed", the words are put back where
+// the terminal has them, at the head of the waiting words.
 async function wordsOn(ui: Drawing): Promise<string> {
-  return (await ui.findAll({ type: 'Text' })).map(text => text.text).join(' | ')
+  const texts = await ui.findAll({ type: 'Text' })
+  const said = texts.map(text => text.text)
+  const hasCheck = (await ui.findAll({ type: 'Svg' })).some(svg => svg.props.alt === 'All committed')
+
+  if (hasCheck) {
+    const last = texts.length - 1
+
+    if (last >= 0 && texts[last]?.props.wrap === 'truncate-end') {
+      said[last] = `All committed \u00b7 ${said[last]}`
+    } else {
+      said.push('All committed')
+    }
+  }
+
+  return said.join(' | ')
 }
 
 async function buttonsOn(ui: Drawing): Promise<string[]> {
@@ -1693,8 +1710,9 @@ describe('the shortcut buttons', () => {
 
     const ui = await bandOn($, surface)
 
+    // The desktop draws the name's mark and the check mark, and no kettlebell.
     expect(await wordsOn(ui)).toBe('site-web | All committed')
-    expect(await ui.findAll({ type: 'Svg' })).toHaveLength(surface === 'terminal' ? 0 : 1)
+    expect(await ui.findAll({ type: 'Svg' })).toHaveLength(surface === 'terminal' ? 0 : 2)
 
     kit.world.heavyOut = [
       '   12.00 GB  leftover    old-render.mov',
@@ -1704,8 +1722,46 @@ describe('the shortcut buttons', () => {
     await kit.clock.advance(31 * 60_000)
     await kit.clock.settle()
     expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 2 heavy files')
-    expect(await ui.findAll({ type: 'Svg' })).toHaveLength(surface === 'terminal' ? 0 : 2)
+    expect(await ui.findAll({ type: 'Svg' })).toHaveLength(surface === 'terminal' ? 0 : 3)
     await ui.unmount()
+  })
+
+  // All committed is a drawing on the desktop and words on the terminal.
+  test('all committed is a check mark before Go commit on the desktop', async ($, on) => {
+    const kit = install(on)
+
+    await start($, kit)
+
+    const desktop = await bandOn($, 'desktop')
+    const drawn = await desktop.findAll({})
+    const check = drawn.findIndex(one => one.type === 'Svg' && one.props.alt === 'All committed')
+    const commit = drawn.findIndex(one => one.type === 'Button' && one.props.label === 'Go commit')
+
+    expect((await desktop.findAll({ type: 'Text' })).map(text => text.text)).toEqual(['site-web'])
+    expect(drawn[check]?.props).toMatchObject({ width: 20, height: 20 })
+    expect(check).toBeGreaterThan(-1)
+    expect(check).toBeLessThan(commit)
+
+    // A file changes: the check goes, and the count rides in the button.
+    kit.world.changed = 1
+    await endTurn($, kit)
+    expect((await desktop.findAll({ type: 'Svg' })).some(svg => svg.props.alt === 'All committed')).toBe(false)
+
+    // Nor is it drawn in the More list.
+    kit.world.changed = 0
+    await endTurn($, kit)
+    await desktop.press({ key: 'more' })
+    expect((await desktop.findAll({ type: 'Svg' })).some(svg => svg.props.alt === 'All committed')).toBe(false)
+    await desktop.press({ key: 'cancel' })
+    await desktop.unmount()
+
+    const terminal = await bandOn($, 'terminal')
+
+    expect((await terminal.findAll({ type: 'Text' })).map(text => text.text)).toEqual([
+      'site-web',
+      'All committed',
+    ])
+    await terminal.unmount()
   })
 })
 
@@ -1774,7 +1830,7 @@ describe('the server light', () => {
   async function dotsOn(ui: Drawing): Promise<string[]> {
     return (await ui.findAll({ type: 'Svg' }))
       .map(svg => String(svg.props.source))
-      .filter(source => source.includes('<circle'))
+      .filter(source => source.includes('r="4"'))
       .map(source => /fill="(#[0-9A-F]{6})"/.exec(source)?.[1] ?? '')
   }
 
@@ -1808,7 +1864,7 @@ describe('the server light', () => {
 
     // The dot is 6 pixels and sits before the percentage.
     const drawn = await ui.findAll({})
-    const dot = drawn.findIndex(one => one.type === 'Svg' && String(one.props.source).includes('<circle'))
+    const dot = drawn.findIndex(one => one.type === 'Svg' && String(one.props.source).includes('r="4"'))
     const fill = drawn.findIndex(one => one.type === 'Button' && one.props.label === '23%')
 
     expect(drawn[dot]?.props).toMatchObject({ width: 6, height: 6, alt: 'Local server is running' })

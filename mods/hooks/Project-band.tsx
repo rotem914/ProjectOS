@@ -197,6 +197,20 @@ const HEAVY_SVG =
 const HEAVY_ALT = 'Heavy files'
 const HEAVY_PIXELS = 16
 
+// All committed: a check mark in a dark disc, drawn just before Go commit in
+// place of the words (owner, 2026-10-04; the drawing is his). The terminal
+// has no drawing and keeps the words.
+const CHECK_SVG =
+  '<svg width="29" height="29" viewBox="0 0 29 29" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+  '<circle cx="14.5" cy="14.5" r="14.5" fill="#383838"/>' +
+  '<path d="M9 15.6056L12.4434 19.4359C12.9079 19.9527 13.7449 19.8498 14.0705 19.236L19.5 9" ' +
+  'stroke="#B3B4BC" stroke-width="2" stroke-linecap="round"/>' +
+  '</svg>'
+const CHECK_ALT = 'All committed'
+// 20, so that it measures about 29 on the owner's screen, which is scaled up.
+const CHECK_PIXELS = 20
+const CHECK_CELLS = 3
+
 // The server light: a dot before the percentage, green while the project's
 // local address answers and grey while it does not (owner, 2026-10-04). The
 // sizes and both colors are his. The terminal has no drawing and shows none.
@@ -269,6 +283,8 @@ type Look = {
   columns: number
   /** The cells left free at the end of the row, for the terminal's own mark. */
   reserve: number
+  /** True where a check mark stands in for the words "All committed". */
+  isCheckDrawn: boolean
 }
 
 type RowPlan = {
@@ -1050,6 +1066,7 @@ function wordsOf(
   isShort: boolean,
   isCountInButton: boolean,
   backupWords: string,
+  isCheckDrawn: boolean,
 ): string[] {
   const words: string[] = []
   const repo = known.repo
@@ -1059,7 +1076,10 @@ function wordsOf(
   }
 
   if (repo.files === 0) {
-    words.push('All committed')
+    // Where the check mark is drawn it says this, and the words stay out.
+    if (!isCheckDrawn) {
+      words.push('All committed')
+    }
   } else if (repo.files !== null && !isCountInButton) {
     // The count alone, at every width: the owner reads "1 to commit". While
     // Go commit is in the row the count rides in the button instead.
@@ -1168,6 +1188,7 @@ function planOf(
   known: ProjectBandFacts,
   state: ProjectBandBusy,
   columns: number,
+  isCheckDrawn = false,
 ): RowPlan {
   const isInRepo = known.repo !== null
   const hasMain = isInRepo && known.shortcuts.includes(MAIN_SHORTCUT)
@@ -1237,6 +1258,7 @@ function planOf(
       step.isShort,
       step.hasCommit,
       isBackupDue && !isBackupInRow ? backupText : '',
+      isCheckDrawn,
     ).join(' \u00b7 ')
     const more = [
       ...(hasMain && !step.hasCommit ? [MAIN_SHORTCUT] : []),
@@ -1332,7 +1354,7 @@ function drawLabel({ Box, Text, Svg }: Table, name: string): RenderElement {
 function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
   const { Box, Text, Button } = table
   const { known, state } = look
-  const plan = planOf(known, state, look.columns)
+  const plan = planOf(known, state, look.columns, look.isCheckDrawn)
   const files = known.repo?.files ?? null
   const canPush = pushTarget(known.repo) !== null
   const hasMore = plan.more.length > 0 || plan.moreHasUpdate
@@ -1412,6 +1434,16 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
               plain
               label={plan.backupQuiet}
               onPress={() => acts.hideBackup()}
+            />
+          </Box>
+        )}
+        {look.isCheckDrawn && table.Svg !== undefined && (
+          <Box flexShrink={0}>
+            <table.Svg
+              source={CHECK_SVG}
+              alt={CHECK_ALT}
+              width={CHECK_PIXELS}
+              height={CHECK_PIXELS}
             />
           </Box>
         )}
@@ -2752,17 +2784,24 @@ export function registerProjectBand(on: On): void {
               ? { Box: resolved.Box, Text: resolved.Text, Button: resolved.Button }
               : resolved
           // Where the mark is drawn, the row is planned without its cells.
+          // The check mark belongs to the plain row: a question or the More
+          // list in the row's place draws none, and gives up no cells for it.
+          const open = await read($, ask)
+          const isCheckDrawn =
+            open === null && table.Svg !== undefined && known.repo?.files === 0
           const columns =
             (e.props.bodyColumns > 0 ? e.props.bodyColumns : 1_000) -
             reserve -
             (table.Svg !== undefined ? MARK_CELLS : 0) -
-            (table.Svg !== undefined && (known.server ?? null) !== null ? SERVER_CELLS : 0)
+            (table.Svg !== undefined && (known.server ?? null) !== null ? SERVER_CELLS : 0) -
+            (isCheckDrawn ? CHECK_CELLS : 0)
           const look: Look = {
             known,
             state: await read($, busy),
-            open: await read($, ask),
+            open,
             columns,
             reserve,
+            isCheckDrawn,
           }
 
           // The presses that ask are handed back to the engine, which waits
