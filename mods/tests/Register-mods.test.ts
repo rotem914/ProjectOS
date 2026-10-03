@@ -456,7 +456,7 @@ describe('the two parts in one session', () => {
       const words = (await ui.findAll({ type: 'Text' })).map(one => one.text)
       const buttons = (await ui.findAll({ type: 'Button' })).map(one => String(one.props.label))
 
-      expect(words).toEqual(['site', '2 files not committed'])
+      expect(words).toEqual(['site', '2 to commit'])
       expect(buttons).toEqual(['Go commit'])
 
       // The dash fix, in the same session: the dash is fixed as the reply is
@@ -499,7 +499,7 @@ describe('the two parts in one session', () => {
       expect(seen.statusRuns).toBe(passesBefore + 2)
       expect((await ui.findAll({ type: 'Text' })).map(one => one.text)).toEqual([
         'site',
-        '2 files not committed',
+        '2 to commit',
       ])
       await ui.unmount()
     })

@@ -2,7 +2,7 @@
 //
 // WHAT IT SHOWS. One compact row with three things the owner asked for: which
 // project this window is in (the repository's name, in plain text), what is
-// waiting in the folder the session was opened in (files not committed,
+// waiting in the folder the session was opened in (files to commit,
 // commits to push, an update for the plugin copy of the kit), and the buttons
 // that act on it.
 //
@@ -897,11 +897,8 @@ function wordsOf(known: ProjectBandFacts, isShort: boolean): string[] {
   if (repo.files === 0) {
     words.push('all committed')
   } else if (repo.files !== null) {
-    words.push(
-      isShort
-        ? `${repo.files} not committed`
-        : `${countOf(repo.files, 'file')} not committed`,
-    )
+    // The count alone, at every width: the owner reads "1 to commit".
+    words.push(`${repo.files} to commit`)
   }
 
   if (repo.online.kind === 'none') {
@@ -1064,46 +1061,57 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
   }
 
   // Centered across the row: on the desktop a button is taller than a line of
-  // text, and the label and the words should sit level with it.
+  // text, and the label and the words should sit level with it. The name
+  // stays at the start of the row; the words and the buttons take the room
+  // that is left and sit at its far end (owner, 2026-10-03).
   return (
     <Box flexDirection="row" alignItems="center" gap={1} paddingRight={look.reserve}>
       {plan.name !== '' && drawLabel(table, plan.name)}
-      {plan.words !== '' && (
-        <Box flexShrink={1}>
-          <Text wrap="truncate-end" dimColor={isCalm}>
-            {plan.words}
-          </Text>
-        </Box>
-      )}
-      {hasButtons && (
-        <Box flexDirection="row" gap={1} flexShrink={0}>
-          {plan.hasCommit && (
-            <Button
-              key="go-commit"
-              label={MAIN_SHORTCUT}
-              {...mainLook}
-              onPress={() => acts.shortcut(MAIN_SHORTCUT)}
-            />
-          )}
-          {canPush && (
-            <Button key="push" label={pushLabelOf(state)} onPress={() => acts.askPush()} />
-          )}
-          {plan.hasUpdate && (
-            <Button
-              key="update-plugin"
-              label={updateLabelOf(state)}
-              onPress={() => acts.askUpdate()}
-            />
-          )}
-          {hasMore && (
-            <Button
-              key="more"
-              label="More"
-              onPress={() => acts.askMore(plan.more, plan.moreHasUpdate)}
-            />
-          )}
-        </Box>
-      )}
+      <Box
+        flexDirection="row"
+        alignItems="center"
+        justifyContent="flex-end"
+        gap={1}
+        flexGrow={1}
+        flexShrink={1}
+      >
+        {plan.words !== '' && (
+          <Box flexShrink={1}>
+            <Text wrap="truncate-end" dimColor={isCalm}>
+              {plan.words}
+            </Text>
+          </Box>
+        )}
+        {hasButtons && (
+          <Box flexDirection="row" gap={1} flexShrink={0}>
+            {plan.hasCommit && (
+              <Button
+                key="go-commit"
+                label={MAIN_SHORTCUT}
+                {...mainLook}
+                onPress={() => acts.shortcut(MAIN_SHORTCUT)}
+              />
+            )}
+            {canPush && (
+              <Button key="push" label={pushLabelOf(state)} onPress={() => acts.askPush()} />
+            )}
+            {plan.hasUpdate && (
+              <Button
+                key="update-plugin"
+                label={updateLabelOf(state)}
+                onPress={() => acts.askUpdate()}
+              />
+            )}
+            {hasMore && (
+              <Button
+                key="more"
+                label="More"
+                onPress={() => acts.askMore(plan.more, plan.moreHasUpdate)}
+              />
+            )}
+          </Box>
+        )}
+      </Box>
     </Box>
   )
 }
