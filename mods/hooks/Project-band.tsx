@@ -190,7 +190,9 @@ const HEAVY_PIXELS = 16
 // The server light: a dot before the percentage, green while the project's
 // local address answers and grey while it does not (owner, 2026-10-04). The
 // sizes and both colors are his. The terminal has no drawing and shows none.
-const SERVER_PIXELS = 8
+// 6, so that it measures about 8 on the owner's screen, which is scaled up:
+// he asked for 8, saw 11, and chose this (2026-10-04).
+const SERVER_PIXELS = 6
 const SERVER_CELLS = 2
 const SERVER_UP_COLOR = '#2E9B24'
 const SERVER_DOWN_COLOR = '#646464'

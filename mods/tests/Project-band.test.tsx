@@ -1765,12 +1765,12 @@ describe('the server light', () => {
     await endTurn($, kit)
     expect(await dotsOn(ui)).toEqual(['#2E9B24'])
 
-    // The dot is 8 pixels and sits before the percentage.
+    // The dot is 6 pixels and sits before the percentage.
     const drawn = await ui.findAll({})
     const dot = drawn.findIndex(one => one.type === 'Svg' && String(one.props.source).includes('<circle'))
     const fill = drawn.findIndex(one => one.type === 'Button' && one.props.label === '23%')
 
-    expect(drawn[dot]?.props).toMatchObject({ width: 8, height: 8, alt: 'Local server is running' })
+    expect(drawn[dot]?.props).toMatchObject({ width: 6, height: 6, alt: 'Local server is running' })
     expect(dot).toBeGreaterThan(-1)
     expect(dot).toBeLessThan(fill)
 
