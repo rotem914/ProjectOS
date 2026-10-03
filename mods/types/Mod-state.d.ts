@@ -58,6 +58,14 @@ export type ProjectBandRepo = {
 /** Everything the row draws from. Each part is written as it is gathered. */
 export type ProjectBandFacts = {
   profile: ProjectBandProfile
+  /**
+   * The project's name, which a personal window shows as its label: the
+   * repository's name as its online address spells it, the top folder's name
+   * when it has no online copy, or the session folder's name outside a
+   * repository. Null until git has been asked. A value kept by an earlier
+   * version of the mod has no such key, and reads the same as null.
+   */
+  project?: string | null
   /** Null outside a git repository, and until git has answered. */
   repo: ProjectBandRepo | null
   /** The shortcut phrases the project's CLAUDE.md carries as headings. */

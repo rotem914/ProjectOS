@@ -74,6 +74,8 @@ type World = {
   remote: string
   remoteRef: string
   pushUrl: string
+  /** The address of the project's remote named origin; null when it has none. */
+  origin: string | null
   /** Text files by path, for `$.fs.read`. */
   files: Record<string, string>
   /** Other paths that exist: a hook file, for one. */
@@ -171,6 +173,7 @@ function worldOf(changes: Partial<World> = {}): World {
     remote: 'origin',
     remoteRef: 'refs/heads/main',
     pushUrl: 'https://github.com/example/site.git',
+    origin: 'https://github.com/example/site.git',
     files: { 'D:/Work/Site/CLAUDE.md': KIT_HEADINGS },
     present: [],
     hooksPath: null,
@@ -314,7 +317,18 @@ async function gitOf(
       return { value: { ...status.value, isStdoutTruncated: world.isStatusCut } }
     }
     case 'remote':
-      return answer(0, `${args.includes('--push') ? world.pushUrl : world.plugin.origin}\n`)
+      if (args.includes('--push')) {
+        return answer(0, `${world.pushUrl}\n`)
+      }
+
+      if (isInPlugin) {
+        return answer(0, `${world.plugin.origin}\n`)
+      }
+
+      // The project's own origin: where the band reads the project's name.
+      return world.origin === null
+        ? answer(2, '', "error: No such remote 'origin'")
+        : answer(0, `${world.origin}\n`)
     case 'ls-remote':
       return answer(0, `${world.plugin.onlineHead}\trefs/heads/main\n`)
     case 'merge-base':
@@ -592,22 +606,43 @@ describe('the label', () => {
     await ui.unmount()
   })
 
-  onEachSurface('says Personal in a neutral color when no profile is set', async ($, on, surface) => {
-    const kit = install(on, { env: { USERPROFILE: 'C:\\Users\\Dana' }, siblings: ['Darrow'] })
+  onEachSurface('a client window does not name the project', async ($, on, surface) => {
+    const kit = install(on)
 
     await start($, kit)
 
     const ui = await bandOn($, surface)
-    const label = await ui.find({ type: 'Text', text: ' Personal ' })
 
-    expect(label?.text).toBe(' Personal ')
-    expect(label?.props.backgroundColor).toBe('#6b7280')
-    // The personal window lists no folder: its color is fixed.
+    expect(await wordsOn(ui)).toBe(' Darrow  | all committed')
+    await ui.unmount()
+  })
+})
+
+// A personal window has no client to name. It names the project instead, in
+// plain text with no color behind it: the owner asked for the repository's
+// name where the row first said Personal (2026-10-03).
+describe('the label of a personal window', () => {
+  const PERSONAL = { USERPROFILE: 'C:\\Users\\Dana' }
+
+  onEachSurface('names the repository in plain text when no profile is set', async ($, on, surface) => {
+    const kit = install(on, { env: PERSONAL, siblings: ['Darrow'] })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+    const label = await ui.find({ type: 'Text', text: 'site' })
+
+    expect(label?.text).toBe('site')
+    expect(label?.props.bold).toBe(true)
+    expect(label?.props.backgroundColor).toBeUndefined()
+    expect(label?.props.color).toBeUndefined()
+    expect(await wordsOn(ui)).toBe('site | all committed')
+    // The personal window lists no folder: it has no color to pick.
     expect(kit.world.listed).toEqual([])
     await ui.unmount()
   })
 
-  onEachSurface('says Personal when the profile is the home folder itself', async ($, on, surface) => {
+  onEachSurface('names the repository when the profile is the home folder itself', async ($, on, surface) => {
     const kit = install(on, {
       env: { CLAUDE_CONFIG_DIR: 'C:\\Users\\Dana\\.claude', USERPROFILE: 'C:\\Users\\Dana' },
     })
@@ -616,7 +651,147 @@ describe('the label', () => {
 
     const ui = await bandOn($, surface)
 
-    expect((await ui.find({ type: 'Text', text: ' Personal ' }))?.text).toBe(' Personal ')
+    expect(await wordsOn(ui)).toBe('site | all committed')
+    await ui.unmount()
+  })
+
+  const ADDRESSES: [string, string][] = [
+    ['https://github.com/rotem914/RotemE.git', 'RotemE'],
+    ['https://github.com/rotem914/RotemE', 'RotemE'],
+    ['https://github.com/rotem914/RotemE.git/', 'RotemE'],
+    ['git@github.com:rotem914/RotemE.git', 'RotemE'],
+    ['ssh://git@github.com/rotem914/Rotem-E.git', 'Rotem-E'],
+    ['D:\\Repos\\Bare.git', 'Bare'],
+  ]
+
+  for (const [address, name] of ADDRESSES) {
+    test(`reads the name from the online address: ${address}`, async ($, on) => {
+      const kit = install(on, { env: PERSONAL, origin: address })
+
+      await start($, kit)
+
+      const ui = await bandOn($, 'desktop')
+
+      expect(await wordsOn(ui)).toBe(`${name} | all committed`)
+      await ui.unmount()
+    })
+  }
+
+  onEachSurface('a sign-in token in the address never reaches the row', async ($, on, surface) => {
+    const kit = install(on, {
+      env: PERSONAL,
+      origin: 'https://dana:ghp_secret123@github.com/example/site.git',
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await wordsOn(ui)).toBe('site | all committed')
+    await ui.unmount()
+  })
+
+  onEachSurface('a repository with no online copy is named by its top folder', async ($, on, surface) => {
+    const kit = install(on, { env: PERSONAL, origin: null, upstream: null })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await wordsOn(ui)).toBe('Site | all committed \u{b7} no online copy yet')
+    await ui.unmount()
+  })
+
+  onEachSurface('outside a repository it is the folder\'s name, alone', async ($, on, surface) => {
+    const kit = install(on, { env: PERSONAL, top: null, folder: 'D:\\Work\\Notes' })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await wordsOn(ui)).toBe('Notes')
+    expect(await buttonsOn(ui)).toEqual([])
+    await ui.unmount()
+  })
+
+  onEachSurface('draws nothing until git has named the project, then the name before the counts', async ($, on, surface) => {
+    const kit = install(on, {
+      env: PERSONAL,
+      changed: 3,
+      ahead: 2,
+      slow: { 'rev-parse': 5_000, status: 4_000 },
+    })
+
+    await open($, kit)
+
+    const ui = await bandOn($, surface)
+
+    await kit.clock.settle()
+    // Nothing to say yet: the engine's own drawing stands, not an empty row.
+    expect(await ui.drawn()).toEqual({ type: 'engine', ref: 0 })
+
+    // Git answers where the project is, and the name is there at once. The
+    // count of files is still under way and holds nothing back.
+    await kit.clock.advance(5_000)
+    expect(await wordsOn(ui)).toBe('site')
+
+    await kit.clock.advance(1_500)
+    expect(await wordsOn(ui)).toBe('site | 2 commits to push')
+
+    await kit.clock.advance(2_500)
+    expect(await wordsOn(ui)).toBe('site | 3 files not committed \u{b7} 2 commits to push')
+    await ui.unmount()
+  })
+
+  test('asks git for the name once, however many passes follow', async ($, on) => {
+    const kit = install(on, { env: PERSONAL })
+    const asksForName = () =>
+      gitRuns(kit.world, 'remote').filter(
+        call => !call.args.includes('--push') && plain(call.cwd) === plain('D:/Work/Site'),
+      )
+
+    await start($, kit)
+
+    const ui = await bandOn($, 'terminal')
+
+    await endTurn($, kit)
+    await kit.clock.advance(3 * 60_000)
+    expect(asksForName()).toHaveLength(1)
+    expect(asksForName()[0]?.args).toEqual(['remote', 'get-url', 'origin'])
+    await ui.unmount()
+  })
+
+  test('a name longer than the label is cut', async ($, on) => {
+    const kit = install(on, {
+      env: PERSONAL,
+      origin: 'https://github.com/example/a-very-long-repository-name-indeed.git',
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    expect(await wordsOn(ui)).toBe('a-very-long-repository-\u{2026} | all committed')
+    await ui.unmount()
+  })
+
+  onEachSurface('the push question keeps the plain name in front', async ($, on, surface) => {
+    const kit = install(on, { env: PERSONAL, ahead: 2 })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    await ui.press({ key: 'push' })
+    await kit.clock.settle()
+
+    const label = await ui.find({ type: 'Text', text: 'site' })
+
+    expect(label?.props.backgroundColor).toBeUndefined()
+    expect(await wordsOn(ui)).toBe(
+      'site | Push 2 commits from main to https://github.com/example/site.git?',
+    )
+    expect(await buttonsOn(ui)).toEqual(['Cancel', 'Push'])
     await ui.unmount()
   })
 })
@@ -2059,7 +2234,7 @@ describe('the plugin copy of the kit', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(' Personal  | all committed \u00b7 plugin update ready')
+    expect(await wordsOn(ui)).toBe('site | all committed \u00b7 plugin update ready')
     expect(gitRuns(kit.world, 'ls-remote')[0]?.cwd).toBe('C:\\Users\\Dana\\.claude\\skills\\projectos')
     await ui.unmount()
   })

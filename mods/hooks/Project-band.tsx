@@ -1,7 +1,8 @@
 // Project-band.tsx: the band above the message box.
 //
-// WHAT IT SHOWS. One compact row with three things the owner asked for: whose
-// window this is (a small colored label), what is waiting in the folder the
+// WHAT IT SHOWS. One compact row with three things the owner asked for: where
+// this window is (a client's name in a small colored label, or the project's
+// name in plain text in a personal window), what is waiting in the folder the
 // session was opened in (files not committed, commits to push, an update for
 // the plugin copy of the kit), and the buttons that act on it.
 //
@@ -257,6 +258,37 @@ function placeOf(path: string, base: string, home: string | undefined): string |
 
 function countOf(count: number, one: string): string {
   return `${count} ${count === 1 ? one : `${one}s`}`
+}
+
+// A name too long for the label is cut, and ends on the mark of a cut.
+function cutToLabel(name: string): string {
+  return name.length > LABEL_MAX ? `${name.slice(0, LABEL_MAX - 1)}\u{2026}` : name
+}
+
+// The repository's name as its online address spells it: the last part,
+// without the .git ending. https://github.com/owner/Name.git and
+// git@github.com:owner/Name.git both answer Name.
+function repoNameIn(url: string): string | undefined {
+  const plain = withoutTrailingSlash(url.trim()).replace(/\.git$/i, '')
+
+  return nonEmpty(plain.split(/[\\/:]/).pop())
+}
+
+// What the label says. A window opened for a client names the client. A
+// personal window names the project instead, where it first said Personal
+// (owner, 2026-10-03), and says nothing until the project's name is known.
+function labelOf(known: ProjectBandFacts): string {
+  return known.profile.isPersonal ? (known.project ?? '') : known.profile.name
+}
+
+// The cells the label takes. A client's name sits between two spaces on its
+// color; the project's name is plain text with nothing around it.
+function labelCells(profile: ProjectBandProfile, name: string): number {
+  if (name === '') {
+    return 0
+  }
+
+  return profile.isPersonal ? name.length : name.length + 2
 }
 
 function profileOf(
@@ -1009,7 +1041,8 @@ function planOf(
     : []
   const canPush = pushTarget(known.repo) !== null
   const canUpdate = isInRepo && known.pluginUpdate !== null
-  const fullName = known.profile.name
+  const fullName = labelOf(known)
+  const labelWidth = labelCells(known.profile, fullName)
   const steps = [
     { isShort: false, hasCommit: hasMain, hasUpdate: canUpdate },
     { isShort: true, hasCommit: hasMain, hasUpdate: canUpdate },
@@ -1047,7 +1080,7 @@ function planOf(
       moreHasUpdate,
     }
 
-    if (fullName.length + 2 + (words === '' ? 0 : 1 + words.length) + fixed <= columns) {
+    if (labelWidth + (words === '' ? 0 : 1 + words.length) + fixed <= columns) {
       return plan
     }
   }
@@ -1055,11 +1088,12 @@ function planOf(
   // The layout cuts the words to the cells that are left after the label,
   // the buttons and the one cell between. Too few to read anything in, and
   // the words are left out.
-  const wordsRoom = columns - (fullName.length + 2) - fixed - 1
+  const wordsRoom = columns - labelWidth - fixed - 1
   const words = wordsRoom >= WORDS_MIN_CELLS ? plan.words : ''
-  // The label is the name between two spaces. What the buttons leave is all
-  // it can have, and never less than one letter and the mark of a cut.
-  const room = Math.max(columns - fixed - 2, 2)
+  // What the buttons leave is all the label can have: the name, and around a
+  // client's name its two spaces. Never less than one letter and the mark of
+  // a cut.
+  const room = Math.max(columns - fixed - (labelWidth - fullName.length), 2)
 
   return {
     ...plan,
@@ -1085,6 +1119,16 @@ function keyOf(phrase: string): string {
 }
 
 function drawLabel({ Box, Text }: Table, profile: ProjectBandProfile, name: string): RenderElement {
+  // The project's name stands as plain bold text. The colored label is kept
+  // for a client's name: it is what tells one client's window from another's.
+  if (profile.isPersonal) {
+    return (
+      <Box flexShrink={0}>
+        <Text bold>{name}</Text>
+      </Box>
+    )
+  }
+
   return (
     <Box flexShrink={0}>
       <Text backgroundColor={profile.color} color={LABEL_TEXT_COLOR} bold>
@@ -1094,7 +1138,7 @@ function drawLabel({ Box, Text }: Table, profile: ProjectBandProfile, name: stri
   )
 }
 
-function drawRow(table: Table, look: Look, acts: Acts): RenderElement {
+function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
   const { Box, Text, Button } = table
   const { known, state } = look
   const plan = planOf(known, state, look.columns)
@@ -1110,11 +1154,17 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement {
   const mainLook = files !== null && files > 0 ? { variant: 'primary' as const } : {}
   const hasButtons = plan.hasCommit || canPush || plan.hasUpdate || hasMore
 
+  // A personal window has nothing to say before git has named the project:
+  // no label, no counts, no buttons. Nothing is drawn then, not an empty row.
+  if (plan.name === '' && plan.words === '' && !hasButtons) {
+    return null
+  }
+
   // Centered across the row: on the desktop a button is taller than a line of
   // text, and the label and the words should sit level with it.
   return (
     <Box flexDirection="row" alignItems="center" gap={1} paddingRight={look.reserve}>
-      {drawLabel(table, known.profile, plan.name)}
+      {plan.name !== '' && drawLabel(table, known.profile, plan.name)}
       {plan.words !== '' && (
         <Box flexShrink={1}>
           <Text wrap="truncate-end" dimColor={isCalm}>
@@ -1168,9 +1218,11 @@ function drawQuestion(
   acts: Acts,
 ): RenderElement {
   const { Box, Text, Button } = table
-  const name = look.known.profile.name
+  const profile = look.known.profile
+  const name = labelOf(look.known)
   const isOneRow =
-    name.length + 2 + 1 + said.length + buttonsWidth(['Cancel', yes.label]) <= look.columns
+    labelCells(profile, name) + 1 + said.length + buttonsWidth(['Cancel', yes.label]) <=
+    look.columns
   const buttons = (
     <Box flexDirection="row" gap={1} flexShrink={0}>
       <Button key="cancel" label="Cancel" autoFocus onPress={() => acts.cancel()} />
@@ -1181,7 +1233,7 @@ function drawQuestion(
   if (isOneRow) {
     return (
       <Box flexDirection="row" alignItems="center" gap={1} paddingRight={look.reserve}>
-        {drawLabel(table, look.known.profile, name)}
+        {name !== '' && drawLabel(table, profile, name)}
         <Box flexShrink={1}>
           <Text bold>{said}</Text>
         </Box>
@@ -1193,7 +1245,7 @@ function drawQuestion(
   return (
     <Box flexDirection="column" paddingRight={look.reserve}>
       <Box flexDirection="row" gap={1}>
-        {drawLabel(table, look.known.profile, name)}
+        {name !== '' && drawLabel(table, profile, name)}
         <Box flexShrink={1}>
           <Text bold wrap="wrap">
             {said}
@@ -1215,6 +1267,7 @@ function drawMore(
 ): RenderElement {
   const { Box, Button } = table
   const files = look.known.repo?.files ?? null
+  const name = labelOf(look.known)
 
   return (
     <Box
@@ -1224,7 +1277,7 @@ function drawMore(
       columnGap={1}
       paddingRight={look.reserve}
     >
-      {drawLabel(table, look.known.profile, look.known.profile.name)}
+      {name !== '' && drawLabel(table, look.known.profile, name)}
       {open.phrases.map(phrase => (
         <Button
           key={keyOf(phrase)}
@@ -1243,7 +1296,7 @@ function drawMore(
   )
 }
 
-function drawBand(table: Table, look: Look, acts: Acts): RenderElement {
+function drawBand(table: Table, look: Look, acts: Acts): RenderElement | null {
   const open = look.open
 
   if (open === null) {
@@ -1308,6 +1361,8 @@ const work: {
   /** How many drawings of the row are under way, and who waits for them. */
   drawing: number
   afterDrawing: (() => void)[]
+  /** The project's name, as git gave it for one repository: asked once. */
+  project: { top: string; name: string } | null
 } = {
   startFolder: '',
   isSeen: false,
@@ -1327,6 +1382,7 @@ const work: {
   filesNotBefore: 0,
   drawing: 0,
   afterDrawing: [],
+  project: null,
 }
 
 function note($: Dollar, what: string, error: unknown): void {
@@ -1478,9 +1534,41 @@ async function writeProfile($: Dollar): Promise<void> {
 
   await writeFacts($, now =>
     now === null
-      ? { profile, repo: null, shortcuts: [], pluginUpdate: null }
+      ? { profile, project: null, repo: null, shortcuts: [], pluginUpdate: null }
       : { ...now, profile },
   )
+}
+
+// The project's name. Inside a repository it is the repository's name as its
+// online address spells it, or the top folder's name when it has no online
+// copy; git is asked once per repository and the answer is kept, so a later
+// pass costs no git for it. Outside a repository it is the name of the folder
+// the session was opened in.
+async function projectOf($: Dollar, top: string | null, folder: string): Promise<string | null> {
+  if (top === null) {
+    const name = nonEmpty(nameOf(folder))
+
+    return name === undefined ? null : cutToLabel(name)
+  }
+
+  if (work.project !== null && isSamePath(work.project.top, top)) {
+    return work.project.name
+  }
+
+  const asked = await git($, ['remote', 'get-url', 'origin'], top, LOCAL_GIT_MS)
+  const named = asked.code === 0 ? repoNameIn(firstLine(asked.out)) : undefined
+  const name = named ?? nonEmpty(nameOf(top))
+
+  if (name === undefined) {
+    return null
+  }
+
+  // An answer that ran out of time is not kept: the next pass asks again.
+  if (!asked.isTimeout) {
+    work.project = { top, name: cutToLabel(name) }
+  }
+
+  return cutToLabel(name)
 }
 
 // The plugin copy of the kit, in a pass of its own: its online check can wait
@@ -1509,15 +1597,22 @@ async function passRepo($: Dollar): Promise<void> {
   const home = await homeOf($)
   const folder = await folderOf($)
   const where = folder === '' ? null : await whereOf($, folder, home)
+  const project = await projectOf($, where?.top ?? null, folder)
 
   // Outside a git repository the row is the label alone.
   if (where === null) {
     await writeFacts($, now =>
-      now === null ? now : { ...now, repo: null, shortcuts: [], pluginUpdate: null },
+      now === null
+        ? now
+        : { ...now, project, repo: null, shortcuts: [], pluginUpdate: null },
     )
 
     return
   }
+
+  // The project's name is written before the rest is asked: a personal
+  // window shows it as its label, and the label never waits for the counts.
+  await writeFacts($, now => (now === null ? now : { ...now, project }))
 
   startPluginPass($)
 
