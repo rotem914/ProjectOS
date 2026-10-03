@@ -582,7 +582,7 @@ describe('the label', () => {
     expect(label?.text).toBe('site-web')
     expect(label?.props.bold).toBe(true)
     expect(label?.props.backgroundColor).toBeUndefined()
-    expect(label?.props.color).toBe('#92949F')
+    expect(label?.props.color).toBe('#A3A4AE')
     expect(await wordsOn(ui)).toBe('site-web | All committed')
     await ui.unmount()
   })

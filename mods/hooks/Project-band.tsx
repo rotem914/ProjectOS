@@ -1259,7 +1259,7 @@ function keyOf(phrase: string): string {
 }
 
 // The name's color is the owner's choice (2026-10-04), a quiet grey.
-const NAME_COLOR = '#92949F'
+const NAME_COLOR = '#A3A4AE'
 
 function drawLabel({ Box, Text, Svg }: Table, name: string): RenderElement {
   return (
