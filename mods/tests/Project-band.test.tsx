@@ -534,7 +534,7 @@ describe('the label', () => {
     expect(label?.props.bold).toBe(true)
     expect(label?.props.backgroundColor).toBeUndefined()
     expect(label?.props.color).toBeUndefined()
-    expect(await wordsOn(ui)).toBe('site-web | all committed')
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
     await ui.unmount()
   })
 
@@ -555,7 +555,7 @@ describe('the label', () => {
 
       const ui = await bandOn($, 'desktop')
 
-      expect(await wordsOn(ui)).toBe('site-web | all committed')
+      expect(await wordsOn(ui)).toBe('site-web | All committed')
       expect(kit.world.listed).toEqual([])
       await ui.unmount()
     })
@@ -578,7 +578,7 @@ describe('the label', () => {
 
       const ui = await bandOn($, 'desktop')
 
-      expect(await wordsOn(ui)).toBe(`${name} | all committed`)
+      expect(await wordsOn(ui)).toBe(`${name} | All committed`)
       await ui.unmount()
     })
   }
@@ -590,18 +590,18 @@ describe('the label', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site | all committed')
+    expect(await wordsOn(ui)).toBe('site | All committed')
     await ui.unmount()
   })
 
-  onEachSurface('a repository with no online copy is named by its top folder', async ($, on, surface) => {
+  onEachSurface('a repository with No online copy is named by its top folder', async ($, on, surface) => {
     const kit = install(on, { origin: null, upstream: null })
 
     await start($, kit)
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('Site | all committed \u{b7} no online copy yet')
+    expect(await wordsOn(ui)).toBe('Site | All committed \u{b7} No online copy yet')
     await ui.unmount()
   })
 
@@ -644,7 +644,7 @@ describe('the label', () => {
 
     const ui = await bandOn($, 'desktop')
 
-    expect(await wordsOn(ui)).toBe('a-very-long-repository-\u{2026} | all committed')
+    expect(await wordsOn(ui)).toBe('a-very-long-repository-\u{2026} | All committed')
     await ui.unmount()
   })
 
@@ -712,14 +712,14 @@ describe('what is waiting', () => {
     await ui.unmount()
   })
 
-  onEachSurface('says all committed and nothing about pushing when nothing waits', async ($, on, surface) => {
+  onEachSurface('says All committed and nothing about pushing when nothing waits', async ($, on, surface) => {
     const kit = install(on, { changed: 0, ahead: 0 })
 
     await start($, kit)
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | all committed')
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
     expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
     await ui.unmount()
   })
@@ -731,24 +731,24 @@ describe('what is waiting', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | all committed \u00b7 2 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 2 commits to push')
 
     // Only behind: nothing waits to be pushed.
     kit.world.ahead = 0
     await endTurn($, kit)
-    expect(await wordsOn(ui)).toBe('site-web | all committed')
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
     expect(await buttonsOn(ui)).not.toContain('Push')
     await ui.unmount()
   })
 
-  onEachSurface('says no online copy yet for a branch with no upstream', async ($, on, surface) => {
+  onEachSurface('says No online copy yet for a branch with no upstream', async ($, on, surface) => {
     const kit = install(on, { changed: 2, upstream: null, ahead: null })
 
     await start($, kit)
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | 2 to commit \u00b7 no online copy yet')
+    expect(await wordsOn(ui)).toBe('site-web | 2 to commit \u00b7 No online copy yet')
     expect(await buttonsOn(ui)).not.toContain('Push')
     await ui.unmount()
   })
@@ -760,7 +760,7 @@ describe('what is waiting', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toContain('no online copy yet')
+    expect(await wordsOn(ui)).toContain('No online copy yet')
     expect(await wordsOn(ui)).not.toContain('to push')
     expect(await buttonsOn(ui)).not.toContain('Push')
     await ui.unmount()
@@ -858,7 +858,7 @@ describe('what is waiting', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toContain('all committed')
+    expect(await wordsOn(ui)).toContain('All committed')
 
     kit.world.changed = 5
     await kit.clock.advance(60_000)
@@ -983,7 +983,7 @@ describe('a session nobody looks at', () => {
 
     await kit.clock.settle()
     expect(await wordsOn(ui)).toBe(
-      'site-web | 3 to commit \u00b7 2 commits to push \u00b7 plugin update ready',
+      'site-web | 3 to commit \u00b7 2 commits to push \u00b7 Plugin update ready',
     )
     expect(gitRuns(kit.world, 'status')).toHaveLength(1)
 
@@ -1059,7 +1059,7 @@ describe('each part as soon as it is known', () => {
 
     await kit.clock.advance(15_000)
     expect(await wordsOn(ui)).toBe(
-      'site-web | 5 to commit \u00b7 2 commits to push \u00b7 plugin update ready',
+      'site-web | 5 to commit \u00b7 2 commits to push \u00b7 Plugin update ready',
     )
     await ui.unmount()
   })
@@ -1559,7 +1559,7 @@ describe('the Push button', () => {
     await ui.press({ key: 'cancel' })
     expect(gitRuns(kit.world, 'push')).toHaveLength(0)
     expect(kit.world.toasts).toEqual([])
-    expect(await wordsOn(ui)).toBe('site-web | all committed \u00b7 2 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 2 commits to push')
     expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push', 'More'])
     await ui.unmount()
   })
@@ -1923,7 +1923,7 @@ describe('a project with a push step of its own', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | all committed \u00b7 2 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 2 commits to push')
     expect(await buttonsOn(ui)).toContain('Push')
     await ui.unmount()
   })
@@ -2001,7 +2001,7 @@ describe('a project with a push step of its own', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | all committed \u00b7 2 commits to push from your git app')
+    expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 2 commits to push from your git app')
     expect(await buttonsOn(ui)).not.toContain('Push')
     await ui.unmount()
   })
@@ -2087,7 +2087,7 @@ describe('the plugin copy of the kit', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | all committed')
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
     expect(await buttonsOn(ui)).not.toContain('Update plugin')
 
     // It did ask, in the plugin folder, and quietly.
@@ -2100,7 +2100,7 @@ describe('the plugin copy of the kit', () => {
     await ui.unmount()
   })
 
-  onEachSurface('says plugin update ready when the online copy moved on', async ($, on, surface) => {
+  onEachSurface('says Plugin update ready when the online copy moved on', async ($, on, surface) => {
     const kit = install(on)
 
     kit.world.plugin.onlineHead = ONLINE_HEAD
@@ -2108,7 +2108,7 @@ describe('the plugin copy of the kit', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | all committed \u00b7 plugin update ready')
+    expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 Plugin update ready')
     expect(await buttonsOn(ui)).toEqual(['Go commit', 'Update plugin', 'More'])
     await ui.unmount()
   })
@@ -2122,7 +2122,7 @@ describe('the plugin copy of the kit', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | all committed \u00b7 plugin update ready')
+    expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 Plugin update ready')
     expect(gitRuns(kit.world, 'ls-remote')[0]?.cwd).toBe('C:\\Users\\Dana\\.claude\\skills\\projectos')
     await ui.unmount()
   })
@@ -2144,7 +2144,7 @@ describe('the plugin copy of the kit', () => {
     const ui = await bandOn($, surface)
 
     expect(await wordsOn(ui)).toBe(
-      'site-web | 2 to commit \u00b7 1 commit to push \u00b7 plugin update ready',
+      'site-web | 2 to commit \u00b7 1 commit to push \u00b7 Plugin update ready',
     )
     expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push', 'Update plugin', 'More'])
     expect(gitRuns(kit.world, 'ls-remote')[0]?.cwd).toBe('/Users/dana/claude-configs/Darrow/skills/projectos')
@@ -2166,7 +2166,7 @@ describe('the plugin copy of the kit', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | all committed')
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
     await ui.unmount()
   })
 
@@ -2179,7 +2179,7 @@ describe('the plugin copy of the kit', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | all committed')
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
     expect(gitRuns(kit.world, 'ls-remote')).toHaveLength(0)
     expect(kit.world.git.every(call => plain(call.cwd) !== plain(kit.world.plugin.dir))).toBe(true)
     await ui.unmount()
@@ -2193,7 +2193,7 @@ describe('the plugin copy of the kit', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | all committed')
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
 
     // And it is not asked again on every pass.
     await endTurn($, kit)
@@ -2227,7 +2227,7 @@ describe('the plugin copy of the kit', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toContain('plugin update ready')
+    expect(await wordsOn(ui)).toContain('Plugin update ready')
     expect(gitRuns(kit.world, 'ls-remote')).toHaveLength(0)
     await ui.unmount()
   })
@@ -2273,7 +2273,7 @@ describe('the plugin copy of the kit', () => {
     expect(pulls[0]?.cwd).toBe('C:\\ClaudeConfigs\\Darrow\\skills\\projectos')
     expect(pulls[0]?.env.GIT_TERMINAL_PROMPT).toBe('0')
     expect(kit.world.toasts).toEqual(['Plugin updated'])
-    expect(await wordsOn(ui)).toBe('site-web | all committed')
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
     expect(await buttonsOn(ui)).not.toContain('Update plugin')
     await ui.unmount()
   })
@@ -2354,7 +2354,7 @@ describe('the plugin copy of the kit', () => {
     expect(kit.world.toasts).toEqual([
       'Update did not go through: this copy has changes of its own. Nothing changed.',
     ])
-    expect(await wordsOn(ui)).toContain('plugin update ready')
+    expect(await wordsOn(ui)).toContain('Plugin update ready')
     await ui.unmount()
   })
 })
@@ -2550,7 +2550,7 @@ describe('a narrow row', () => {
 
     const ui = await bandOn($, surface, width(surface, 82))
 
-    expect(await wordsOn(ui)).toBe('site-web | 3 to commit \u00b7 2 to push \u00b7 update ready')
+    expect(await wordsOn(ui)).toBe('site-web | 3 to commit \u00b7 2 to push \u00b7 Update ready')
     expect(await buttonsOn(ui)).toEqual(['Push', 'More'])
     await ui.press({ key: 'more' })
     expect(await buttonsOn(ui)).toContain('Update plugin')
@@ -2766,7 +2766,7 @@ describe('good manners', () => {
 
     // The look came first and the start after it: the row still fills in.
     await open($, kit)
-    expect(await wordsOn(ui)).toBe('site-web | all committed')
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
     await ui.unmount()
   })
 

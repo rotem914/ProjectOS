@@ -906,6 +906,7 @@ async function pluginUpdateOf(
 
 // DRAWING. Values in, a tree out: no git, no files, no waiting.
 
+// Each message opens on a capital letter, or on its count (owner, 2026-10-03).
 function wordsOf(known: ProjectBandFacts, isShort: boolean): string[] {
   const words: string[] = []
   const repo = known.repo
@@ -915,14 +916,14 @@ function wordsOf(known: ProjectBandFacts, isShort: boolean): string[] {
   }
 
   if (repo.files === 0) {
-    words.push('all committed')
+    words.push('All committed')
   } else if (repo.files !== null) {
     // The count alone, at every width: the owner reads "1 to commit".
     words.push(`${repo.files} to commit`)
   }
 
   if (repo.online.kind === 'none') {
-    words.push(isShort ? 'no online copy' : 'no online copy yet')
+    words.push(isShort ? 'No online copy' : 'No online copy yet')
   } else if (repo.online.kind === 'tracked' && repo.online.ahead > 0) {
     // Where the row offers no Push because the project has a push step of
     // its own, the words say where to push from instead.
@@ -936,7 +937,7 @@ function wordsOf(known: ProjectBandFacts, isShort: boolean): string[] {
   }
 
   if (known.pluginUpdate !== null) {
-    words.push(isShort ? 'update ready' : 'plugin update ready')
+    words.push(isShort ? 'Update ready' : 'Plugin update ready')
   }
 
   return words
