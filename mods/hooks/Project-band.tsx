@@ -187,6 +187,35 @@ const HEAVY_SVG =
 const HEAVY_ALT = 'Heavy files'
 const HEAVY_PIXELS = 16
 
+// The server light: a dot before the percentage, green while the project's
+// local address answers and grey while it does not (owner, 2026-10-04). The
+// sizes and both colors are his. The terminal has no drawing and shows none.
+const SERVER_PIXELS = 8
+const SERVER_CELLS = 2
+const SERVER_UP_COLOR = '#2E9B24'
+const SERVER_DOWN_COLOR = '#646464'
+const SERVER_UP_ALT = 'Local server is running'
+const SERVER_DOWN_ALT = 'Local server is not running'
+// How long an address may take to answer before it counts as closed.
+const SERVER_WAIT_MS = 2_000
+// The address a project works at on this computer, as its CLAUDE.md states
+// it. The line that names it "Local app URL" wins over any other mention.
+const SERVER_NAMED = /local app url[^\n]*?(https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d{1,5})?)/i
+const SERVER_ANY = /https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d{1,5})?/i
+
+function serverDot(color: string): string {
+  return (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 8 8">' +
+    `<circle cx="4" cy="4" r="4" fill="${color}"/>` +
+    '</svg>'
+  )
+}
+
+/** The local address a CLAUDE.md names, or null when it names none. */
+export function serverUrlIn(text: string): string | null {
+  return (SERVER_NAMED.exec(text)?.[1] ?? SERVER_ANY.exec(text)?.[0] ?? null)
+}
+
 type GitAnswer = {
   /** The exit code; null when git could not be run or was stopped. */
   code: number | null
@@ -1285,6 +1314,7 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
   const canPush = pushTarget(known.repo) !== null
   const hasMore = plan.more.length > 0 || plan.moreHasUpdate
   const isHeavy = known.repo !== null && (known.heavy ?? 0) > 0
+  const server = known.repo !== null ? (known.server ?? null) : null
   // Nothing waiting reads quieter than something waiting.
   const isCalm =
     (files === null || files === 0) &&
@@ -1322,6 +1352,16 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
         flexGrow={1}
         flexShrink={1}
       >
+        {server !== null && table.Svg !== undefined && (
+          <Box flexShrink={0}>
+            <table.Svg
+              source={serverDot(server === 'up' ? SERVER_UP_COLOR : SERVER_DOWN_COLOR)}
+              alt={server === 'up' ? SERVER_UP_ALT : SERVER_DOWN_ALT}
+              width={SERVER_PIXELS}
+              height={SERVER_PIXELS}
+            />
+          </Box>
+        )}
         {plan.fill !== '' && (
           <Box flexShrink={0}>
             <Button key="fill" plain label={plan.fill} onPress={() => acts.compact()} />
@@ -1536,6 +1576,7 @@ const work: {
   passes: number
   isCheckingPlugin: boolean
   isCheckingHeavy: boolean
+  isCheckingServer: boolean
   /** The repository the heavy files were last listed in, and when next. */
   heavyTop: string
   heavyNotBefore: number
@@ -1572,6 +1613,7 @@ const work: {
   passes: 0,
   isCheckingPlugin: false,
   isCheckingHeavy: false,
+  isCheckingServer: false,
   heavyTop: '',
   heavyNotBefore: 0,
   timer: null,
@@ -1775,6 +1817,75 @@ function startPluginPass($: Dollar): void {
   })
 }
 
+// The address the project's CLAUDE.md names, read the way the shortcuts are:
+// the git top folder first, then the session folder.
+async function serverUrlOf($: Dollar, folders: readonly string[]): Promise<string | null> {
+  for (const folder of folders) {
+    try {
+      const url = serverUrlIn(await $.fs.read(joinPath(folder, 'CLAUDE.md')))
+
+      if (url !== null) {
+        return url
+      }
+    } catch {
+      // No CLAUDE.md in this folder: no address from it.
+    }
+  }
+
+  return null
+}
+
+// Whether the address answers, in a pass of its own so that nothing waits
+// for it. Any answer at all counts as open, whatever its status: the server
+// is there. No answer within the wait, or a refusal, counts as closed. Who
+// started the server does not matter, only whether the address answers.
+function startServerPass($: Dollar, folders: readonly string[]): void {
+  if (work.isCheckingServer) {
+    return
+  }
+
+  work.isCheckingServer = true
+  inBackground($, 'checking the local server failed', async () => {
+    try {
+      const url = await serverUrlOf($, folders)
+
+      if (url === null) {
+        await writeFacts($, now => (now === null ? now : { ...now, server: null }))
+
+        return
+      }
+
+      const isUp = await new Promise<boolean>(resolve => {
+        let timer: { cancel: () => void } | null = null
+        const done = (answer: boolean): void => {
+          try {
+            timer?.cancel()
+          } catch {
+            // A timer that cannot be stopped fires into a settled promise.
+          }
+
+          resolve(answer)
+        }
+
+        try {
+          timer = $.clock.after(SERVER_WAIT_MS, () => done(false))
+        } catch {
+          // No clock to wait on: the address alone decides.
+        }
+
+        $.http.fetch(url).then(
+          () => done(true),
+          () => done(false),
+        )
+      })
+
+      await writeFacts($, now => (now === null ? now : { ...now, server: isUp ? 'up' : 'down' }))
+    } finally {
+      work.isCheckingServer = false
+    }
+  })
+}
+
 // The heavy things in the project, in a pass of its own: the kit's listing
 // walks every folder, which can take a while, and nothing waits for it. It
 // runs where the project carries the listing, once per half hour. A run that
@@ -1905,6 +2016,7 @@ async function passRepo($: Dollar): Promise<void> {
             pluginUpdate: null,
             heavy: null,
             backup: null,
+            server: null,
           },
     )
 
@@ -1917,6 +2029,7 @@ async function passRepo($: Dollar): Promise<void> {
 
   startPluginPass($)
   startHeavyPass($, where.top)
+  startServerPass($, [where.top, folder])
 
   const counting = countFiles($, where.top)
   const [part, shortcuts] = await Promise.all([
@@ -2578,7 +2691,8 @@ export function registerProjectBand(on: On): void {
           const columns =
             (e.props.bodyColumns > 0 ? e.props.bodyColumns : 1_000) -
             reserve -
-            (table.Svg !== undefined ? MARK_CELLS : 0)
+            (table.Svg !== undefined ? MARK_CELLS : 0) -
+            (table.Svg !== undefined && (known.server ?? null) !== null ? SERVER_CELLS : 0)
           const look: Look = {
             known,
             state: await read($, busy),

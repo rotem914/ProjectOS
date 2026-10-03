@@ -89,6 +89,12 @@ export type ProjectBandFacts = {
    */
   backup?: { days: number } | null
   /**
+   * Whether the project's local address answers: the one its CLAUDE.md names
+   * (a localhost URL). Null, or no such key, when the file names none and
+   * until the address was asked.
+   */
+  server?: 'up' | 'down' | null
+  /**
    * The age, in days, at which the owner pressed the backup's quiet words
    * away. They stay out of the row until the backup is older than this.
    * Null, or no such key, when they were never pressed away.

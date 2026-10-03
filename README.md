@@ -116,6 +116,9 @@ own window, in the desktop app and in the terminal, in every folder you open.
   name outside a repository.
 - What is waiting, inside a git project: files to commit, commits to
   push, and a newer kit ready for this computer's copy.
+- A small light, in the desktop app, where the project's `CLAUDE.md` names
+  a local address (`http://localhost:4321`): green while that address
+  answers, grey while it does not, whoever started the server.
 - Buttons. One for each kit shortcut the project's `CLAUDE.md` carries:
   `Go commit` in the row, with the count of files waiting inside it
   (`Go commit · 1`), the rest behind `More`. A press sends the phrase as

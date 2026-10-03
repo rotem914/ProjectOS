@@ -110,6 +110,9 @@ type World = {
   fill: number | null
   /** What the project's listing of heavy files prints. */
   heavyOut: string
+  /** Whether the project's local address answers, and every address asked. */
+  isServerUp: boolean
+  fetched: string[]
   /** Every slash command the mod ran. */
   commands: string[]
   /** A tree some other mod draws in the band, beneath this one. */
@@ -204,6 +207,8 @@ function worldOf(changes: Partial<World> = {}): World {
     isPromptRefused: false,
     fill: null,
     heavyOut: '',
+    isServerUp: false,
+    fetched: [],
     commands: [],
     beneath: null,
     slowDraw: 0,
@@ -389,6 +394,13 @@ function install(on: On, changes: Partial<World> = {}): Kit {
   on('process.run', (_, e) =>
     e.argv[0] === 'node' ? answer(0, world.heavyOut) : gitOf(world, clock, e.argv, e.init),
   )
+  on('http.fetch', (_, e) => {
+    world.fetched.push(e.url)
+
+    return world.isServerUp
+      ? { value: { status: 404, ok: false, headers: {}, text: '' } }
+      : { deny: 'connect ECONNREFUSED 127.0.0.1:4321' }
+  })
   on('fs.read', (_, e) => {
     const found = Object.entries(world.files).find(([path]) => isAt(e.path, path))
 
@@ -1687,6 +1699,77 @@ describe('the shortcut buttons', () => {
     await kit.clock.settle()
     expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 2 heavy files')
     expect(await ui.findAll({ type: 'Svg' })).toHaveLength(surface === 'terminal' ? 0 : 2)
+    await ui.unmount()
+  })
+})
+
+describe('the server light', () => {
+  const WITH_ADDRESS = [
+    KIT_HEADINGS,
+    'Docs: http://localhost:9999/guide',
+    'Local app URL: `http://localhost:4321` (editor at `/keystatic`).',
+  ].join('\n')
+
+  // The dot's color is all the drawing says, so it is read off the markup.
+  async function dotsOn(ui: Drawing): Promise<string[]> {
+    return (await ui.findAll({ type: 'Svg' }))
+      .map(svg => String(svg.props.source))
+      .filter(source => source.includes('<circle'))
+      .map(source => /fill="(#[0-9A-F]{6})"/.exec(source)?.[1] ?? '')
+  }
+
+  test('a project that names no local address shows no light and asks nothing', async ($, on) => {
+    const kit = install(on)
+
+    await start($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    expect(await dotsOn(ui)).toEqual([])
+    expect(kit.world.fetched).toEqual([])
+    await ui.unmount()
+  })
+
+  test('grey while the address does not answer, green once it does', async ($, on) => {
+    const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': WITH_ADDRESS }, fill: 23 })
+
+    await start($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    // The address the file calls the local app's, not the first one in it.
+    expect(new Set(kit.world.fetched)).toEqual(new Set(['http://localhost:4321']))
+    expect(await dotsOn(ui)).toEqual(['#646464'])
+
+    // The owner starts the server himself. Any answer counts, even a 404.
+    kit.world.isServerUp = true
+    await endTurn($, kit)
+    expect(await dotsOn(ui)).toEqual(['#2E9B24'])
+
+    // The dot is 8 pixels and sits before the percentage.
+    const drawn = await ui.findAll({})
+    const dot = drawn.findIndex(one => one.type === 'Svg' && String(one.props.source).includes('<circle'))
+    const fill = drawn.findIndex(one => one.type === 'Button' && one.props.label === '23%')
+
+    expect(drawn[dot]?.props).toMatchObject({ width: 8, height: 8, alt: 'Local server is running' })
+    expect(dot).toBeGreaterThan(-1)
+    expect(dot).toBeLessThan(fill)
+
+    kit.world.isServerUp = false
+    await endTurn($, kit)
+    expect(await dotsOn(ui)).toEqual(['#646464'])
+    await ui.unmount()
+  })
+
+  test('the terminal draws no light', async ($, on) => {
+    const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': WITH_ADDRESS } })
+
+    kit.world.isServerUp = true
+    await start($, kit)
+
+    const ui = await bandOn($, 'terminal')
+
+    expect(await ui.findAll({ type: 'Svg' })).toHaveLength(0)
     await ui.unmount()
   })
 })
