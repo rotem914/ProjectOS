@@ -106,6 +106,10 @@ type World = {
   /** What the store holds before the session starts. */
   stored: Record<string, unknown>
   isPromptRefused: boolean
+  /** How full the conversation is, in percent; null before its first answer. */
+  fill: number | null
+  /** Every slash command the mod ran. */
+  commands: string[]
   /** A tree some other mod draws in the band, beneath this one. */
   beneath: RenderElement | null
   /** How long the drawing beneath takes on the test's clock, in milliseconds. */
@@ -191,6 +195,8 @@ function worldOf(changes: Partial<World> = {}): World {
     pull: { code: 0, out: 'Updating aaaaaaa..bbbbbbb\nFast-forward\n', err: '', delayMs: 0 },
     stored: {},
     isPromptRefused: false,
+    fill: null,
+    commands: [],
     beneath: null,
     slowDraw: 0,
     refusals: 0,
@@ -397,6 +403,19 @@ function install(on: On, changes: Partial<World> = {}): Kit {
     world.prompts.push({ text: e.text, origin: e.origin })
 
     return { text: e.text }
+  })
+  on('session.usage', () => ({
+    value: {
+      startedAt: startOfTime,
+      context: { window: 200_000, ...(world.fill === null ? {} : { percent: world.fill }) },
+      rateLimits: [],
+      cost: { usd: 0 },
+    },
+  }))
+  on('command.run', (_, e) => {
+    world.commands.push(e.command)
+
+    return {}
   })
   on('ui.toast', (_, e) => {
     world.toasts.push(e.text)
@@ -1374,6 +1393,32 @@ describe('the shortcut buttons', () => {
     // Fast is in the row, so More does not list it again.
     await ui.press({ key: 'more' })
     expect(await buttonsOn(ui)).toEqual(['Go backup', 'Back'])
+    await ui.unmount()
+  })
+
+  onEachSurface('the fill is a percentage before the words, and a press runs /compact', async ($, on, surface) => {
+    const kit = install(on, { changed: 2, fill: 42 })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await buttonsOn(ui)).toEqual(['42%', 'Go commit', 'More'])
+    expect((await ui.find({ key: 'fill' }))?.props.plain).toBe(true)
+    await ui.press({ key: 'fill' })
+    await kit.clock.settle()
+    expect(kit.world.commands).toEqual(['compact'])
+    expect(kit.world.prompts).toEqual([])
+
+    // A double click is one press.
+    await ui.press({ key: 'fill' })
+    await kit.clock.settle()
+    expect(kit.world.commands).toHaveLength(1)
+
+    // After a compaction the session has no figure, and the row shows none.
+    kit.world.fill = null
+    await endTurn($, kit)
+    expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
     await ui.unmount()
   })
 })

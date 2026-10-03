@@ -63,6 +63,12 @@ export type ProjectBandFacts = {
   shortcuts: string[]
   /** Set only while the plugin copy of the kit is behind its online copy. */
   pluginUpdate: { dir: string } | null
+  /**
+   * How full the conversation is, as a whole percentage. Null before the
+   * conversation's first answer and right after a compaction. A value kept by
+   * an earlier version of the mod has no such key, and reads the same as null.
+   */
+  fill?: number | null
 }
 
 /**

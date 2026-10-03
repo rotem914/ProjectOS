@@ -178,6 +178,7 @@ type Acts = {
   askPush: () => Promise<void>
   askUpdate: () => Promise<void>
   askMore: (phrases: string[], hasUpdate: boolean) => Promise<void>
+  compact: () => Promise<void>
   confirmPush: () => void
   confirmUpdate: () => void
   cancel: () => Promise<void>
@@ -197,6 +198,8 @@ type Look = {
 type RowPlan = {
   /** The label's name, cut shorter when the row is very narrow. */
   name: string
+  /** How full the conversation is, as the row reads it; empty when unknown. */
+  fill: string
   words: string
   hasCommit: boolean
   hasFast: boolean
@@ -999,6 +1002,11 @@ function planOf(
   const canPush = pushTarget(known.repo) !== null
   const canUpdate = isInRepo && known.pluginUpdate !== null
   const fullName = labelOf(known)
+  // The percentage alone, before the words (owner, 2026-10-03). It is drawn
+  // without a frame, so it takes its own cells and the one that separates it.
+  const fill = known.fill ?? null
+  const fillText = fill === null ? '' : `${Math.round(fill)}%`
+  const fillCells = fillText === '' ? 0 : fillText.length + 1
   const steps = [
     { isShort: false, isInRow: true, hasCommit: hasMain, hasUpdate: canUpdate },
     { isShort: true, isInRow: true, hasCommit: hasMain, hasUpdate: canUpdate },
@@ -1007,6 +1015,7 @@ function planOf(
   ]
   let plan: RowPlan = {
     name: fullName,
+    fill: fillText,
     words: '',
     hasCommit: false,
     hasFast: false,
@@ -1034,9 +1043,10 @@ function planOf(
       ...(more.length > 0 || moreHasUpdate ? ['More'] : []),
     ]
 
-    fixed = buttonsWidth(buttons)
+    fixed = buttonsWidth(buttons) + fillCells
     plan = {
       name: fullName,
+      fill: fillText,
       words,
       hasCommit: step.hasCommit,
       hasFast: isFastInRow,
@@ -1071,6 +1081,7 @@ function keysOf(known: ProjectBandFacts, state: ProjectBandBusy, columns: number
   const plan = planOf(known, state, columns)
 
   return [
+    ...(plan.fill !== '' ? ['fill'] : []),
     ...(plan.hasCommit ? ['go-commit'] : []),
     ...(plan.hasFast ? [keyOf(FAST_SHORTCUT)] : []),
     ...(pushTarget(known.repo) !== null ? ['push'] : []),
@@ -1113,7 +1124,7 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
 
   // The row has nothing to say before git has named the project: no name, no
   // counts, no buttons. Nothing is drawn then, not an empty row.
-  if (plan.name === '' && plan.words === '' && !hasButtons) {
+  if (plan.name === '' && plan.fill === '' && plan.words === '' && !hasButtons) {
     return null
   }
 
@@ -1132,6 +1143,11 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
         flexGrow={1}
         flexShrink={1}
       >
+        {plan.fill !== '' && (
+          <Box flexShrink={0}>
+            <Button key="fill" plain label={plan.fill} onPress={() => acts.compact()} />
+          </Box>
+        )}
         {plan.words !== '' && (
           <Box flexShrink={1}>
             <Text wrap="truncate-end" dimColor={isCalm}>
@@ -1600,6 +1616,19 @@ async function passRepo($: Dollar): Promise<void> {
   }
 }
 
+// How full the conversation is. The session has no figure before its first
+// answer, and none right after a compaction: the row shows nothing then. A
+// reading that failed keeps the figure the row already shows.
+async function passFill($: Dollar): Promise<void> {
+  try {
+    const fill = (await $.session.usage()).context.percent ?? null
+
+    await writeFacts($, now => (now === null ? now : { ...now, fill }))
+  } catch (error) {
+    note($, 'reading how full the conversation is failed', error)
+  }
+}
+
 async function closeAsk($: Dollar): Promise<void> {
   if ((await read($, ask)) !== null) {
     await writeAsk($, null)
@@ -1635,6 +1664,7 @@ async function refresh($: Dollar): Promise<void> {
         await writeStart($)
       }
 
+      await passFill($)
       await passRepo($)
     } while (work.isAnotherPassWanted)
   } catch (error) {
@@ -1792,6 +1822,38 @@ async function submitShortcut($: Dollar, phrase: string, columns: number): Promi
       $.ui.toast(`Could not send "${sent}". Type it in the message box instead.`, {
         timeoutMs: LONG_TOAST_MS,
       })
+    }
+  })
+}
+
+// A press on the percentage compacts the conversation, as /compact typed by
+// the owner does. The command waits its turn behind a running turn.
+async function submitCompact($: Dollar): Promise<void> {
+  const now = await $.clock.now()
+  const last = work.lastShortcut
+  const isRepeat =
+    last !== null &&
+    last.phrase === '/compact' &&
+    now - last.at >= 0 &&
+    now - last.at < REPEAT_PRESS_MS
+
+  // A double click is one press: the second would compact once more.
+  if (isRepeat) {
+    return
+  }
+
+  work.lastShortcut = { phrase: '/compact', at: now }
+
+  inBackground($, 'running /compact failed', async () => {
+    try {
+      await $.command.run({ command: 'compact' })
+    } catch (error) {
+      note($, 'running /compact failed', error)
+      $.ui.toast('Could not run /compact. Type it in the message box instead.', {
+        timeoutMs: LONG_TOAST_MS,
+      })
+    } finally {
+      await refresh($)
     }
   })
 }
@@ -2150,6 +2212,8 @@ export function registerProjectBand(on: On): void {
               askMore($, phrases, hasUpdate).catch(error =>
                 note($, 'opening More failed', error),
               ),
+            compact: () =>
+              submitCompact($).catch(error => note($, 'a press on the fill failed', error)),
             confirmPush: () =>
               inBackground($, 'the push failed', () => confirmPush($, columns)),
             confirmUpdate: () =>
