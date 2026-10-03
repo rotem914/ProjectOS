@@ -1275,8 +1275,8 @@ function keysOf(known: ProjectBandFacts, state: ProjectBandBusy, columns: number
     ...(plan.fill !== '' ? ['fill'] : []),
     ...(plan.backupQuiet !== '' ? ['backup-age'] : []),
     ...(plan.hasCommit ? ['go-commit'] : []),
-    ...(plan.hasFast ? [keyOf(FAST_SHORTCUT)] : []),
     ...(pushTarget(known.repo) !== null ? ['push'] : []),
+    ...(plan.hasFast ? [keyOf(FAST_SHORTCUT)] : []),
     ...(plan.backup !== '' ? [keyOf(BACKUP_SHORTCUT)] : []),
     ...(plan.hasUpdate ? ['update-plugin'] : []),
     ...(plan.more.length > 0 || plan.moreHasUpdate ? ['more'] : []),
@@ -1288,7 +1288,7 @@ function keyOf(phrase: string): string {
 }
 
 // The name's color is the owner's choice (2026-10-04), a quiet grey.
-const NAME_COLOR = '#A3A4AE'
+const NAME_COLOR = '#B3B4BC'
 
 function drawLabel({ Box, Text, Svg }: Table, name: string): RenderElement {
   return (
@@ -1401,15 +1401,16 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
                 onPress={() => acts.shortcut(MAIN_SHORTCUT)}
               />
             )}
+            {/* Push sits before Fast (owner, 2026-10-04). */}
+            {canPush && (
+              <Button key="push" label={pushLabelOf(state, known)} onPress={() => acts.askPush()} />
+            )}
             {plan.hasFast && (
               <Button
                 key={keyOf(FAST_SHORTCUT)}
                 label={plan.fastLabel}
                 onPress={() => acts.shortcut(FAST_SHORTCUT)}
               />
-            )}
-            {canPush && (
-              <Button key="push" label={pushLabelOf(state, known)} onPress={() => acts.askPush()} />
             )}
             {plan.backup !== '' && (
               <Button

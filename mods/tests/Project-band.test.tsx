@@ -594,7 +594,7 @@ describe('the label', () => {
     expect(label?.text).toBe('site-web')
     expect(label?.props.bold).toBe(true)
     expect(label?.props.backgroundColor).toBeUndefined()
-    expect(label?.props.color).toBe('#A3A4AE')
+    expect(label?.props.color).toBe('#B3B4BC')
     expect(await wordsOn(ui)).toBe('site-web | All committed')
     await ui.unmount()
   })
@@ -1699,6 +1699,25 @@ describe('the shortcut buttons', () => {
     await kit.clock.settle()
     expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 2 heavy files')
     expect(await ui.findAll({ type: 'Svg' })).toHaveLength(surface === 'terminal' ? 0 : 2)
+    await ui.unmount()
+  })
+})
+
+describe('the order of the buttons', () => {
+  onEachSurface('Push sits before Fast', async ($, on, surface) => {
+    const kit = install(on, {
+      changed: 1,
+      ahead: 1,
+      files: { 'D:/Work/Site/CLAUDE.md': `${KIT_HEADINGS}\n### \`FAST MODE\` (also \`FAST ON\`)\n` },
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+    const buttons = await buttonsOn(ui)
+
+    expect(buttons).toContain('Fast')
+    expect(buttons.indexOf('Push \u00b7 1')).toBe(buttons.indexOf('Fast') - 1)
     await ui.unmount()
   })
 })
