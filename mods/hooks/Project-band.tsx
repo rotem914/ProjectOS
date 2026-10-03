@@ -963,13 +963,12 @@ function wordsOf(known: ProjectBandFacts, isShort: boolean): string[] {
     words.push(isShort ? 'No online copy' : 'No online copy yet')
   } else if (repo.online.kind === 'tracked' && repo.online.ahead > 0) {
     // Where the row offers no Push because the project has a push step of
-    // its own, the words say where to push from instead.
+    // its own, the words say where to push from instead. The count alone,
+    // at every width: the owner reads "1 to push".
     words.push(
-      isShort
+      isShort || repo.canPushHere
         ? `${repo.online.ahead} to push`
-        : repo.canPushHere
-          ? `${countOf(repo.online.ahead, 'commit')} to push`
-          : `${countOf(repo.online.ahead, 'commit')} to push from your git app`,
+        : `${repo.online.ahead} to push from your git app`,
     )
   }
 
