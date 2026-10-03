@@ -1351,6 +1351,31 @@ describe('the shortcut buttons', () => {
     expect((await ui.find({ key: 'go-commit' }))?.props.variant).toBeUndefined()
     await ui.unmount()
   })
+
+  onEachSurface('Fast sits right after Go commit and submits FAST ON', async ($, on, surface) => {
+    const kit = install(on, {
+      files: {
+        'D:/Work/Site/CLAUDE.md': [
+          '### `Go commit`',
+          '### `FAST MODE` (also `FAST ON`)',
+          '### `Go backup`',
+        ].join('\n'),
+      },
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Fast', 'More'])
+    await ui.press({ key: 'fast-mode' })
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['FAST ON'])
+
+    // Fast is in the row, so More does not list it again.
+    await ui.press({ key: 'more' })
+    expect(await buttonsOn(ui)).toEqual(['Go backup', 'Back'])
+    await ui.unmount()
+  })
 })
 
 describe('More', () => {

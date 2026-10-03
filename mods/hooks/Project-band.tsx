@@ -61,12 +61,19 @@ const NEW_CONVERSATION = { source: ['clear', 'resume', 'compact', 'fork'] } as c
 // so a project without the kit never gets a button that does nothing.
 const SHORTCUTS = [
   'Go commit',
+  'FAST MODE',
   'Go backup',
   'Go audit',
   'Go update kit',
   'Go code review',
 ] as const
 const MAIN_SHORTCUT = 'Go commit'
+// Fast mode sits beside Go commit in the row (owner, 2026-10-03). The kit's
+// heading for it is the mode's name, the button reads shorter, and the words
+// it sends are the ones that switch the mode on.
+const FAST_SHORTCUT = 'FAST MODE'
+const FAST_LABEL = 'Fast'
+const FAST_SENT = 'FAST ON'
 
 const REFRESH_MS = 60_000
 const PLUGIN_CHECK_MS = 30 * 60_000
@@ -192,6 +199,7 @@ type RowPlan = {
   name: string
   words: string
   hasCommit: boolean
+  hasFast: boolean
   hasUpdate: boolean
   more: string[]
   moreHasUpdate: boolean
@@ -957,8 +965,18 @@ function buttonsWidth(labels: readonly string[]): number {
   return labels.reduce((sum, text) => sum + 1 + text.length + 4, 0)
 }
 
+// What a shortcut's button reads, and the words a press of it sends.
+function buttonTextOf(phrase: string): string {
+  return phrase === FAST_SHORTCUT ? FAST_LABEL : phrase
+}
+
+function sentOf(phrase: string): string {
+  return phrase === FAST_SHORTCUT ? FAST_SENT : phrase
+}
+
 // The row must fit the width it is given. When it cannot, the words get
-// shorter first, then Go commit moves behind More, then Update plugin does.
+// shorter first, then Go commit and Fast move behind More, then Update plugin
+// does.
 // Past that the layout cuts the words, down to a handful of cells and then
 // away, and when even the label and the buttons do not fit, the label's name
 // is cut. Push stays in every step.
@@ -969,24 +987,29 @@ function planOf(
 ): RowPlan {
   const isInRepo = known.repo !== null
   const hasMain = isInRepo && known.shortcuts.includes(MAIN_SHORTCUT)
+  const hasFast = isInRepo && known.shortcuts.includes(FAST_SHORTCUT)
   const others = isInRepo
     ? SHORTCUTS.filter(
-        phrase => phrase !== MAIN_SHORTCUT && known.shortcuts.includes(phrase),
+        phrase =>
+          phrase !== MAIN_SHORTCUT &&
+          phrase !== FAST_SHORTCUT &&
+          known.shortcuts.includes(phrase),
       )
     : []
   const canPush = pushTarget(known.repo) !== null
   const canUpdate = isInRepo && known.pluginUpdate !== null
   const fullName = labelOf(known)
   const steps = [
-    { isShort: false, hasCommit: hasMain, hasUpdate: canUpdate },
-    { isShort: true, hasCommit: hasMain, hasUpdate: canUpdate },
-    { isShort: true, hasCommit: false, hasUpdate: canUpdate },
-    { isShort: true, hasCommit: false, hasUpdate: false },
+    { isShort: false, isInRow: true, hasCommit: hasMain, hasUpdate: canUpdate },
+    { isShort: true, isInRow: true, hasCommit: hasMain, hasUpdate: canUpdate },
+    { isShort: true, isInRow: false, hasCommit: false, hasUpdate: canUpdate },
+    { isShort: true, isInRow: false, hasCommit: false, hasUpdate: false },
   ]
   let plan: RowPlan = {
     name: fullName,
     words: '',
     hasCommit: false,
+    hasFast: false,
     hasUpdate: false,
     more: [],
     moreHasUpdate: false,
@@ -995,10 +1018,17 @@ function planOf(
 
   for (const step of steps) {
     const words = wordsOf(known, step.isShort).join(' \u00b7 ')
-    const more = [...(hasMain && !step.hasCommit ? [MAIN_SHORTCUT] : []), ...others]
+    // Fast keeps Go commit's company: in the row with it, behind More with it.
+    const isFastInRow = hasFast && step.isInRow
+    const more = [
+      ...(hasMain && !step.hasCommit ? [MAIN_SHORTCUT] : []),
+      ...(hasFast && !isFastInRow ? [FAST_SHORTCUT] : []),
+      ...others,
+    ]
     const moreHasUpdate = canUpdate && !step.hasUpdate
     const buttons = [
       ...(step.hasCommit ? [MAIN_SHORTCUT] : []),
+      ...(isFastInRow ? [FAST_LABEL] : []),
       ...(canPush ? [pushLabelOf(state)] : []),
       ...(step.hasUpdate ? [updateLabelOf(state)] : []),
       ...(more.length > 0 || moreHasUpdate ? ['More'] : []),
@@ -1009,6 +1039,7 @@ function planOf(
       name: fullName,
       words,
       hasCommit: step.hasCommit,
+      hasFast: isFastInRow,
       hasUpdate: step.hasUpdate,
       more,
       moreHasUpdate,
@@ -1041,6 +1072,7 @@ function keysOf(known: ProjectBandFacts, state: ProjectBandBusy, columns: number
 
   return [
     ...(plan.hasCommit ? ['go-commit'] : []),
+    ...(plan.hasFast ? [keyOf(FAST_SHORTCUT)] : []),
     ...(pushTarget(known.repo) !== null ? ['push'] : []),
     ...(plan.hasUpdate ? ['update-plugin'] : []),
     ...(plan.more.length > 0 || plan.moreHasUpdate ? ['more'] : []),
@@ -1077,7 +1109,7 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
     (files === null || files === 0) &&
     !(known.repo?.online.kind === 'tracked' && known.repo.online.ahead > 0) &&
     known.pluginUpdate === null
-  const hasButtons = plan.hasCommit || canPush || plan.hasUpdate || hasMore
+  const hasButtons = plan.hasCommit || plan.hasFast || canPush || plan.hasUpdate || hasMore
 
   // The row has nothing to say before git has named the project: no name, no
   // counts, no buttons. Nothing is drawn then, not an empty row.
@@ -1114,6 +1146,13 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
                 key="go-commit"
                 label={MAIN_SHORTCUT}
                 onPress={() => acts.shortcut(MAIN_SHORTCUT)}
+              />
+            )}
+            {plan.hasFast && (
+              <Button
+                key={keyOf(FAST_SHORTCUT)}
+                label={FAST_LABEL}
+                onPress={() => acts.shortcut(FAST_SHORTCUT)}
               />
             )}
             {canPush && (
@@ -1213,7 +1252,7 @@ function drawMore(
       {open.phrases.map(phrase => (
         <Button
           key={keyOf(phrase)}
-          label={phrase}
+          label={buttonTextOf(phrase)}
           onPress={() => acts.shortcut(phrase)}
         />
       ))}
@@ -1741,14 +1780,16 @@ async function submitShortcut($: Dollar, phrase: string, columns: number): Promi
   // The exact phrase, as the owner's own words: the project's CLAUDE.md
   // answers to the phrase itself. A prompt waits its turn behind a running
   // turn, so nothing here waits for it to enter.
-  inBackground($, `submitting ${phrase} failed`, async () => {
+  const sent = sentOf(phrase)
+
+  inBackground($, `submitting ${sent} failed`, async () => {
     try {
-      await $.prompt.submit({ text: phrase, asUser: true })
+      await $.prompt.submit({ text: sent, asUser: true })
     } catch (error) {
       // A press that did nothing would leave the owner waiting for a commit
       // that never starts.
-      note($, `submitting ${phrase} failed`, error)
-      $.ui.toast(`Could not send "${phrase}". Type it in the message box instead.`, {
+      note($, `submitting ${sent} failed`, error)
+      $.ui.toast(`Could not send "${sent}". Type it in the message box instead.`, {
         timeoutMs: LONG_TOAST_MS,
       })
     }
