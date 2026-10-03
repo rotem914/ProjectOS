@@ -1027,10 +1027,15 @@ function wordsOf(
 
   if (repo.online.kind === 'none') {
     words.push(isShort ? 'No online copy' : 'No online copy yet')
-  } else if (repo.online.kind === 'tracked' && repo.online.ahead > 0) {
-    // Where the row offers no Push because the project has a push step of
-    // its own, the words say where to push from instead. The count alone,
-    // at every width: the owner reads "1 to push".
+  } else if (
+    repo.online.kind === 'tracked' &&
+    repo.online.ahead > 0 &&
+    pushTarget(repo) === null
+  ) {
+    // While Push is in the row the count rides in the button, as it does in
+    // Go commit (owner, 2026-10-04). Where the row offers no Push, because
+    // the project has a push step of its own or the online copy has no
+    // address, the words carry the count and say where to push from.
     words.push(
       isShort || repo.canPushHere
         ? `${repo.online.ahead} to push`
@@ -1056,8 +1061,16 @@ function wordsOf(
   return words
 }
 
-function pushLabelOf(state: ProjectBandBusy): string {
-  return state.isPushing ? 'Pushing...' : 'Push'
+// Push carries the count of commits waiting, after a middle dot, as Go commit
+// carries its files (owner, 2026-10-04).
+function pushLabelOf(state: ProjectBandBusy, known: ProjectBandFacts): string {
+  if (state.isPushing) {
+    return 'Pushing...'
+  }
+
+  const ahead = pushTarget(known.repo)?.ahead ?? 0
+
+  return ahead > 0 ? `Push \u00b7 ${ahead}` : 'Push'
 }
 
 function updateLabelOf(state: ProjectBandBusy): string {
@@ -1183,7 +1196,7 @@ function planOf(
     const buttons = [
       ...(step.hasCommit ? [commitLabelOf(known)] : []),
       ...(isFastInRow ? [fastLabel] : []),
-      ...(canPush ? [pushLabelOf(state)] : []),
+      ...(canPush ? [pushLabelOf(state, known)] : []),
       ...(isBackupInRow ? [backupText] : []),
       ...(step.hasUpdate ? [updateLabelOf(state)] : []),
       ...(more.length > 0 || moreHasUpdate ? ['More'] : []),
@@ -1357,7 +1370,7 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
               />
             )}
             {canPush && (
-              <Button key="push" label={pushLabelOf(state)} onPress={() => acts.askPush()} />
+              <Button key="push" label={pushLabelOf(state, known)} onPress={() => acts.askPush()} />
             )}
             {plan.backup !== '' && (
               <Button

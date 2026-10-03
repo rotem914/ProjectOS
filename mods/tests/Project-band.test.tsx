@@ -745,8 +745,8 @@ describe('what is waiting', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | 2 to push')
-    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 3', 'Push', 'More'])
+    expect(await wordsOn(ui)).toBe('site-web')
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 3', 'Push \u00b7 2', 'More'])
     await ui.unmount()
   })
 
@@ -757,7 +757,7 @@ describe('what is waiting', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toContain('1 to push')
+    expect(await buttonsOn(ui)).toContain('Push \u00b7 1')
     await ui.unmount()
   })
 
@@ -780,7 +780,7 @@ describe('what is waiting', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 2 to push')
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
 
     // Only behind: nothing waits to be pushed.
     kit.world.ahead = 0
@@ -838,14 +838,14 @@ describe('what is waiting', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toContain('2 to push')
+    expect(await buttonsOn(ui)).toContain('Push \u00b7 2')
 
     // The count of files starts failing. The number it gave before must go;
     // the branch is read apart from the files, so its part stays.
     kit.world.broken = ['status']
     await endTurn($, kit)
-    expect(await wordsOn(ui)).toBe('site-web | 2 to push')
-    expect(await buttonsOn(ui)).toContain('Push')
+    expect(await wordsOn(ui)).toBe('site-web')
+    expect(await buttonsOn(ui)).toContain('Push \u00b7 2')
 
     // The branch cannot be read: files only, and no Push.
     kit.world.broken = ['symbolic-ref']
@@ -863,7 +863,7 @@ describe('what is waiting', () => {
     kit.world.broken = ['remote']
     await endTurn($, kit)
     expect(await wordsOn(ui)).toContain('2 to push')
-    expect(await buttonsOn(ui)).not.toContain('Push')
+    expect(await buttonsOn(ui)).not.toContain('Push \u00b7 2')
 
     // Git cannot even say where the folder is: the name alone, and the same
     // name as before. A git that fails for a moment does not rename the row.
@@ -881,7 +881,7 @@ describe('what is waiting', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | 2 to push')
+    expect(await wordsOn(ui)).toBe('site-web')
     expect((await ui.find({ key: 'go-commit' }))?.props.variant).toBeUndefined()
     await ui.unmount()
   })
@@ -893,7 +893,7 @@ describe('what is waiting', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | 2 to push')
+    expect(await wordsOn(ui)).toBe('site-web')
 
     // Every git run is given a time limit, so a silent one cannot hang a pass.
     expect(kit.world.git.every(call => typeof call.timeoutMs === 'number' && call.timeoutMs <= 120_000)).toBe(true)
@@ -916,7 +916,7 @@ describe('what is waiting', () => {
     kit.world.changed = 6
     kit.world.ahead = 1
     await endTurn($, kit)
-    expect(await wordsOn(ui)).toContain('1 to push')
+    expect(await buttonsOn(ui)).toContain('Push \u00b7 1')
     await ui.unmount()
   })
 
@@ -979,7 +979,7 @@ describe('what is waiting', () => {
       const ui = await looking
 
       await kit.clock.settle()
-      expect(await wordsOn(ui)).toBe('site-web | 2 to push')
+      expect(await wordsOn(ui)).toBe('site-web')
       expect(gitRuns(kit.world, 'rev-parse').filter(call => call.args.includes('--show-toplevel'))).toHaveLength(1)
       expect(gitRuns(kit.world, 'status')).toHaveLength(1)
 
@@ -1009,7 +1009,7 @@ describe('what is waiting', () => {
       const ui = await looking
 
       await kit.clock.settle()
-      expect(await wordsOn(ui)).toBe('site-web | 2 to push')
+      expect(await wordsOn(ui)).toBe('site-web')
       expect(gitRuns(kit.world, 'rev-parse').filter(call => call.args.includes('--show-toplevel'))).toHaveLength(1)
       expect(gitRuns(kit.world, 'status')).toHaveLength(1)
       await ui.unmount()
@@ -1032,7 +1032,7 @@ describe('a session nobody looks at', () => {
 
     await kit.clock.settle()
     expect(await wordsOn(ui)).toBe(
-      'site-web | 2 to push \u00b7 Plugin update ready',
+      'site-web | Plugin update ready',
     )
     expect(gitRuns(kit.world, 'status')).toHaveLength(1)
 
@@ -1080,10 +1080,10 @@ describe('each part as soon as it is known', () => {
     expect(await buttonsOn(ui)).toEqual([])
 
     await kit.clock.advance(1_500)
-    expect(await wordsOn(ui)).toBe('site-web | 2 to push')
+    expect(await wordsOn(ui)).toBe('site-web')
 
     await kit.clock.advance(2_500)
-    expect(await wordsOn(ui)).toBe('site-web | 2 to push')
+    expect(await wordsOn(ui)).toBe('site-web')
     await ui.unmount()
   })
 
@@ -1096,19 +1096,19 @@ describe('each part as soon as it is known', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | 2 to push')
-    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 3', 'Push', 'More'])
+    expect(await wordsOn(ui)).toBe('site-web')
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 3', 'Push \u00b7 2', 'More'])
 
     // A turn ends while the check still hangs: the new counts are not kept
     // waiting behind it, and no second check is sent after the first.
     kit.world.changed = 5
     await endTurn($, kit)
-    expect(await wordsOn(ui)).toBe('site-web | 2 to push')
+    expect(await wordsOn(ui)).toBe('site-web')
     expect(gitRuns(kit.world, 'ls-remote')).toHaveLength(1)
 
     await kit.clock.advance(15_000)
     expect(await wordsOn(ui)).toBe(
-      'site-web | 2 to push \u00b7 Plugin update ready',
+      'site-web | Plugin update ready',
     )
     await ui.unmount()
   })
@@ -1123,11 +1123,11 @@ describe('each part as soon as it is known', () => {
     expect(await wordsOn(ui)).toBe('site-web')
 
     await kit.clock.advance(1_500)
-    expect(await wordsOn(ui)).toBe('site-web | 2 to push')
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push', 'More'])
+    expect(await wordsOn(ui)).toBe('site-web')
+    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push \u00b7 2', 'More'])
 
     await kit.clock.advance(2_500)
-    expect(await wordsOn(ui)).toBe('site-web | 2 to push')
+    expect(await wordsOn(ui)).toBe('site-web')
     await ui.unmount()
   })
 
@@ -1143,10 +1143,10 @@ describe('each part as soon as it is known', () => {
     kit.world.ahead = 3
     await endTurn($, kit)
     await kit.clock.advance(1_500)
-    expect(await wordsOn(ui)).toBe('site-web | 3 to push')
+    expect(await wordsOn(ui)).toBe('site-web')
 
     await kit.clock.advance(2_500)
-    expect(await wordsOn(ui)).toBe('site-web | 3 to push')
+    expect(await wordsOn(ui)).toBe('site-web')
     await ui.unmount()
   })
 })
@@ -1160,14 +1160,14 @@ describe('a count of files that runs out of time', () => {
     const ui = await bandOn($, 'terminal')
 
     // The first count ran out of time: no number, and the rest is there.
-    expect(await wordsOn(ui)).toBe('site-web | 2 to push')
+    expect(await wordsOn(ui)).toBe('site-web')
     expect(gitRuns(kit.world, 'status')).toHaveLength(1)
 
     // Ten minutes on. The next count waited two minutes, the one after it
     // four: two more, where every minute used to start one.
     await kit.clock.advance(10 * 60_000)
     expect(gitRuns(kit.world, 'status')).toHaveLength(3)
-    expect(await wordsOn(ui)).toBe('site-web | 2 to push')
+    expect(await wordsOn(ui)).toBe('site-web')
 
     // An hour more. The wait doubles up to a quarter of an hour and stays.
     await kit.clock.advance(60 * 60_000)
@@ -1197,10 +1197,10 @@ describe('a count of files that runs out of time', () => {
 
     kit.world.silent = []
     await kit.clock.advance(60_000)
-    expect(await wordsOn(ui)).toBe('site-web | 2 to push')
+    expect(await wordsOn(ui)).toBe('site-web')
 
     await kit.clock.advance(60_000)
-    expect(await wordsOn(ui)).toBe('site-web | 2 to push')
+    expect(await wordsOn(ui)).toBe('site-web')
     expect(gitRuns(kit.world, 'status')).toHaveLength(2)
 
     // Back to a count on every pass.
@@ -1833,11 +1833,11 @@ describe('the Push button', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await buttonsOn(ui)).not.toContain('Push')
+    expect(await buttonsOn(ui)).not.toContain('Push \u00b7 3')
 
     kit.world.ahead = 3
     await endTurn($, kit)
-    expect(await buttonsOn(ui)).toContain('Push')
+    expect(await buttonsOn(ui)).toContain('Push \u00b7 3')
     await ui.unmount()
   })
 
@@ -1947,8 +1947,8 @@ describe('the Push button', () => {
     await ui.press({ key: 'cancel' })
     expect(gitRuns(kit.world, 'push')).toHaveLength(0)
     expect(kit.world.toasts).toEqual([])
-    expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 2 to push')
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push', 'More'])
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
+    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push \u00b7 2', 'More'])
     await ui.unmount()
   })
 
@@ -1985,7 +1985,7 @@ describe('the Push button', () => {
 
     await ui.press({ key: 'push' })
     await kit.clock.advance(3 * 60_000)
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push \u00b7 2', 'More'])
     expect(gitRuns(kit.world, 'push')).toHaveLength(0)
     await ui.unmount()
   })
@@ -2056,8 +2056,8 @@ describe('the Push button', () => {
     ])
 
     // Still waiting, and Push can be tried again.
-    expect(await wordsOn(ui)).toContain('2 to push')
-    expect(await buttonsOn(ui)).toContain('Push')
+    expect(await buttonsOn(ui)).toContain('Push \u00b7 2')
+    expect(await buttonsOn(ui)).toContain('Push \u00b7 2')
     await ui.unmount()
   })
 
@@ -2205,7 +2205,7 @@ describe('the Push button', () => {
     ])
 
     // The row now shows three, and a new press asks about three.
-    expect(await wordsOn(ui)).toContain('3 to push')
+    expect(await buttonsOn(ui)).toContain('Push \u00b7 3')
     await ui.press({ key: 'push' })
     expect(await wordsOn(ui)).toContain('Push 3 commits from main to')
     await ui.unmount()
@@ -2311,8 +2311,8 @@ describe('a project with a push step of its own', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 2 to push')
-    expect(await buttonsOn(ui)).toContain('Push')
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
+    expect(await buttonsOn(ui)).toContain('Push \u00b7 2')
     await ui.unmount()
   })
 
@@ -2328,7 +2328,7 @@ describe('a project with a push step of its own', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await buttonsOn(ui)).toContain('Push')
+    expect(await buttonsOn(ui)).toContain('Push \u00b7 2')
 
     kit.world.present = ['D:/Work/Site/.githooks/pre-push']
     await endTurn($, kit)
@@ -2348,16 +2348,16 @@ describe('a project with a push step of its own', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await buttonsOn(ui)).not.toContain('Push')
+    expect(await buttonsOn(ui)).not.toContain('Push \u00b7 2')
 
     kit.world.hooksPath = '~/git-hooks'
     kit.world.present = ['C:/Users/Dana/git-hooks/pre-push']
     await endTurn($, kit)
-    expect(await buttonsOn(ui)).not.toContain('Push')
+    expect(await buttonsOn(ui)).not.toContain('Push \u00b7 2')
 
     kit.world.present = []
     await endTurn($, kit)
-    expect(await buttonsOn(ui)).toContain('Push')
+    expect(await buttonsOn(ui)).toContain('Push \u00b7 2')
     await ui.unmount()
   })
 
@@ -2373,7 +2373,7 @@ describe('a project with a push step of its own', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await buttonsOn(ui)).toContain('Push')
+    expect(await buttonsOn(ui)).toContain('Push \u00b7 2')
 
     // The project's own push hook, one folder up, is what the stand-in runs.
     kit.world.present = ['D:/Work/Site/.husky/_/pre-push', 'D:/Work/Site/.husky/pre-push']
@@ -2462,7 +2462,7 @@ describe('a project with a push step of its own', () => {
 
     kit.world.present = ['D:/Work/Site-fix/.git/hooks/pre-push']
     await endTurn($, kit)
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push \u00b7 2', 'More'])
     await ui.unmount()
   })
 })
@@ -2532,9 +2532,9 @@ describe('the plugin copy of the kit', () => {
     const ui = await bandOn($, surface)
 
     expect(await wordsOn(ui)).toBe(
-      'site-web | 1 to push \u00b7 Plugin update ready',
+      'site-web | Plugin update ready',
     )
-    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', 'Push', 'Update plugin', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', 'Push \u00b7 1', 'Update plugin', 'More'])
     expect(gitRuns(kit.world, 'ls-remote')[0]?.cwd).toBe('/Users/dana/claude-configs/Darrow/skills/projectos')
     expect(kit.world.listed).toEqual([])
 
@@ -2749,38 +2749,38 @@ describe('the plugin copy of the kit', () => {
 
 describe('a narrow row', () => {
   // The label is 8 cells. With 3 files, 2 commits and every shortcut the row
-  // needs 54 cells with the count in Go commit, and 50 with Go commit behind
-  // More, where the count goes back into the words.
+  // needs 48 cells with the counts in Go commit and Push, and 42 with Go
+  // commit behind More, where its count goes back into the words.
   onEachSurface('shortens the words first, then folds Go commit into More', async ($, on, surface) => {
     const kit = install(on, { changed: 3, ahead: 2 })
 
     await start($, kit)
 
-    const wide = await bandOn($, surface, width(surface, 56))
+    const wide = await bandOn($, surface, width(surface, 50))
 
-    expect(await wordsOn(wide)).toBe('site-web | 2 to push')
-    expect(await buttonsOn(wide)).toEqual(['Go commit \u00b7 3', 'Push', 'More'])
+    expect(await wordsOn(wide)).toBe('site-web')
+    expect(await buttonsOn(wide)).toEqual(['Go commit \u00b7 3', 'Push \u00b7 2', 'More'])
     await wide.unmount()
 
-    const narrower = await bandOn($, surface, width(surface, 55))
+    const narrower = await bandOn($, surface, width(surface, 49))
 
-    expect(await wordsOn(narrower)).toBe('site-web | 2 to push')
-    expect(await buttonsOn(narrower)).toEqual(['Go commit \u00b7 3', 'Push', 'More'])
+    expect(await wordsOn(narrower)).toBe('site-web')
+    expect(await buttonsOn(narrower)).toEqual(['Go commit \u00b7 3', 'Push \u00b7 2', 'More'])
     await narrower.redraw({
       hasSurvey: false,
       isWorking: false,
       maxRows: 12,
-      bodyColumns: width(surface, 54),
+      bodyColumns: width(surface, 48),
       scroll: { offset: 0, bodyRows: 12 },
       view: {},
     })
-    expect(await buttonsOn(narrower)).toEqual(['Go commit \u00b7 3', 'Push', 'More'])
+    expect(await buttonsOn(narrower)).toEqual(['Go commit \u00b7 3', 'Push \u00b7 2', 'More'])
     await narrower.unmount()
 
-    const narrow = await bandOn($, surface, width(surface, 53))
+    const narrow = await bandOn($, surface, width(surface, 47))
 
-    expect(await wordsOn(narrow)).toBe('site-web | 3 to commit \u00b7 2 to push')
-    expect(await buttonsOn(narrow)).toEqual(['Push', 'More'])
+    expect(await wordsOn(narrow)).toBe('site-web | 3 to commit')
+    expect(await buttonsOn(narrow)).toEqual(['Push \u00b7 2', 'More'])
 
     // Go commit did not vanish: it leads More, drawn as the buttons beside it.
     await narrow.press({ key: 'more' })
@@ -2810,12 +2810,12 @@ describe('a narrow row', () => {
     const terminal = await bandOn($, 'terminal', 74)
 
     expect(await terminal.drawn()).toMatchObject({ type: 'Box', props: { paddingRight: 4 } })
-    expect(await wordsOn(terminal)).toBe('site-web | 2 to push')
+    expect(await wordsOn(terminal)).toBe('site-web')
     await terminal.unmount()
 
     const roomy = await bandOn($, 'terminal', 76)
 
-    expect(await wordsOn(roomy)).toBe('site-web | 2 to push')
+    expect(await wordsOn(roomy)).toBe('site-web')
     await roomy.unmount()
 
     // The desktop draws no such mark at the end. It keeps cells at the start
@@ -2823,7 +2823,7 @@ describe('a narrow row', () => {
     const desktop = await bandOn($, 'desktop', 76)
 
     expect(await desktop.drawn()).toMatchObject({ type: 'Box', props: { paddingRight: 0 } })
-    expect(await wordsOn(desktop)).toBe('site-web | 2 to push')
+    expect(await wordsOn(desktop)).toBe('site-web')
     await desktop.unmount()
 
     // A question and More keep clear of the mark too.
@@ -2868,7 +2868,7 @@ describe('a narrow row', () => {
       const ui = await bandOn($, surface, columns)
 
       expect((await ui.find({ type: 'Text', text: 'site-web' }))?.text, `${columns} columns`).toBe('site-web')
-      expect(await buttonsOn(ui)).toContain('Push')
+      expect(await buttonsOn(ui)).toContain('Push \u00b7 2')
       await ui.unmount()
     }
 
@@ -2878,13 +2878,13 @@ describe('a narrow row', () => {
       const ui = await bandOn($, surface, columns)
 
       expect((await ui.findAll({ type: 'Text' }))[0]?.text, `${columns} columns`).toBe('s\u2026')
-      expect(await buttonsOn(ui)).toContain('Push')
+      expect(await buttonsOn(ui)).toContain('Push \u00b7 2')
       await ui.unmount()
     }
   })
 
   // The name is 24 letters at the most. With Push and More beside it the
-  // label then needs 42 cells, more than a narrow window has.
+  // label then needs 46 cells, more than a narrow window has.
   onEachSurface('a long name gives way before Push does', async ($, on, surface) => {
     const kit = install(on, {
       changed: 3,
@@ -2899,12 +2899,12 @@ describe('a narrow row', () => {
     expect((await wide.findAll({ type: 'Text' }))[0]?.text).toBe('Northwind-Traders-Europ\u{2026}')
     await wide.unmount()
 
-    for (const usable of [42, 41, 30, 26]) {
+    for (const usable of [46, 45, 30, 26]) {
       const ui = await bandOn($, surface, width(surface, usable))
       const label = (await ui.findAll({ type: 'Text' }))[0]?.text ?? ''
       const buttons = await buttonsOn(ui)
 
-      expect(buttons, `${usable} cells`).toEqual(['Push', 'More'])
+      expect(buttons, `${usable} cells`).toEqual(['Push \u00b7 2', 'More'])
       expect(label.startsWith('N'), `${usable} cells`).toBe(true)
 
       // The name and the buttons fit the cells there are, and no words are
@@ -2916,32 +2916,32 @@ describe('a narrow row', () => {
 
     const tight = await bandOn($, surface, width(surface, 30))
 
-    expect((await tight.findAll({ type: 'Text' }))[0]?.text).toBe('Northwind-T\u{2026}')
+    expect((await tight.findAll({ type: 'Text' }))[0]?.text).toBe('Northwi\u{2026}')
     await tight.unmount()
   })
 
-  // With an update ready the row has Go commit in it at 97 cells. It needs
-  // 83 once Go commit is behind More, and 65 with Update plugin there too.
+  // With an update ready the row has Go commit in it at 79 cells. It needs
+  // 75 once Go commit is behind More, and 57 with Update plugin there too.
   onEachSurface('folds Update plugin into More last, and it still asks first', async ($, on, surface) => {
     const kit = install(on, { changed: 3, ahead: 2 })
 
     kit.world.plugin.onlineHead = ONLINE_HEAD
     await start($, kit)
 
-    const roomy = await bandOn($, surface, width(surface, 97))
+    const roomy = await bandOn($, surface, width(surface, 79))
 
-    expect(await buttonsOn(roomy)).toEqual(['Go commit \u00b7 3', 'Push', 'Update plugin', 'More'])
+    expect(await buttonsOn(roomy)).toEqual(['Go commit \u00b7 3', 'Push \u00b7 2', 'Update plugin', 'More'])
     await roomy.unmount()
 
-    const tighter = await bandOn($, surface, width(surface, 83))
+    const tighter = await bandOn($, surface, width(surface, 75))
 
-    expect(await buttonsOn(tighter)).toEqual(['Push', 'Update plugin', 'More'])
+    expect(await buttonsOn(tighter)).toEqual(['Push \u00b7 2', 'Update plugin', 'More'])
     await tighter.unmount()
 
-    const ui = await bandOn($, surface, width(surface, 82))
+    const ui = await bandOn($, surface, width(surface, 74))
 
-    expect(await wordsOn(ui)).toBe('site-web | 3 to commit \u00b7 2 to push \u00b7 Update ready')
-    expect(await buttonsOn(ui)).toEqual(['Push', 'More'])
+    expect(await wordsOn(ui)).toBe('site-web | 3 to commit \u00b7 Update ready')
+    expect(await buttonsOn(ui)).toEqual(['Push \u00b7 2', 'More'])
     await ui.press({ key: 'more' })
     expect(await buttonsOn(ui)).toContain('Update plugin')
     await ui.press({ key: 'update-plugin' })
@@ -2955,29 +2955,29 @@ describe('a narrow row', () => {
 
     await start($, kit)
 
-    const ui = await bandOn($, surface, 40)
+    const ui = await bandOn($, surface, width(surface, 40))
     const words = await ui.find({ type: 'Text', text: '3 to commit' })
 
     expect(words?.props.wrap).toBe('truncate-end')
     await ui.unmount()
   })
 
-  // The label is 8 cells and Push and More take 18. Beside them the words
+  // The label is 8 cells and Push and More take 22. Beside them the words
   // need their own cell of space and at least 8 cells to say anything.
   onEachSurface('leaves the words out when too few cells are left to read them in', async ($, on, surface) => {
     const kit = install(on, { changed: 3, ahead: 2 })
 
     await start($, kit)
 
-    const enough = await bandOn($, surface, width(surface, 35))
+    const enough = await bandOn($, surface, width(surface, 39))
 
-    expect(await wordsOn(enough)).toBe('site-web | 3 to commit \u00b7 2 to push')
+    expect(await wordsOn(enough)).toBe('site-web | 3 to commit')
     await enough.unmount()
 
-    const tooFew = await bandOn($, surface, width(surface, 34))
+    const tooFew = await bandOn($, surface, width(surface, 38))
 
     expect(await wordsOn(tooFew)).toBe('site-web')
-    expect(await buttonsOn(tooFew)).toEqual(['Push', 'More'])
+    expect(await buttonsOn(tooFew)).toEqual(['Push \u00b7 2', 'More'])
     await tooFew.unmount()
   })
 })
@@ -2999,7 +2999,7 @@ describe('a new conversation in the same window', () => {
       await kit.clock.settle()
 
       // No turn ended and the clock did not move: the hook alone did it.
-      expect(await wordsOn(ui)).toBe('site-web | 2 to push')
+      expect(await wordsOn(ui)).toBe('site-web')
       await ui.unmount()
     })
   }
