@@ -52,6 +52,8 @@ const busy = atom({ plugin: 'projectos-mods', key: 'bandBusy' } as const, {
 // The first two are passed by every session start and every end of a turn.
 const EVERY_SESSION = { isInteractive: [true, false] } as const
 const EVERY_TURN_END = { isAborted: [true, false] } as const
+// Passed by every prompt, typed with or without the ask to wait its turn.
+const EVERY_PROMPT = { wait: [true, false] } as const
 // A conversation that takes the place of another in the same window: after
 // /clear, a resume, a compaction or a fork. No session start comes with it.
 const NEW_CONVERSATION = { source: ['clear', 'resume', 'compact', 'fork'] } as const
@@ -63,9 +65,11 @@ const SHORTCUTS = [
   'Go commit',
   'FAST MODE',
   'Go backup',
+  'Go commit and backup',
   'Go audit',
   'Go update kit',
   'Go code review',
+  'GO visual qa',
 ] as const
 const MAIN_SHORTCUT = 'Go commit'
 // Fast mode sits beside Go commit in the row (owner, 2026-10-03). The kit's
@@ -74,6 +78,17 @@ const MAIN_SHORTCUT = 'Go commit'
 const FAST_SHORTCUT = 'FAST MODE'
 const FAST_LABEL = 'Fast'
 const FAST_SENT = 'FAST ON'
+// While the mode is on the button says so, and a press switches it off
+// (owner, 2026-10-04).
+const FAST_ON_LABEL = 'Fast on'
+const FAST_OFF_SENT = 'FAST OFF'
+// The backup's age is read from the newest ZIP in the project's backups
+// folder, where the kit's backup puts it. It is quiet words until the backup
+// is this many days old, and a button from then on (owner, 2026-10-04).
+const BACKUP_SHORTCUT = 'Go backup'
+const BACKUP_FOLDER = 'backups'
+const BACKUP_BUTTON_DAYS = 30
+const DAY_MS = 24 * 60 * 60_000
 
 const REFRESH_MS = 60_000
 const PLUGIN_CHECK_MS = 30 * 60_000
@@ -150,7 +165,7 @@ type Table = Pick<Elements['mobile'], 'Box' | 'Text' | 'Button'> & {
 const MARK_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">' +
   '<rect width="64" height="64" rx="13" fill="#192685"/>' +
-  '<path fill="#A0A8E3" fill-rule="evenodd" ' +
+  '<path fill="#B8BEEA" fill-rule="evenodd" ' +
   'transform="translate(10.24 17.01) scale(0.888) translate(-62 -42)" ' +
   'd="M86.5,58.7a3.465,3.465,0,1,1,3.548-3.464A3.507,3.507,0,0,1,86.5,58.7ZM108.866,42H64.132a2.069,2.069,0,0,0-1.816,3.09L63.022,46.1l5.76,0.085L68.1,46.1l36.987,0.088L89.321,68.39,86.5,72.415,71.315,50.372H66.248l13.808,20.1L84.5,76.817a1.965,1.965,0,0,0,.366.491,2.271,2.271,0,0,0,3.28-.014,1.953,1.953,0,0,0,.348-0.469L106.056,51.7l4.627-6.607A2.07,2.07,0,0,0,108.866,42Z"/>' +
   '</svg>'
@@ -219,6 +234,12 @@ type RowPlan = {
   words: string
   hasCommit: boolean
   hasFast: boolean
+  /** What the Fast button reads: the mode's state rides in it. */
+  fastLabel: string
+  /** What the backup button reads; empty when the row draws none. */
+  backup: string
+  /** True once the newest backup is old enough to call for a new one. */
+  isBackupDue: boolean
   hasUpdate: boolean
   more: string[]
   moreHasUpdate: boolean
@@ -445,6 +466,39 @@ function heavyIn(out: string): number {
   return out
     .split(/\r?\n/)
     .filter(line => /^\s+[\d.]+ (?:KB|MB|GB)\s+(?:leftover|backups)\s+\S/.test(line)).length
+}
+
+// Whether fast mode is on after a prompt, going by the words the kit answers
+// to: the two that switch it on, the two that switch it off, the commit
+// shortcuts, which end it by themselves, and the plain words for leaving it.
+// Any other prompt leaves the mode as it was.
+function fastAfter(text: string, isOn: boolean): boolean {
+  const said = text.trim().replace(/\s+/g, ' ').replace(/[.!]+$/, '').toLowerCase()
+
+  if (said === 'fast on' || said === 'fast mode') {
+    return true
+  }
+
+  if (
+    said === 'fast off' ||
+    said === 'fast mode off' ||
+    said === 'go commit' ||
+    said === 'go c' ||
+    said === 'go commit and backup'
+  ) {
+    return false
+  }
+
+  if (/\b(?:exit|stop|end|leave|quit)\s+fast\s+mode\b|\bturn\s+off\s+fast\s+mode\b/.test(said)) {
+    return false
+  }
+
+  return isOn
+}
+
+// How the row reads a backup's age: today, or its count of days.
+function backupTextOf(days: number): string {
+  return days === 0 ? 'Backup today' : `Backup ${days}d`
 }
 
 // What git's status answers in its second porcelain format: one line per
@@ -944,7 +998,12 @@ async function pluginUpdateOf(
 // DRAWING. Values in, a tree out: no git, no files, no waiting.
 
 // Each message opens on a capital letter, or on its count (owner, 2026-10-03).
-function wordsOf(known: ProjectBandFacts, isShort: boolean, isCountInButton: boolean): string[] {
+function wordsOf(
+  known: ProjectBandFacts,
+  isShort: boolean,
+  isCountInButton: boolean,
+  backupWords: string,
+): string[] {
   const words: string[] = []
   const repo = known.repo
 
@@ -983,6 +1042,11 @@ function wordsOf(known: ProjectBandFacts, isShort: boolean, isCountInButton: boo
     words.push(isShort ? `${heavy} heavy` : countOf(heavy, 'heavy file'))
   }
 
+  // The backup's age, while it is not riding in a button of its own.
+  if (backupWords !== '') {
+    words.push(backupWords)
+  }
+
   return words
 }
 
@@ -1000,9 +1064,13 @@ function buttonsWidth(labels: readonly string[]): number {
   return labels.reduce((sum, text) => sum + 1 + text.length + 4, 0)
 }
 
+function fastLabelOf(isFast: boolean): string {
+  return isFast ? FAST_ON_LABEL : FAST_LABEL
+}
+
 // What a shortcut's button reads, and the words a press of it sends.
-function buttonTextOf(phrase: string): string {
-  return phrase === FAST_SHORTCUT ? FAST_LABEL : phrase
+function buttonTextOf(phrase: string, isFast: boolean): string {
+  return phrase === FAST_SHORTCUT ? fastLabelOf(isFast) : phrase
 }
 
 // Go commit carries the count of files waiting, after a middle dot (owner,
@@ -1014,13 +1082,17 @@ function commitLabelOf(known: ProjectBandFacts): string {
   return files > 0 ? `${MAIN_SHORTCUT} · ${files}` : MAIN_SHORTCUT
 }
 
-function sentOf(phrase: string): string {
-  return phrase === FAST_SHORTCUT ? FAST_SENT : phrase
+function sentOf(phrase: string, isFast: boolean): string {
+  if (phrase !== FAST_SHORTCUT) {
+    return phrase
+  }
+
+  return isFast ? FAST_OFF_SENT : FAST_SENT
 }
 
 // The row must fit the width it is given. When it cannot, the words get
-// shorter first, then Go commit and Fast move behind More, then Update plugin
-// does.
+// shorter first, then Go commit, Fast and the backup button move behind More,
+// then Update plugin does.
 // Past that the layout cuts the words, down to a handful of cells and then
 // away, and when even the label and the buttons do not fit, the label's name
 // is cut. Push stays in every step.
@@ -1042,6 +1114,13 @@ function planOf(
     : []
   const canPush = pushTarget(known.repo) !== null
   const canUpdate = isInRepo && known.pluginUpdate !== null
+  const fastLabel = fastLabelOf(known.isFast === true)
+  // The backup's age shows only where the project carries the shortcut that
+  // makes one, and only once a backup was found.
+  const backupDays =
+    isInRepo && known.shortcuts.includes(BACKUP_SHORTCUT) ? (known.backup?.days ?? null) : null
+  const backupText = backupDays === null ? '' : backupTextOf(backupDays)
+  const isBackupDue = backupDays !== null && backupDays >= BACKUP_BUTTON_DAYS
   const fullName = labelOf(known)
   // The percentage alone, before the words (owner, 2026-10-03). It is drawn
   // without a frame, so it takes its own cells and the one that separates it.
@@ -1060,6 +1139,9 @@ function planOf(
     words: '',
     hasCommit: false,
     hasFast: false,
+    fastLabel,
+    backup: '',
+    isBackupDue,
     hasUpdate: false,
     more: [],
     moreHasUpdate: false,
@@ -1067,19 +1149,28 @@ function planOf(
   let fixed = 0
 
   for (const step of steps) {
-    const words = wordsOf(known, step.isShort, step.hasCommit).join(' \u00b7 ')
     // Fast keeps Go commit's company: in the row with it, behind More with it.
+    // So does the backup button, which the row draws only for a backup that
+    // is due; until then, and behind More, its age is in the words.
     const isFastInRow = hasFast && step.isInRow
+    const isBackupInRow = isBackupDue && step.isInRow
+    const words = wordsOf(
+      known,
+      step.isShort,
+      step.hasCommit,
+      isBackupInRow ? '' : backupText,
+    ).join(' \u00b7 ')
     const more = [
       ...(hasMain && !step.hasCommit ? [MAIN_SHORTCUT] : []),
       ...(hasFast && !isFastInRow ? [FAST_SHORTCUT] : []),
-      ...others,
+      ...others.filter(phrase => !(isBackupInRow && phrase === BACKUP_SHORTCUT)),
     ]
     const moreHasUpdate = canUpdate && !step.hasUpdate
     const buttons = [
       ...(step.hasCommit ? [commitLabelOf(known)] : []),
-      ...(isFastInRow ? [FAST_LABEL] : []),
+      ...(isFastInRow ? [fastLabel] : []),
       ...(canPush ? [pushLabelOf(state)] : []),
+      ...(isBackupInRow ? [backupText] : []),
       ...(step.hasUpdate ? [updateLabelOf(state)] : []),
       ...(more.length > 0 || moreHasUpdate ? ['More'] : []),
     ]
@@ -1091,6 +1182,9 @@ function planOf(
       words,
       hasCommit: step.hasCommit,
       hasFast: isFastInRow,
+      fastLabel,
+      backup: isBackupInRow ? backupText : '',
+      isBackupDue,
       hasUpdate: step.hasUpdate,
       more,
       moreHasUpdate,
@@ -1126,6 +1220,7 @@ function keysOf(known: ProjectBandFacts, state: ProjectBandBusy, columns: number
     ...(plan.hasCommit ? ['go-commit'] : []),
     ...(plan.hasFast ? [keyOf(FAST_SHORTCUT)] : []),
     ...(pushTarget(known.repo) !== null ? ['push'] : []),
+    ...(plan.backup !== '' ? [keyOf(BACKUP_SHORTCUT)] : []),
     ...(plan.hasUpdate ? ['update-plugin'] : []),
     ...(plan.more.length > 0 || plan.moreHasUpdate ? ['more'] : []),
   ]
@@ -1162,8 +1257,10 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
     (files === null || files === 0) &&
     !(known.repo?.online.kind === 'tracked' && known.repo.online.ahead > 0) &&
     known.pluginUpdate === null &&
-    !isHeavy
-  const hasButtons = plan.hasCommit || plan.hasFast || canPush || plan.hasUpdate || hasMore
+    !isHeavy &&
+    !plan.isBackupDue
+  const hasButtons =
+    plan.hasCommit || plan.hasFast || canPush || plan.backup !== '' || plan.hasUpdate || hasMore
 
   // The row has nothing to say before git has named the project: no name, no
   // counts, no buttons. Nothing is drawn then, not an empty row.
@@ -1218,12 +1315,19 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
             {plan.hasFast && (
               <Button
                 key={keyOf(FAST_SHORTCUT)}
-                label={FAST_LABEL}
+                label={plan.fastLabel}
                 onPress={() => acts.shortcut(FAST_SHORTCUT)}
               />
             )}
             {canPush && (
               <Button key="push" label={pushLabelOf(state)} onPress={() => acts.askPush()} />
+            )}
+            {plan.backup !== '' && (
+              <Button
+                key={keyOf(BACKUP_SHORTCUT)}
+                label={plan.backup}
+                onPress={() => acts.shortcut(BACKUP_SHORTCUT)}
+              />
             )}
             {plan.hasUpdate && (
               <Button
@@ -1319,7 +1423,7 @@ function drawMore(
       {open.phrases.map(phrase => (
         <Button
           key={keyOf(phrase)}
-          label={buttonTextOf(phrase)}
+          label={buttonTextOf(phrase, look.known.isFast === true)}
           onPress={() => acts.shortcut(phrase)}
         />
       ))}
@@ -1402,6 +1506,11 @@ const work: {
   afterDrawing: (() => void)[]
   /** The project's name, as git gave it for one repository: asked once. */
   project: { top: string; name: string } | null
+  /**
+   * Whether fast mode is on in this conversation. Kept here too, because a
+   * compaction empties the session's values while the mode goes on.
+   */
+  isFast: boolean
 } = {
   startFolder: '',
   isSeen: false,
@@ -1425,6 +1534,7 @@ const work: {
   drawing: 0,
   afterDrawing: [],
   project: null,
+  isFast: false,
 }
 
 function note($: Dollar, what: string, error: unknown): void {
@@ -1663,6 +1773,52 @@ function startHeavyPass($: Dollar, top: string): void {
   })
 }
 
+// How old the newest backup is, in whole days. Asked only where the project
+// carries the shortcut that makes one. A project with no backups folder, or
+// with no ZIP in it, answers null and the row says nothing: the owner may
+// keep the ZIPs somewhere else, so a missing one is not read as never.
+async function backupOf(
+  $: Dollar,
+  top: string,
+  shortcuts: readonly string[],
+): Promise<{ days: number } | null> {
+  try {
+    if (!shortcuts.includes(BACKUP_SHORTCUT)) {
+      return null
+    }
+
+    const dir = joinPath(top, BACKUP_FOLDER)
+
+    if (!(await $.fs.exists(dir))) {
+      return null
+    }
+
+    let newest = 0
+
+    for (const entry of await $.fs.list(dir)) {
+      if (entry.kind === 'file' && /\.zip$/i.test(entry.name) && entry.mtimeMs > newest) {
+        newest = entry.mtimeMs
+      }
+    }
+
+    if (newest === 0) {
+      return null
+    }
+
+    return { days: Math.max(0, Math.floor(((await $.clock.now()) - newest) / DAY_MS)) }
+  } catch (error) {
+    note($, 'reading the age of the backup failed', error)
+
+    return null
+  }
+}
+
+// Writes whether fast mode is on, here and in the session's values.
+async function setFast($: Dollar, isFast: boolean): Promise<void> {
+  work.isFast = isFast
+  await writeFacts($, now => (now === null ? now : { ...now, isFast }))
+}
+
 // The repository the session is in: the branch, its online copy, the
 // shortcuts, and the count of files.
 async function passRepo($: Dollar): Promise<void> {
@@ -1676,7 +1832,15 @@ async function passRepo($: Dollar): Promise<void> {
     await writeFacts($, now =>
       now === null
         ? now
-        : { ...now, project, repo: null, shortcuts: [], pluginUpdate: null, heavy: null },
+        : {
+            ...now,
+            project,
+            repo: null,
+            shortcuts: [],
+            pluginUpdate: null,
+            heavy: null,
+            backup: null,
+          },
     )
 
     return
@@ -1694,7 +1858,10 @@ async function passRepo($: Dollar): Promise<void> {
     branchPartOf($, where, home),
     shortcutsOf($, [where.top, folder]),
   ])
-  const counted = await countWithin($, counting, FILES_GRACE_MS)
+  const [counted, backup] = await Promise.all([
+    countWithin($, counting, FILES_GRACE_MS),
+    backupOf($, where.top, shortcuts),
+  ])
 
   // While a count is still under way the row keeps the number it shows.
   await writeFacts($, now => {
@@ -1709,6 +1876,7 @@ async function passRepo($: Dollar): Promise<void> {
       ...now,
       repo: { ...part, files: counted.isDone ? counted.files : shown },
       shortcuts,
+      backup,
     }
   })
 
@@ -1919,11 +2087,20 @@ async function submitShortcut($: Dollar, phrase: string, columns: number): Promi
   // The exact phrase, as the owner's own words: the project's CLAUDE.md
   // answers to the phrase itself. A prompt waits its turn behind a running
   // turn, so nothing here waits for it to enter.
-  const sent = sentOf(phrase)
+  const isFastNow = (await read($, facts))?.isFast === true
+  const sent = sentOf(phrase, isFastNow)
 
   inBackground($, `submitting ${sent} failed`, async () => {
     try {
       await $.prompt.submit({ text: sent, asUser: true })
+
+      // The row's own words do not pass its hook on prompts, so the mode is
+      // followed here: Fast switches it, and Go commit ends it.
+      const isFast = fastAfter(sent, isFastNow)
+
+      if (isFast !== isFastNow) {
+        await setFast($, isFast)
+      }
     } catch (error) {
       // A press that did nothing would leave the owner waiting for a commit
       // that never starts.
@@ -2203,16 +2380,25 @@ async function cancelAsk($: Dollar, columns: number): Promise<void> {
 // conversation starts with empty values instead, while a push of this copy
 // may still be on its way, so the mark is put back. Then the first value, and
 // a pass when somebody is looking and the first look has not started one.
-async function begin($: Dollar, isNewCode: boolean): Promise<void> {
+//
+// Fast mode belongs to one conversation. A new copy of the code takes it
+// from the session's values, which a reload leaves in place and a new session
+// starts without. A compaction goes on in the same conversation, so the mode
+// is kept through it; any other new conversation starts with the mode off.
+async function begin($: Dollar, isNewCode: boolean, keepsFast: boolean): Promise<void> {
   const passesBefore = work.passes
 
   await syncBusy($)
 
   if (isNewCode) {
     await closeAsk($)
+    work.isFast = (await read($, facts))?.isFast === true
+  } else if (!keepsFast) {
+    work.isFast = false
   }
 
   await writeStart($)
+  await setFast($, work.isFast)
 
   if (work.isSeen && work.passes === passesBefore) {
     await refresh($)
@@ -2237,7 +2423,7 @@ export function registerProjectBand(on: On): void {
         inBackground($, 'the first pass failed', () => refresh($))
       }
       // Not awaited: the first prompt must never wait for this.
-      inBackground($, 'starting failed', () => begin($, true))
+      inBackground($, 'starting failed', () => begin($, true, true))
     } catch (error) {
       note($, 'starting failed', error)
     }
@@ -2251,12 +2437,34 @@ export function registerProjectBand(on: On): void {
   on('classic.SessionStart', NEW_CONVERSATION, ($, e, next) => {
     try {
       work.startFolder = e.cwd
-      inBackground($, 'starting the new conversation failed', () => begin($, false))
+      inBackground($, 'starting the new conversation failed', () =>
+        begin($, false, e.source === 'compact'),
+      )
     } catch (error) {
       note($, 'starting the new conversation failed', error)
     }
 
     return next(e)
+  })
+
+  // The mode is switched by words: the row's own button sends them, and the
+  // owner types them. Either way they pass here, and the Fast button follows.
+  // A prompt that did not enter changes nothing.
+  on('prompt.submit', EVERY_PROMPT, async ($, e, next) => {
+    const entered = await next(e)
+
+    try {
+      const isFast = fastAfter(e.text, work.isFast)
+
+      if (!('drop' in entered) && isFast !== work.isFast) {
+        work.isFast = isFast
+        inBackground($, 'writing the fast mode failed', () => setFast($, isFast))
+      }
+    } catch (error) {
+      note($, 'following the fast mode failed', error)
+    }
+
+    return entered
   })
 
   on('turn.complete', EVERY_TURN_END, ($, e, next) => {

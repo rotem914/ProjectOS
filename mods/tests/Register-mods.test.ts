@@ -104,10 +104,11 @@ describe('the guards around each part', () => {
 
     expect(register(on, {})).toBeUndefined()
 
-    // Four hooks from the band, then two from the dash fix.
+    // Five hooks from the band, then two from the dash fix.
     expect(eventsOf(registered)).toEqual([
       'session.start',
       'classic.SessionStart',
+      'prompt.submit',
       'turn.complete',
       'ui.render',
       'session.start',
@@ -164,6 +165,7 @@ describe('the guards around each part', () => {
     expect(eventsOf(registered)).toEqual([
       'session.start',
       'classic.SessionStart',
+      'prompt.submit',
       'turn.complete',
       'session.start',
       'session.append',
@@ -196,6 +198,7 @@ describe('the guards around each part', () => {
     expect(eventsOf(registered)).toEqual([
       'session.start',
       'classic.SessionStart',
+      'prompt.submit',
       'turn.complete',
       'ui.render',
       'session.start',

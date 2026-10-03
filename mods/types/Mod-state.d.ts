@@ -75,6 +75,19 @@ export type ProjectBandFacts = {
    * there are none, when the project has no such listing, and until it ran.
    */
   heavy?: number | null
+  /**
+   * True while fast mode is on in this conversation, as far as the row can
+   * tell from the words that switch it: its own button's, and the owner's.
+   * A value kept by an earlier version of the mod has no such key, and reads
+   * the same as false.
+   */
+  isFast?: boolean
+  /**
+   * How old the newest backup ZIP in the project's backups folder is, in
+   * whole days. Null when the project has no backup shortcut, when no ZIP is
+   * there, and until it was looked for.
+   */
+  backup?: { days: number } | null
 }
 
 /**

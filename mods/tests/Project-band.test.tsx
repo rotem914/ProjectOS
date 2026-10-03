@@ -123,7 +123,12 @@ type World = {
   toasts: string[]
   prompts: { text: string; origin: unknown }[]
   logs: string[]
-  /** Every folder the mod listed. It should list none. */
+  /**
+   * The ZIPs and other files in the project's backups folder, each with its
+   * age in days as the session starts; null when the folder is not there.
+   */
+  backups: { name: string; daysOld: number }[] | null
+  /** Every folder the mod listed. It lists the backups folder, and no other. */
   listed: string[]
   /** Every pane the mod opened. It should open none. */
   opened: string[]
@@ -207,6 +212,7 @@ function worldOf(changes: Partial<World> = {}): World {
     toasts: [],
     prompts: [],
     logs: [],
+    backups: null,
     listed: [],
     opened: [],
     ...changes,
@@ -369,6 +375,8 @@ function install(on: On, changes: Partial<World> = {}): Kit {
 
   startOfTime += 3_600_000
 
+  const startedAt = startOfTime
+
   const clock = mock.clock(on, { now: startOfTime })
 
   mock.env(on, world.env)
@@ -391,10 +399,27 @@ function install(on: On, changes: Partial<World> = {}): Kit {
       return { value: world.plugin.isClone }
     }
 
+    if (world.backups !== null && isAt(e.path, `${world.top}/backups`)) {
+      return { value: true }
+    }
+
     return { value: [...Object.keys(world.files), ...world.present].some(path => isAt(e.path, path)) }
   })
   on('fs.list', (_, e) => {
     world.listed.push(e.path ?? '')
+
+    if (world.backups !== null && isAt(e.path ?? '', `${world.top}/backups`)) {
+      return {
+        value: world.backups.map(file => ({
+          name: file.name,
+          kind: 'file' as const,
+          size: 1_000,
+          // A minute older than its count of days, so the count is whole.
+          mtimeMs: startedAt - file.daysOld * 24 * 60 * 60_000 - 60_000,
+          isLink: false,
+        })),
+      }
+    }
 
     return { deny: `ENOENT: no such directory, scandir '${e.path ?? ''}'` }
   })
@@ -1212,7 +1237,7 @@ describe('the shortcut buttons', () => {
           '### `Go commit`',
           '### `Go audit` runs the checks',
           // None of these is the kit's heading for a shortcut.
-          '### `Go commit and backup`',
+          '### `Go commit and backup now`',
           '#### `Go backup`',
           '### Go update kit',
           'Type `Go code review` to start a review.',
@@ -1276,7 +1301,7 @@ describe('the shortcut buttons', () => {
     // prompt always carry the phrase the kit's way.
     expect(await buttonsOn(ui)).toEqual(['More'])
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toEqual(['Go backup', 'Back'])
+    expect(await buttonsOn(ui)).toEqual(['Go backup', 'Go commit and backup', 'Back'])
     await ui.press({ key: 'go-backup' })
     expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go backup'])
     await ui.unmount()
@@ -1402,6 +1427,207 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
+  const FAST_HEADINGS = [
+    '### `Go commit`',
+    '### `FAST MODE` (also `FAST ON`)',
+    '### `Go backup`',
+  ].join('\n')
+
+  // What the owner types, as the engine hands it to the mods.
+  const typed = (text: string) => ({ text, wait: false, origin: { kind: 'composer' as const } })
+
+  onEachSurface('Fast reads Fast on while the mode is on, and a press switches it off', async ($, on, surface) => {
+    const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': FAST_HEADINGS } })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    await ui.press({ key: 'fast-mode' })
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Fast on', 'More'])
+
+    // A later press is a new one, and sends the words that end the mode.
+    await kit.clock.advance(5_000)
+    await ui.press({ key: 'fast-mode' })
+    await kit.clock.settle()
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['FAST ON', 'FAST OFF'])
+    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Fast', 'More'])
+    await ui.unmount()
+  })
+
+  onEachSurface('Fast follows the words the owner types', async ($, on, surface) => {
+    const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': FAST_HEADINGS } })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+    const after = async (text: string): Promise<string | undefined> => {
+      await $.prompt.submit(typed(text))
+      await kit.clock.settle()
+
+      return (await buttonsOn(ui))[1]
+    }
+
+    // The mode's name in a sentence is talk about it, and switches nothing.
+    expect(await after('is fast mode worth it here?')).toBe('Fast')
+    expect(await after('fast on')).toBe('Fast on')
+    expect(await after('make the title bigger')).toBe('Fast on')
+    expect(await after('FAST OFF')).toBe('Fast')
+    expect(await after('Fast mode')).toBe('Fast on')
+    expect(await after('ok, exit fast mode please')).toBe('Fast')
+    expect(await after('FAST ON')).toBe('Fast on')
+
+    // Go commit ends the mode by itself.
+    expect(await after('Go commit')).toBe('Fast')
+    await ui.unmount()
+  })
+
+  test('a prompt the session refuses switches nothing', async ($, on) => {
+    const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': FAST_HEADINGS } })
+
+    await start($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    kit.world.isPromptRefused = true
+    await ui.press({ key: 'fast-mode' })
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Fast', 'More'])
+    await ui.unmount()
+  })
+
+  test('the mode is kept through a compaction, and a cleared conversation starts without it', async ($, on) => {
+    const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': FAST_HEADINGS } })
+
+    await start($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    await $.prompt.submit(typed('FAST ON'))
+    await kit.clock.settle()
+    await $.classic.SessionStart({ source: 'compact', cwd: kit.world.folder })
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Fast on', 'More'])
+
+    await $.classic.SessionStart({ source: 'clear', cwd: kit.world.folder })
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Fast', 'More'])
+    await ui.unmount()
+  })
+
+  onEachSurface('the backup shows its age in the words, and is a button from 30 days on', async ($, on, surface) => {
+    const kit = install(on, {
+      backups: [
+        { name: 'Site_2026-08-01_10-00.zip', daysOld: 60 },
+        { name: 'Site_2026-09-21_10-00.zip', daysOld: 12 },
+        // Not a ZIP: whatever else sits in the folder says nothing.
+        { name: 'notes.txt', daysOld: 0 },
+      ],
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 Backup 12d')
+    expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
+    expect(new Set(kit.world.listed).size).toBe(1)
+
+    // The days pass, and on the thirtieth the age moves into a button.
+    kit.world.backups = [{ name: 'Site_2026-09-04_10-00.zip', daysOld: 29 }]
+    await endTurn($, kit)
+    expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 Backup 29d')
+    kit.world.backups = [{ name: 'Site_2026-09-03_10-00.zip', daysOld: 30 }]
+    await endTurn($, kit)
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
+    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Backup 30d', 'More'])
+
+    // The button is the backup shortcut, so More does not list it again.
+    await ui.press({ key: 'go-backup' })
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go backup'])
+    await ui.press({ key: 'more' })
+    expect(await buttonsOn(ui)).toEqual([
+      'Go commit and backup',
+      'Go audit',
+      'Go update kit',
+      'Go code review',
+      'Back',
+    ])
+    await ui.unmount()
+  })
+
+  onEachSurface('a backup made today reads Backup today', async ($, on, surface) => {
+    const kit = install(on, { backups: [{ name: 'Site_2026-10-03_08-00.zip', daysOld: 0 }] })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 Backup today')
+    await ui.unmount()
+  })
+
+  onEachSurface('a backup that is due stays in the words where the row is narrow', async ($, on, surface) => {
+    const kit = install(on, {
+      changed: 3,
+      backups: [{ name: 'Site_2026-08-01_10-00.zip', daysOld: 45 }],
+    })
+
+    await start($, kit)
+
+    const narrow = await bandOn($, surface, width(surface, 44))
+
+    expect(await wordsOn(narrow)).toBe('site-web | 3 to commit \u00b7 Backup 45d')
+    expect(await buttonsOn(narrow)).toEqual(['More'])
+    await narrow.press({ key: 'more' })
+    expect(await buttonsOn(narrow)).toContain('Go backup')
+    await narrow.unmount()
+  })
+
+  onEachSurface('no backup age without a ZIP, and none without the backup shortcut', async ($, on, surface) => {
+    const empty = install(on, { backups: [{ name: 'readme.txt', daysOld: 3 }] })
+
+    await start($, empty)
+
+    const ui = await bandOn($, surface)
+
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
+    await ui.unmount()
+  })
+
+  onEachSurface('a project without the backup shortcut never has its backups folder read', async ($, on, surface) => {
+    const kit = install(on, {
+      files: { 'D:/Work/Site/CLAUDE.md': '### `Go commit`\n' },
+      backups: [{ name: 'Site_2026-08-01_10-00.zip', daysOld: 45 }],
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
+    expect(await buttonsOn(ui)).toEqual(['Go commit'])
+    expect(kit.world.listed).toEqual([])
+    await ui.unmount()
+  })
+
+  onEachSurface('GO visual qa is listed behind More and sent the kit\'s way', async ($, on, surface) => {
+    const kit = install(on, {
+      files: { 'D:/Work/Site/CLAUDE.md': '### `Go commit`\n### `GO visual qa`\n' },
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    await ui.press({ key: 'more' })
+    expect(await buttonsOn(ui)).toEqual(['GO visual qa', 'Back'])
+    await ui.press({ key: 'go-visual-qa' })
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['GO visual qa'])
+    await ui.unmount()
+  })
+
   onEachSurface('the fill is a percentage before the words, and a press runs /compact', async ($, on, surface) => {
     const kit = install(on, { changed: 2, fill: 42 })
 
@@ -1475,6 +1701,7 @@ describe('More', () => {
     expect(await wordsOn(ui)).toBe('site-web')
     expect(await buttonsOn(ui)).toEqual([
       'Go backup',
+      'Go commit and backup',
       'Go audit',
       'Go update kit',
       'Go code review',
@@ -2509,6 +2736,7 @@ describe('a narrow row', () => {
     expect(await buttonsOn(narrow)).toEqual([
       'Go commit',
       'Go backup',
+      'Go commit and backup',
       'Go audit',
       'Go update kit',
       'Go code review',
