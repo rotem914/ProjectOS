@@ -404,7 +404,8 @@ Typically: their role on this project, the language replies are written in
 (always asked, see below), who starts the dev server and where it runs
 (CLAUDE.md rule 16 has four honest answers and is rewritten from this one),
 whether this project uses each tool folder under `project-os/mcp/` (see
-below), and anything step 3 came up empty on, except the "none yet" rows of a
+below), whether to switch on the mods when they are not on yet (see below),
+and anything step 3 came up empty on, except the "none yet" rows of a
 folder with no code and no plan, which are never asked.
 
 Say which pile blocks the install and which does not, in one line, so nobody
@@ -465,6 +466,19 @@ that server; or not used here, remove the folder. A code repo rarely shows
 whether a design file or an analytics account is used, so this is never
 worked out and never put in pile one. It does not block the install: no
 answer keeps the folder, with "not wired yet" in its setup table (step 5).
+
+**The mods.** The owner asked that every install offer them, as a question
+and never silently. They are two optional additions to Claude Code's own
+window: a row above the message box with the project's name, what is waiting
+to be committed or pushed, and buttons for the kit's shortcuts, plus a live
+fix for long dashes. First run step 6e's check: when the mods are already on
+for this computer, there is no question, only one line under What was set.
+Otherwise it is one question with two options. Yes, recommended, since one
+command switches them off again: you put the kit's copy in the owner's
+personal Claude folder when it is not there, and switch them on for every
+project on this computer. No: nothing changes. The option's line says the
+mods are early access, so a newer Claude Code may stop them, and nothing else
+in the kit depends on them. It does not block the install: no answer is a no.
 
 Every other marked setup block in the kit is a question waiting to be asked.
 Walk them ALL before asking anything, and fold each one into the right pile. A
@@ -968,6 +982,66 @@ another project's connection (rule 21). The project file is the whole setup.
 install writes outside `project-os/` is in place. A failure is a Problems line,
 and a check step 3 ruled out for the kit's files alone becomes the standing
 check when it now passes.
+
+## 6e. Offer the mods
+
+The mods belong to the computer, not to the project: nothing of them is
+copied here, and one switch covers every project. So this step first reads
+whether they are on, and acts only on the owner's yes from step 4.
+
+1. **Read whether they are on.** This check runs before step 4's questions.
+   On Windows, through PowerShell:
+
+   ```
+   [Environment]::GetEnvironmentVariable('CLAUDE_CODE_PLUGIN_DIRS', 'User')
+   ```
+
+   On macOS or Linux, read the `env` block of `~/.claude/settings.json`
+   (reading it is allowed). When the value names a folder ending in
+   `skills/projectos/mods`, they are on: ask nothing, and say so in one line
+   under What was set.
+2. **On a no, or no answer:** change nothing. One line under What was set:
+   the mods are off, and the kit's README says how to switch them on later.
+3. **On a yes, on Windows,** the yes is the approval for what follows, all of
+   it in the owner's personal Claude folder and their own settings:
+   - When `$HOME/.claude/skills/projectos` does not exist, make the copy:
+
+     ```
+     git clone https://github.com/rotem914/ProjectOS "$HOME/.claude/skills/projectos"
+     ```
+
+     That copy is also the kit's plugin, so from the next session every
+     project on this computer that carries the kit gets its hooks from it.
+     Say so in the same What was set line.
+   - When the folder exists with no `mods` folder inside, it is an older
+     copy: bring it up with `git -C "$HOME/.claude/skills/projectos" pull`.
+   - Then switch them on, through PowerShell, exactly as written:
+
+     ```
+     $mods = "$HOME\.claude\skills\projectos\mods"; if (-not (Test-Path -LiteralPath $mods)) { "The mods folder is not on this computer yet: $mods." } else { $dirs = @("$([Environment]::GetEnvironmentVariable('CLAUDE_CODE_PLUGIN_DIRS', 'User'))" -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ }); if ($dirs -notcontains $mods) { [Environment]::SetEnvironmentVariable('CLAUDE_CODE_PLUGIN_DIRS', (($dirs + $mods) -join ';'), 'User') }; "The mods are switched on. Quit Claude completely and open it again." }
+     ```
+
+     It keeps whatever the setting already held and changes nothing on a
+     second run. Its answer in words is the proof: quote it in the install
+     row (step 7).
+   - Tell the owner the one thing that is theirs, beside the new session the
+     report already asks for: quit Claude completely first, beside the clock
+     too, since the setting is read when Claude itself starts.
+4. **On a yes, on macOS or Linux,** the switch is one line in
+   `~/.claude/settings.json`, a file that is the owner's to edit, never
+   yours. Make the copy as above when it is missing, then put ONE
+   Waiting-on-you item with the line and where it goes, in its `env` block:
+
+   ```
+   "CLAUDE_CODE_PLUGIN_DIRS": "~/.claude/skills/projectos/mods"
+   ```
+5. **If any command here is refused,** do not retry and do not route around
+   it. The mods are optional, so this is never a Problem: put ONE
+   Waiting-on-you item with the commands that did not run, each in its own
+   fence, saying they go in Windows PowerShell.
+
+A re-run asks again only while the mods are off; a no given earlier in the
+same conversation stands (step 4).
 
 ## 7. Log the install
 

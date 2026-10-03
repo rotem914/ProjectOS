@@ -142,9 +142,12 @@ system:
 git -C "$HOME/.claude/skills/projectos" pull
 ```
 
-A copy made before the mods existed needs that update first. One more step,
-once, then switches the mods on in every way of opening Claude. In Windows
-PowerShell:
+Every install asks whether to switch the mods on, when they are not on yet
+on that computer, and on a yes does the steps below for you.
+
+By hand: a copy made before the mods existed needs that update first. One
+more step, once, then switches the mods on in every way of opening Claude.
+In Windows PowerShell:
 
 ```
 $mods = "$HOME\.claude\skills\projectos\mods"; if (-not (Test-Path -LiteralPath $mods)) { "The mods folder is not on this computer yet: $mods. Do the Once per computer step, or run the update command above, then run this again." } else { $dirs = @("$([Environment]::GetEnvironmentVariable('CLAUDE_CODE_PLUGIN_DIRS', 'User'))" -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ }); if ($dirs -notcontains $mods) { [Environment]::SetEnvironmentVariable('CLAUDE_CODE_PLUGIN_DIRS', (($dirs + $mods) -join ';'), 'User') }; "The mods are switched on. Quit Claude completely and open it again." }
