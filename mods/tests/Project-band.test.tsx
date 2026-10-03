@@ -108,6 +108,8 @@ type World = {
   isPromptRefused: boolean
   /** How full the conversation is, in percent; null before its first answer. */
   fill: number | null
+  /** What the project's listing of heavy files prints. */
+  heavyOut: string
   /** Every slash command the mod ran. */
   commands: string[]
   /** A tree some other mod draws in the band, beneath this one. */
@@ -196,6 +198,7 @@ function worldOf(changes: Partial<World> = {}): World {
     stored: {},
     isPromptRefused: false,
     fill: null,
+    heavyOut: '',
     commands: [],
     beneath: null,
     slowDraw: 0,
@@ -375,7 +378,9 @@ function install(on: On, changes: Partial<World> = {}): Kit {
   on('classic.SessionStart', () => ({}))
   on('session.root', () => ({ value: world.folder }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
-  on('process.run', (_, e) => gitOf(world, clock, e.argv, e.init))
+  on('process.run', (_, e) =>
+    e.argv[0] === 'node' ? answer(0, world.heavyOut) : gitOf(world, clock, e.argv, e.init),
+  )
   on('fs.read', (_, e) => {
     const found = Object.entries(world.files).find(([path]) => isAt(e.path, path))
 
@@ -1419,6 +1424,40 @@ describe('the shortcut buttons', () => {
     kit.world.fill = null
     await endTurn($, kit)
     expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
+    await ui.unmount()
+  })
+
+  onEachSurface('heavy files show only while a leftover or a backup is that big', async ($, on, surface) => {
+    const kit = install(on, {
+      files: {
+        'D:/Work/Site/CLAUDE.md': KIT_HEADINGS,
+        'D:/Work/Site/project-os/Find-heavy-files.mjs': '',
+      },
+      // Dependencies and git's history are heavy in most projects: no mark.
+      heavyOut: [
+        'Find-heavy-files: D:/Work/Site, everything over 1.00 GB',
+        '    3.10 GB  regenerable node_modules/',
+        '    1.40 GB  git         .git/',
+        'Find-heavy-files deletes nothing; the owner decides what goes.',
+      ].join('\n'),
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
+    expect(await ui.findAll({ type: 'Svg' })).toHaveLength(surface === 'terminal' ? 0 : 1)
+
+    kit.world.heavyOut = [
+      '   12.00 GB  leftover    old-render.mov',
+      '    2.50 GB  backups     backups/',
+      '    3.10 GB  regenerable node_modules/',
+    ].join('\n')
+    await kit.clock.advance(31 * 60_000)
+    await kit.clock.settle()
+    expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 2 heavy files')
+    expect(await ui.findAll({ type: 'Svg' })).toHaveLength(surface === 'terminal' ? 0 : 2)
     await ui.unmount()
   })
 })

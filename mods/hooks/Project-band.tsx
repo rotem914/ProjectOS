@@ -77,6 +77,12 @@ const FAST_SENT = 'FAST ON'
 
 const REFRESH_MS = 60_000
 const PLUGIN_CHECK_MS = 30 * 60_000
+// The kit's own listing of heavy files walks the whole project, so it runs
+// in a pass of its own, this far apart, and is given this long.
+const HEAVY_CHECK_MS = 30 * 60_000
+const HEAVY_RUN_MS = 60_000
+// Where a project keeps the listing: the kit's place, then the older one.
+const HEAVY_SCRIPTS = ['project-os/Find-heavy-files.mjs', 'scripts/Find-heavy-files.mjs']
 const LOCAL_GIT_MS = 10_000
 const NETWORK_GIT_MS = 15_000
 const PUSH_MS = 120_000
@@ -152,6 +158,16 @@ const MARK_ALT = 'Rotem E'
 // The mark's side on screen, and the cells of the row it and its gap take.
 const MARK_PIXELS = 25
 const MARK_CELLS = 4
+
+// A kettlebell, in red: drawn before the words only while something heavy
+// waits for the owner (2026-10-03). The terminal has the words alone.
+const HEAVY_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">' +
+  '<path fill="#E5484D" fill-rule="evenodd" ' +
+  'd="M8 3h8a2 2 0 0 1 2 2c0 1.2-.5 2.3-1.2 3.2A7.5 7.5 0 1 1 7.2 8.2 5.3 5.3 0 0 1 6 5a2 2 0 0 1 2-2Zm.2 2.2c.1.7.4 1.3.8 1.8a7.5 7.5 0 0 1 6 0c.4-.5.7-1.1.8-1.8Z"/>' +
+  '</svg>'
+const HEAVY_ALT = 'Heavy files'
+const HEAVY_PIXELS = 16
 
 type GitAnswer = {
   /** The exit code; null when git could not be run or was stopped. */
@@ -419,6 +435,16 @@ function shortcutsIn(text: string): Set<string> {
   }
 
   return found
+}
+
+// What the kit's listing of heavy files prints: one line per thing, its size,
+// its kind, its path. Only the two kinds the owner has to judge are counted.
+// Dependencies, build output and git's own history are heavy in most
+// projects and call for nothing, so they never raise the mark.
+function heavyIn(out: string): number {
+  return out
+    .split(/\r?\n/)
+    .filter(line => /^\s+[\d.]+ (?:KB|MB|GB)\s+(?:leftover|backups)\s+\S/.test(line)).length
 }
 
 // What git's status answers in its second porcelain format: one line per
@@ -951,6 +977,12 @@ function wordsOf(known: ProjectBandFacts, isShort: boolean): string[] {
     words.push(isShort ? 'Update ready' : 'Plugin update ready')
   }
 
+  const heavy = known.heavy ?? 0
+
+  if (heavy > 0) {
+    words.push(isShort ? `${heavy} heavy` : countOf(heavy, 'heavy file'))
+  }
+
   return words
 }
 
@@ -1115,11 +1147,13 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
   const files = known.repo?.files ?? null
   const canPush = pushTarget(known.repo) !== null
   const hasMore = plan.more.length > 0 || plan.moreHasUpdate
+  const isHeavy = known.repo !== null && (known.heavy ?? 0) > 0
   // Nothing waiting reads quieter than something waiting.
   const isCalm =
     (files === null || files === 0) &&
     !(known.repo?.online.kind === 'tracked' && known.repo.online.ahead > 0) &&
-    known.pluginUpdate === null
+    known.pluginUpdate === null &&
+    !isHeavy
   const hasButtons = plan.hasCommit || plan.hasFast || canPush || plan.hasUpdate || hasMore
 
   // The row has nothing to say before git has named the project: no name, no
@@ -1147,6 +1181,14 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
           <Box flexShrink={0}>
             <Button key="fill" plain label={plan.fill} onPress={() => acts.compact()} />
           </Box>
+        )}
+        {isHeavy && plan.words !== '' && table.Svg !== undefined && (
+          <table.Svg
+            source={HEAVY_SVG}
+            alt={HEAVY_ALT}
+            width={HEAVY_PIXELS}
+            height={HEAVY_PIXELS}
+          />
         )}
         {plan.words !== '' && (
           <Box flexShrink={1}>
@@ -1331,6 +1373,10 @@ const work: {
   /** How many passes were asked for so far. */
   passes: number
   isCheckingPlugin: boolean
+  isCheckingHeavy: boolean
+  /** The repository the heavy files were last listed in, and when next. */
+  heavyTop: string
+  heavyNotBefore: number
   timer: { cancel: () => void } | null
   lastShortcut: { phrase: string; at: number } | null
   /** The push or update this copy of the code has in flight. */
@@ -1356,6 +1402,9 @@ const work: {
   isAnotherPassWanted: false,
   passes: 0,
   isCheckingPlugin: false,
+  isCheckingHeavy: false,
+  heavyTop: '',
+  heavyNotBefore: 0,
   timer: null,
   lastShortcut: null,
   running: { isPushing: false, isUpdating: false },
@@ -1555,6 +1604,56 @@ function startPluginPass($: Dollar): void {
   })
 }
 
+// The heavy things in the project, in a pass of its own: the kit's listing
+// walks every folder, which can take a while, and nothing waits for it. It
+// runs where the project carries the listing, once per half hour. A run that
+// failed keeps what the row shows.
+function startHeavyPass($: Dollar, top: string): void {
+  if (work.isCheckingHeavy) {
+    return
+  }
+
+  work.isCheckingHeavy = true
+  inBackground($, 'listing the heavy files failed', async () => {
+    try {
+      const now = await $.clock.now()
+
+      if (isSamePath(work.heavyTop, top) && now < work.heavyNotBefore) {
+        return
+      }
+
+      work.heavyTop = top
+      work.heavyNotBefore = now + HEAVY_CHECK_MS
+
+      let script: string | null = null
+
+      for (const place of HEAVY_SCRIPTS) {
+        if (script === null && (await $.fs.exists(`${top}/${place}`))) {
+          script = place
+        }
+      }
+
+      if (script === null) {
+        await writeFacts($, now => (now === null ? now : { ...now, heavy: null }))
+
+        return
+      }
+
+      const ran = await $.process.run(['node', script], { cwd: top, timeoutMs: HEAVY_RUN_MS })
+
+      if (ran.exitCode === 0 && !ran.isStdoutTruncated) {
+        const heavy = heavyIn(ran.stdout)
+
+        await writeFacts($, now =>
+          now === null ? now : { ...now, heavy: heavy > 0 ? heavy : null },
+        )
+      }
+    } finally {
+      work.isCheckingHeavy = false
+    }
+  })
+}
+
 // The repository the session is in: the branch, its online copy, the
 // shortcuts, and the count of files.
 async function passRepo($: Dollar): Promise<void> {
@@ -1568,7 +1667,7 @@ async function passRepo($: Dollar): Promise<void> {
     await writeFacts($, now =>
       now === null
         ? now
-        : { ...now, project, repo: null, shortcuts: [], pluginUpdate: null },
+        : { ...now, project, repo: null, shortcuts: [], pluginUpdate: null, heavy: null },
     )
 
     return
@@ -1579,6 +1678,7 @@ async function passRepo($: Dollar): Promise<void> {
   await writeFacts($, now => (now === null ? now : { ...now, project }))
 
   startPluginPass($)
+  startHeavyPass($, where.top)
 
   const counting = countFiles($, where.top)
   const [part, shortcuts] = await Promise.all([

@@ -69,6 +69,12 @@ export type ProjectBandFacts = {
    * an earlier version of the mod has no such key, and reads the same as null.
    */
   fill?: number | null
+  /**
+   * How many heavy things in the project wait for the owner's word: leftovers
+   * and backups over 1 GB, as the kit's own listing counts them. Null when
+   * there are none, when the project has no such listing, and until it ran.
+   */
+  heavy?: number | null
 }
 
 /**
