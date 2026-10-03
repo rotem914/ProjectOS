@@ -1038,6 +1038,9 @@ function drawLabel({ Box, Text }: Table, name: string): RenderElement {
   )
 }
 
+// Go commit is drawn as every other button in the row, files waiting or not:
+// the owner did not want the filled one (2026-10-03). Only the yes of a
+// question is drawn as the main action.
 function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
   const { Box, Text, Button } = table
   const { known, state } = look
@@ -1050,8 +1053,6 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
     (files === null || files === 0) &&
     !(known.repo?.online.kind === 'tracked' && known.repo.online.ahead > 0) &&
     known.pluginUpdate === null
-  // Go commit is the main action only while there is something to commit.
-  const mainLook = files !== null && files > 0 ? { variant: 'primary' as const } : {}
   const hasButtons = plan.hasCommit || canPush || plan.hasUpdate || hasMore
 
   // The row has nothing to say before git has named the project: no name, no
@@ -1088,7 +1089,6 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
               <Button
                 key="go-commit"
                 label={MAIN_SHORTCUT}
-                {...mainLook}
                 onPress={() => acts.shortcut(MAIN_SHORTCUT)}
               />
             )}
@@ -1175,7 +1175,6 @@ function drawMore(
   acts: Acts,
 ): RenderElement {
   const { Box, Button } = table
-  const files = look.known.repo?.files ?? null
   const name = labelOf(look.known)
 
   return (
@@ -1191,9 +1190,6 @@ function drawMore(
         <Button
           key={keyOf(phrase)}
           label={phrase}
-          {...(phrase === MAIN_SHORTCUT && files !== null && files > 0
-            ? { variant: 'primary' as const }
-            : {})}
           onPress={() => acts.shortcut(phrase)}
         />
       ))}

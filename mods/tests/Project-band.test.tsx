@@ -1334,14 +1334,14 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
-  onEachSurface('Go commit is the main action only while files are uncommitted', async ($, on, surface) => {
+  onEachSurface('Go commit is drawn as the other buttons, files waiting or not', async ($, on, surface) => {
     const kit = install(on, { changed: 2 })
 
     await start($, kit)
 
     const ui = await bandOn($, surface)
 
-    expect((await ui.find({ key: 'go-commit' }))?.props.variant).toBe('primary')
+    expect((await ui.find({ key: 'go-commit' }))?.props.variant).toBeUndefined()
 
     kit.world.changed = 0
     await endTurn($, kit)
@@ -2390,8 +2390,7 @@ describe('a narrow row', () => {
     expect(await wordsOn(narrow)).toBe('site-web | 3 to commit \u00b7 2 to push')
     expect(await buttonsOn(narrow)).toEqual(['Push', 'More'])
 
-    // Go commit did not vanish: it leads More, still the main action while
-    // files are uncommitted.
+    // Go commit did not vanish: it leads More, drawn as the buttons beside it.
     await narrow.press({ key: 'more' })
     expect(await buttonsOn(narrow)).toEqual([
       'Go commit',
@@ -2401,7 +2400,7 @@ describe('a narrow row', () => {
       'Go code review',
       'Back',
     ])
-    expect((await narrow.find({ key: 'go-commit' }))?.props.variant).toBe('primary')
+    expect((await narrow.find({ key: 'go-commit' }))?.props.variant).toBeUndefined()
     await narrow.press({ key: 'go-commit' })
     expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go commit'])
     await narrow.unmount()
