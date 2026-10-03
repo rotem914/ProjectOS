@@ -1444,7 +1444,8 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
 
 // A question takes the row's place until it is answered. Cancel comes first
 // and the keyboard starts on it: a stray Enter then takes the question back,
-// and only a deliberate press pushes or pulls. The words are never cut, so
+// and only a deliberate press pushes or pulls. Like the plain row, the name
+// stays at the start and the rest sits at the far end (owner, 2026-10-04). The words are never cut, so
 // the address is always read whole: where they do not fit beside the
 // buttons, they wrap and the buttons move to a row of their own.
 function drawQuestion(
@@ -1469,10 +1470,19 @@ function drawQuestion(
     return (
       <Box flexDirection="row" alignItems="center" gap={1} paddingRight={look.reserve}>
         {name !== '' && drawLabel(table, name)}
-        <Box flexShrink={1}>
-          <Text bold>{said}</Text>
+        <Box
+          flexDirection="row"
+          alignItems="center"
+          justifyContent="flex-end"
+          gap={1}
+          flexGrow={1}
+          flexShrink={1}
+        >
+          <Box flexShrink={1}>
+            <Text bold>{said}</Text>
+          </Box>
+          {buttons}
         </Box>
-        {buttons}
       </Box>
     )
   }
@@ -1481,13 +1491,15 @@ function drawQuestion(
     <Box flexDirection="column" paddingRight={look.reserve}>
       <Box flexDirection="row" gap={1}>
         {name !== '' && drawLabel(table, name)}
-        <Box flexShrink={1}>
+        <Box flexDirection="row" justifyContent="flex-end" flexGrow={1} flexShrink={1}>
           <Text bold wrap="wrap">
             {said}
           </Text>
         </Box>
       </Box>
-      {buttons}
+      <Box flexDirection="row" justifyContent="flex-end">
+        {buttons}
+      </Box>
     </Box>
   )
 }
@@ -1504,25 +1516,30 @@ function drawMore(
   const name = labelOf(look.known)
 
   return (
-    <Box
-      flexDirection="row"
-      flexWrap="wrap"
-      alignItems="center"
-      columnGap={1}
-      paddingRight={look.reserve}
-    >
+    <Box flexDirection="row" alignItems="center" gap={1} paddingRight={look.reserve}>
       {name !== '' && drawLabel(table, name)}
-      {open.phrases.map(phrase => (
-        <Button
-          key={keyOf(phrase)}
-          label={buttonTextOf(phrase, look.known.isFast === true)}
-          onPress={() => acts.shortcut(phrase)}
-        />
-      ))}
-      {open.hasUpdate && (
-        <Button key="update-plugin" label="Update plugin" onPress={() => acts.askUpdate()} />
-      )}
-      <Button key="cancel" label="Back" onPress={() => acts.cancel()} />
+      {/* The buttons sit at the far end, as in the plain row (owner, 2026-10-04). */}
+      <Box
+        flexDirection="row"
+        flexWrap="wrap"
+        alignItems="center"
+        justifyContent="flex-end"
+        columnGap={1}
+        flexGrow={1}
+        flexShrink={1}
+      >
+        {open.phrases.map(phrase => (
+          <Button
+            key={keyOf(phrase)}
+            label={buttonTextOf(phrase, look.known.isFast === true)}
+            onPress={() => acts.shortcut(phrase)}
+          />
+        ))}
+        {open.hasUpdate && (
+          <Button key="update-plugin" label="Update plugin" onPress={() => acts.askUpdate()} />
+        )}
+        <Button key="cancel" label="Back" onPress={() => acts.cancel()} />
+      </Box>
     </Box>
   )
 }

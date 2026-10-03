@@ -1815,7 +1815,12 @@ describe('More', () => {
     // The list is drawn where the row is, so it needs no pane, and its
     // buttons wrap onto further rows in a narrow window.
     expect(kit.world.opened).toEqual([])
-    expect(await ui.drawn()).toMatchObject({ type: 'Box', props: { flexWrap: 'wrap' } })
+    // They sit at the far end of the row, after the name.
+    expect(
+      (await ui.findAll({ type: 'Box' })).some(
+        box => box.props.flexWrap === 'wrap' && box.props.justifyContent === 'flex-end',
+      ),
+    ).toBe(true)
 
     await ui.press({ key: 'go-code-review' })
     expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go code review'])
