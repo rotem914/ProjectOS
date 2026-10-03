@@ -386,6 +386,12 @@ A `1.` list item nests the following lines, which reflows the stacked beats back
 into one dense paragraph, exactly what this rule exists to prevent. And numbers
 alone do not separate blocks in a chat client; the divider is what does.
 
+The four labels came from an owner who asked for the most important fixes and
+got one line per item, cut to fit rule 1, the turn after a full list. A line
+per item reads as a verdict with no reason. Each item now says the problem, the
+proposal, what changes in practice and what changes in the owner's work, and
+no line ceiling trims it.
+
 ### Rule 11: Grouped status lists
 
 An icon legend makes the reader decipher a key before reading. A table row per

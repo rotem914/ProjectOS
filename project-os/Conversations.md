@@ -64,7 +64,8 @@ Inside that ceiling, say the problem and the why, never a verdict alone.
 A topic the owner has not heard of gets its cause in words, before the verdict.
 Only the long evidence and the full check list go to the `project-os/History.md` row.
 The ceiling holds for EVERY reply, work behind it or not.
-It lifts ONLY when the owner asks for a `full report`: 16 prose lines,
+A findings list (rule 10) has no ceiling: every item in full.
+Otherwise it lifts ONLY when the owner asks for a `full report`: 16 prose lines,
 and twice more for the two messages `Installation.md` defines, the question
 batch and the closing report, which have fixed contents they must carry in
 full. Every layout rule still applies to both; only the length ceiling lifts.
@@ -236,11 +237,11 @@ Renaming is safe.
 ### 10 · Stacked list points
 
 In a list of findings, never pack a point into a paragraph.
-Give each point a short **bold** headline (3 to 4 words), then one beat per line
-beneath it (observation, evidence, recommendation), blank line between.
-EVERY point takes a `----` divider above its headline, numbered or not.
-Points sharing one topic fold a number into the headline (`1 ·`, `2 ·`).
-Keep that number on the headline line, never a Markdown `1.` list item.
+Give EVERY point, numbered or not, a **bold** headline with `----` above it.
+Under it, in full and never trimmed: `Problem:`, `Proposal:`, `In practice:`,
+`Your workflow:`, each label alone on its line, one sentence per line below.
+Same-topic points number the headline (`1 ·`), never a Markdown `1.` item.
+The install's two messages keep the one-line Problems shape `Installation.md` gives them.
 
 ~~~
 ----
@@ -249,18 +250,32 @@ Keep that number on the headline line, never a Markdown `1.` list item.
 ----
 **1 · Status column is ambiguous**
 
+Problem:
 The column shows the group's status, not the item's.
 
-The list row reads the parent record.
-
+Proposal:
 Pick one meaning and label it.
+
+In practice:
+Everyone reads the column the same way.
+
+Your workflow:
+No change for you.
 
 ----
 **2 · Progress reads as text only**
 
+Problem:
 done / total is a bare number.
 
-A thin bar would make it scannable.
+Proposal:
+A thin bar beside it.
+
+In practice:
+Progress is scannable at a glance.
+
+Your workflow:
+No change for you.
 ~~~
 
 ### 11 · Grouped status lists
