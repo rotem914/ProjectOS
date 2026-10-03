@@ -72,6 +72,16 @@ const SHORTCUTS = [
   'GO visual qa',
 ] as const
 const MAIN_SHORTCUT = 'Go commit'
+// The visual pass keeps the kit's heading as the words it sends, and reads
+// "Go visual QA" on its button (owner, 2026-10-04).
+const VISUAL_SHORTCUT = 'GO visual qa'
+const VISUAL_LABEL = 'Go visual QA'
+// Deep research is not a kit phrase but a command of Claude Code itself. Its
+// button sits in the More list wherever this Claude Code offers the command,
+// and a press runs it as /deep-research typed by the owner (2026-10-04).
+const RESEARCH_SHORTCUT = '/deep-research'
+const RESEARCH_COMMAND = 'deep-research'
+const RESEARCH_LABEL = 'Deep Research'
 // Fast mode sits beside Go commit in the row (owner, 2026-10-03). The kit's
 // heading for it is the mode's name, the button reads shorter, and the words
 // it sends are the ones that switch the mode on.
@@ -1120,7 +1130,15 @@ function fastLabelOf(isFast: boolean): string {
 
 // What a shortcut's button reads, and the words a press of it sends.
 function buttonTextOf(phrase: string, isFast: boolean): string {
-  return phrase === FAST_SHORTCUT ? fastLabelOf(isFast) : phrase
+  if (phrase === FAST_SHORTCUT) {
+    return fastLabelOf(isFast)
+  }
+
+  if (phrase === VISUAL_SHORTCUT) {
+    return VISUAL_LABEL
+  }
+
+  return phrase === RESEARCH_SHORTCUT ? RESEARCH_LABEL : phrase
 }
 
 // Go commit carries the count of files waiting, after a middle dot (owner,
@@ -1154,13 +1172,16 @@ function planOf(
   const isInRepo = known.repo !== null
   const hasMain = isInRepo && known.shortcuts.includes(MAIN_SHORTCUT)
   const hasFast = isInRepo && known.shortcuts.includes(FAST_SHORTCUT)
-  const others = isInRepo
-    ? SHORTCUTS.filter(
-        phrase =>
-          phrase !== MAIN_SHORTCUT &&
-          phrase !== FAST_SHORTCUT &&
-          known.shortcuts.includes(phrase),
-      )
+  const others: string[] = isInRepo
+    ? [
+        ...SHORTCUTS.filter(
+          phrase =>
+            phrase !== MAIN_SHORTCUT &&
+            phrase !== FAST_SHORTCUT &&
+            known.shortcuts.includes(phrase),
+        ),
+        ...(known.hasResearch === true ? [RESEARCH_SHORTCUT] : []),
+      ]
     : []
   const canPush = pushTarget(known.repo) !== null
   const canUpdate = isInRepo && known.pluginUpdate !== null
@@ -2052,9 +2073,14 @@ async function passRepo($: Dollar): Promise<void> {
   startServerPass($, [where.top, folder])
 
   const counting = countFiles($, where.top)
-  const [part, shortcuts] = await Promise.all([
+  const [part, shortcuts, hasResearch] = await Promise.all([
     branchPartOf($, where, home),
     shortcutsOf($, [where.top, folder]),
+    // A Claude Code that cannot list its commands offers no such button.
+    $.command.list().then(
+      listed => listed.some(one => one.name === RESEARCH_COMMAND),
+      () => false,
+    ),
   ])
   const [counted, backup] = await Promise.all([
     countWithin($, counting, FILES_GRACE_MS),
@@ -2074,6 +2100,7 @@ async function passRepo($: Dollar): Promise<void> {
       ...now,
       repo: { ...part, files: counted.isDone ? counted.files : shown },
       shortcuts,
+      hasResearch,
       backup,
     }
   })
@@ -2280,6 +2307,23 @@ async function submitShortcut($: Dollar, phrase: string, columns: number): Promi
   if ((await read($, ask)) !== null) {
     await closeAsk($)
     await ringBack($, ['more'], columns)
+  }
+
+  // Deep research is a command, not words for the model: it is run as the
+  // owner typing /deep-research would run it, and asks him for its topic.
+  if (phrase === RESEARCH_SHORTCUT) {
+    inBackground($, 'running /deep-research failed', async () => {
+      try {
+        await $.command.run({ command: RESEARCH_COMMAND })
+      } catch (error) {
+        note($, 'running /deep-research failed', error)
+        $.ui.toast('Could not run /deep-research. Type it in the message box instead.', {
+          timeoutMs: LONG_TOAST_MS,
+        })
+      }
+    })
+
+    return
   }
 
   // The exact phrase, as the owner's own words: the project's CLAUDE.md

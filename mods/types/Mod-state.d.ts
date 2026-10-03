@@ -95,6 +95,11 @@ export type ProjectBandFacts = {
    */
   server?: 'up' | 'down' | null
   /**
+   * True where this Claude Code offers the /deep-research command, so the
+   * More list can carry a button for it. No such key reads the same as false.
+   */
+  hasResearch?: boolean
+  /**
    * The age, in days, at which the owner pressed the backup's quiet words
    * away. They stay out of the row until the backup is older than this.
    * Null, or no such key, when they were never pressed away.

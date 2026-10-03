@@ -115,6 +115,8 @@ type World = {
   fetched: string[]
   /** Every slash command the mod ran. */
   commands: string[]
+  /** The slash commands this Claude Code offers. */
+  offered: string[]
   /** A tree some other mod draws in the band, beneath this one. */
   beneath: RenderElement | null
   /** How long the drawing beneath takes on the test's clock, in milliseconds. */
@@ -210,6 +212,7 @@ function worldOf(changes: Partial<World> = {}): World {
     isServerUp: false,
     fetched: [],
     commands: [],
+    offered: ['compact'],
     beneath: null,
     slowDraw: 0,
     refusals: 0,
@@ -453,6 +456,9 @@ function install(on: On, changes: Partial<World> = {}): Kit {
       rateLimits: [],
       cost: { usd: 0 },
     },
+  }))
+  on('command.list', () => ({
+    value: world.offered.map(name => ({ name, description: '', source: 'builtin' as const })),
   }))
   on('command.run', (_, e) => {
     world.commands.push(e.command)
@@ -1636,7 +1642,7 @@ describe('the shortcut buttons', () => {
     const ui = await bandOn($, surface)
 
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toEqual(['GO visual qa', 'Back'])
+    expect(await buttonsOn(ui)).toEqual(['Go visual QA', 'Back'])
     await ui.press({ key: 'go-visual-qa' })
     expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['GO visual qa'])
     await ui.unmount()
@@ -1699,6 +1705,41 @@ describe('the shortcut buttons', () => {
     await kit.clock.settle()
     expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 2 heavy files')
     expect(await ui.findAll({ type: 'Svg' })).toHaveLength(surface === 'terminal' ? 0 : 2)
+    await ui.unmount()
+  })
+})
+
+describe('Deep Research', () => {
+  onEachSurface('sits last in More where the command is offered, and a press runs it', async ($, on, surface) => {
+    const kit = install(on, { offered: ['compact', 'deep-research'] })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    await ui.press({ key: 'more' })
+
+    const listed = await buttonsOn(ui)
+
+    expect(listed.slice(-2)).toEqual(['Deep Research', 'Back'])
+    await ui.press({ key: '/deep-research' })
+    await kit.clock.settle()
+    expect(kit.world.commands).toEqual(['deep-research'])
+    expect(kit.world.prompts).toEqual([])
+    // The list has done its job and the row is back.
+    expect(await buttonsOn(ui)).toContain('More')
+    await ui.unmount()
+  })
+
+  onEachSurface('is not offered where Claude Code has no such command', async ($, on, surface) => {
+    const kit = install(on)
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    await ui.press({ key: 'more' })
+    expect(await buttonsOn(ui)).not.toContain('Deep Research')
     await ui.unmount()
   })
 })
