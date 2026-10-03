@@ -1516,7 +1516,7 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
-  onEachSurface('the backup shows its age in the words, and is a button from 30 days on', async ($, on, surface) => {
+  onEachSurface('the row is silent about a backup until it is 30 days old, then offers a button', async ($, on, surface) => {
     const kit = install(on, {
       backups: [
         { name: 'Site_2026-08-01_10-00.zip', daysOld: 60 },
@@ -1530,17 +1530,16 @@ describe('the shortcut buttons', () => {
 
     const ui = await bandOn($, surface)
 
-    // Before it is due the age is quiet words of its own, drawn without a
-    // frame, ahead of the buttons.
+    // Before it is due the row says nothing about the backup.
     expect(await wordsOn(ui)).toBe('site-web | All committed')
-    expect(await buttonsOn(ui)).toEqual(['Backup 12d', 'Go commit', 'More'])
-    expect((await ui.find({ key: 'backup-age' }))?.props.plain).toBe(true)
+    expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
+    expect(await ui.find({ key: 'backup-age' })).toBeUndefined()
     expect(new Set(kit.world.listed).size).toBe(1)
 
-    // The days pass, and on the thirtieth the age moves into a button.
+    // The days pass, and on the thirtieth the button appears.
     kit.world.backups = [{ name: 'Site_2026-09-04_10-00.zip', daysOld: 29 }]
     await endTurn($, kit)
-    expect(await buttonsOn(ui)).toEqual(['Backup 29d', 'Go commit', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
     kit.world.backups = [{ name: 'Site_2026-09-03_10-00.zip', daysOld: 30 }]
     await endTurn($, kit)
     expect(await wordsOn(ui)).toBe('site-web | All committed')
@@ -1560,62 +1559,14 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
-  onEachSurface('a backup made today reads Backup today', async ($, on, surface) => {
+  onEachSurface('a backup made today says nothing', async ($, on, surface) => {
     const kit = install(on, { backups: [{ name: 'Site_2026-10-03_08-00.zip', daysOld: 0 }] })
 
     await start($, kit)
 
     const ui = await bandOn($, surface)
 
-    expect(await buttonsOn(ui)).toEqual(['Backup today', 'Go commit', 'More'])
-    await ui.unmount()
-  })
-
-  onEachSurface('a press on the backup words hides them and runs no backup', async ($, on, surface) => {
-    const kit = install(on, { backups: [{ name: 'Site_2026-09-21_10-00.zip', daysOld: 12 }] })
-
-    await start($, kit)
-
-    const ui = await bandOn($, surface)
-
-    await ui.press({ key: 'backup-age' })
-    await kit.clock.settle()
     expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
-    expect(kit.world.prompts).toEqual([])
-
-    // The same age stays hidden through later passes and a compaction.
-    await endTurn($, kit)
-    await $.classic.SessionStart({ source: 'compact', cwd: kit.world.folder })
-    await kit.clock.settle()
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
-
-    // A day later the backup is older than the one pressed away.
-    kit.world.backups = [{ name: 'Site_2026-09-21_10-00.zip', daysOld: 13 }]
-    await endTurn($, kit)
-    expect(await buttonsOn(ui)).toEqual(['Backup 13d', 'Go commit', 'More'])
-
-    // Hidden again, it is back in the next conversation.
-    await ui.press({ key: 'backup-age' })
-    await kit.clock.settle()
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
-    await $.classic.SessionStart({ source: 'clear', cwd: kit.world.folder })
-    await kit.clock.settle()
-    expect(await buttonsOn(ui)).toEqual(['Backup 13d', 'Go commit', 'More'])
-    await ui.unmount()
-  })
-
-  onEachSurface('the backup button, once due, is never hidden by an earlier press', async ($, on, surface) => {
-    const kit = install(on, { backups: [{ name: 'Site_2026-09-04_10-00.zip', daysOld: 29 }] })
-
-    await start($, kit)
-
-    const ui = await bandOn($, surface)
-
-    await ui.press({ key: 'backup-age' })
-    await kit.clock.settle()
-    kit.world.backups = [{ name: 'Site_2026-09-03_10-00.zip', daysOld: 30 }]
-    await endTurn($, kit)
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Backup 30d', 'More'])
     await ui.unmount()
   })
 

@@ -1140,12 +1140,11 @@ function planOf(
     isInRepo && known.shortcuts.includes(BACKUP_SHORTCUT) ? (known.backup?.days ?? null) : null
   const backupText = backupDays === null ? '' : backupTextOf(backupDays)
   const isBackupDue = backupDays !== null && backupDays >= BACKUP_BUTTON_DAYS
-  // Before it is due the age is quiet words of its own, which a press hides
-  // until the backup is a day older. Like the percentage it is drawn without
-  // a frame, so it takes its own cells and the one that separates it.
-  const hiddenAt = known.backupHidden ?? null
-  const isBackupHidden = backupDays !== null && hiddenAt !== null && backupDays <= hiddenAt
-  const backupQuiet = isBackupDue || isBackupHidden ? '' : backupText
+  // Before it is due the row says nothing about the backup: the owner wanted
+  // a reminder once a month, not a count of days (2026-10-04). The quiet
+  // words that showed the age, and the press that hid them, are switched off
+  // here and draw nothing.
+  const backupQuiet: string = ''
   const quietCells = backupQuiet === '' ? 0 : backupQuiet.length + 1
   const fullName = labelOf(known)
   // The percentage alone, before the words (owner, 2026-10-03). It is drawn
