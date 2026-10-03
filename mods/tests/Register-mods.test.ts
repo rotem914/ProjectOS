@@ -456,8 +456,8 @@ describe('the two parts in one session', () => {
       const words = (await ui.findAll({ type: 'Text' })).map(one => one.text)
       const buttons = (await ui.findAll({ type: 'Button' })).map(one => String(one.props.label))
 
-      expect(words).toEqual(['site', '2 to commit'])
-      expect(buttons).toEqual(['Go commit'])
+      expect(words).toEqual(['site'])
+      expect(buttons).toEqual(['Go commit \u00b7 2'])
 
       // The dash fix, in the same session: the dash is fixed as the reply is
       // kept, and nothing is said about the reply's length.
@@ -497,10 +497,7 @@ describe('the two parts in one session', () => {
       await clock.settle()
       expect(seen.status).toEqual([])
       expect(seen.statusRuns).toBe(passesBefore + 2)
-      expect((await ui.findAll({ type: 'Text' })).map(one => one.text)).toEqual([
-        'site',
-        '2 to commit',
-      ])
+      expect((await ui.findAll({ type: 'Text' })).map(one => one.text)).toEqual(['site'])
       await ui.unmount()
     })
   }

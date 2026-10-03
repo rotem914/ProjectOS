@@ -944,7 +944,7 @@ async function pluginUpdateOf(
 // DRAWING. Values in, a tree out: no git, no files, no waiting.
 
 // Each message opens on a capital letter, or on its count (owner, 2026-10-03).
-function wordsOf(known: ProjectBandFacts, isShort: boolean): string[] {
+function wordsOf(known: ProjectBandFacts, isShort: boolean, isCountInButton: boolean): string[] {
   const words: string[] = []
   const repo = known.repo
 
@@ -954,8 +954,9 @@ function wordsOf(known: ProjectBandFacts, isShort: boolean): string[] {
 
   if (repo.files === 0) {
     words.push('All committed')
-  } else if (repo.files !== null) {
-    // The count alone, at every width: the owner reads "1 to commit".
+  } else if (repo.files !== null && !isCountInButton) {
+    // The count alone, at every width: the owner reads "1 to commit". While
+    // Go commit is in the row the count rides in the button instead.
     words.push(`${repo.files} to commit`)
   }
 
@@ -1002,6 +1003,15 @@ function buttonsWidth(labels: readonly string[]): number {
 // What a shortcut's button reads, and the words a press of it sends.
 function buttonTextOf(phrase: string): string {
   return phrase === FAST_SHORTCUT ? FAST_LABEL : phrase
+}
+
+// Go commit carries the count of files waiting, after a middle dot (owner,
+// 2026-10-03). With nothing waiting, or before git has answered, it reads the
+// phrase alone.
+function commitLabelOf(known: ProjectBandFacts): string {
+  const files = known.repo?.files ?? 0
+
+  return files > 0 ? `${MAIN_SHORTCUT} · ${files}` : MAIN_SHORTCUT
 }
 
 function sentOf(phrase: string): string {
@@ -1057,7 +1067,7 @@ function planOf(
   let fixed = 0
 
   for (const step of steps) {
-    const words = wordsOf(known, step.isShort).join(' \u00b7 ')
+    const words = wordsOf(known, step.isShort, step.hasCommit).join(' \u00b7 ')
     // Fast keeps Go commit's company: in the row with it, behind More with it.
     const isFastInRow = hasFast && step.isInRow
     const more = [
@@ -1067,7 +1077,7 @@ function planOf(
     ]
     const moreHasUpdate = canUpdate && !step.hasUpdate
     const buttons = [
-      ...(step.hasCommit ? [MAIN_SHORTCUT] : []),
+      ...(step.hasCommit ? [commitLabelOf(known)] : []),
       ...(isFastInRow ? [FAST_LABEL] : []),
       ...(canPush ? [pushLabelOf(state)] : []),
       ...(step.hasUpdate ? [updateLabelOf(state)] : []),
@@ -1201,7 +1211,7 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
             {plan.hasCommit && (
               <Button
                 key="go-commit"
-                label={MAIN_SHORTCUT}
+                label={commitLabelOf(known)}
                 onPress={() => acts.shortcut(MAIN_SHORTCUT)}
               />
             )}

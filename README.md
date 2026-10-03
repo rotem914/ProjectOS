@@ -117,7 +117,8 @@ own window, in the desktop app and in the terminal, in every folder you open.
 - What is waiting, inside a git project: files to commit, commits to
   push, and a newer kit ready for this computer's copy.
 - Buttons. One for each kit shortcut the project's `CLAUDE.md` carries:
-  `Go commit` in the row, the rest behind `More`. A press sends the phrase as
+  `Go commit` in the row, with the count of files waiting inside it
+  (`Go commit · 1`), the rest behind `More`. A press sends the phrase as
   your own message. `Push` and `Update plugin` show only while there is
   something to push or to update, and both ask in the row before they do
   anything.
