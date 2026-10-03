@@ -82,10 +82,6 @@ type World = {
   present: string[]
   /** The hooks folder the project names in its git settings; null for none. */
   hooksPath: string | null
-  /** The folders beside the profile's own; null when they cannot be listed. */
-  siblings: string[] | null
-  /** Plain files beside the profile's folder. */
-  siblingFiles: string[]
   /** Git subcommands that answer with an error. */
   broken: string[]
   /** Git subcommands that never answer: the engine gives up on them. */
@@ -119,7 +115,7 @@ type World = {
   toasts: string[]
   prompts: { text: string; origin: unknown }[]
   logs: string[]
-  /** Every folder the mod listed. */
+  /** Every folder the mod listed. It should list none. */
   listed: string[]
   /** Every pane the mod opened. It should open none. */
   opened: string[]
@@ -173,12 +169,10 @@ function worldOf(changes: Partial<World> = {}): World {
     remote: 'origin',
     remoteRef: 'refs/heads/main',
     pushUrl: 'https://github.com/example/site.git',
-    origin: 'https://github.com/example/site.git',
+    origin: 'https://github.com/example/site-web.git',
     files: { 'D:/Work/Site/CLAUDE.md': KIT_HEADINGS },
     present: [],
     hooksPath: null,
-    siblings: null,
-    siblingFiles: [],
     broken: [],
     silent: [],
     slow: {},
@@ -389,16 +383,7 @@ function install(on: On, changes: Partial<World> = {}): Kit {
   on('fs.list', (_, e) => {
     world.listed.push(e.path ?? '')
 
-    if (world.siblings === null) {
-      return { deny: `ENOENT: no such directory, scandir '${e.path ?? ''}'` }
-    }
-
-    return {
-      value: [
-        ...world.siblings.map(name => ({ name, kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false })),
-        ...world.siblingFiles.map(name => ({ name, kind: 'file' as const, size: 10, mtimeMs: 1, isLink: false })),
-      ],
-    }
+    return { deny: `ENOENT: no such directory, scandir '${e.path ?? ''}'` }
   })
   on('prompt.submit', (_, e) => {
     // A hook that throws is skipped, and nothing beneath it answers: that is
@@ -530,130 +515,48 @@ function onEachSurface(
   }
 }
 
+// The label is the project's name, in plain text with no color behind it, in
+// every window. The row first named the window's owner there, Personal or a
+// client; the owner asked for the repository's name instead (2026-10-03).
 describe('the label', () => {
-  onEachSurface('names the client profile in a color of its own', async ($, on, surface) => {
+  onEachSurface('names the repository in plain text', async ($, on, surface) => {
     const kit = install(on)
 
     await start($, kit)
 
     const ui = await bandOn($, surface)
-    const label = await ui.find({ type: 'Text', text: ' Darrow ' })
+    const label = await ui.find({ type: 'Text', text: 'site-web' })
 
-    expect(label?.text).toBe(' Darrow ')
-    expect(label?.props.backgroundColor).toBe('#2563eb')
-    expect(label?.props.color).toBe('#ffffff')
+    expect(label?.text).toBe('site-web')
+    expect(label?.props.bold).toBe(true)
+    expect(label?.props.backgroundColor).toBeUndefined()
+    expect(label?.props.color).toBeUndefined()
+    expect(await wordsOn(ui)).toBe('site-web | all committed')
     await ui.unmount()
   })
 
-  onEachSurface('keeps the color of the name when the folders beside it cannot be listed', async ($, on, surface) => {
-    const kit = install(on, {
-      env: { CLAUDE_CONFIG_DIR: 'C:\\ClaudeConfigs\\Northwind\\', USERPROFILE: 'C:\\Users\\Dana' },
-    })
+  // Whose window it is changes nothing in the row. A window opened for a
+  // client, a personal one, and one whose profile is the home folder itself
+  // all name the project, and none of them lists a folder to do it.
+  const WINDOWS: [string, Record<string, string>][] = [
+    ['a client', { CLAUDE_CONFIG_DIR: 'C:\\ClaudeConfigs\\Darrow', USERPROFILE: 'C:\\Users\\Dana' }],
+    ['no profile', { USERPROFILE: 'C:\\Users\\Dana' }],
+    ['the home folder', { CLAUDE_CONFIG_DIR: 'C:\\Users\\Dana\\.claude', USERPROFILE: 'C:\\Users\\Dana' }],
+  ]
 
-    await start($, kit)
-
-    const ui = await bandOn($, surface)
-    const label = await ui.find({ type: 'Text', text: ' Northwind ' })
-
-    // The folder the profiles sit in was looked at, the listing failed, and
-    // the color then comes from the name alone: the same in every window and
-    // every session.
-    expect(kit.world.listed).toHaveLength(1)
-    expect(isAt(kit.world.listed[0] ?? '', 'C:/ClaudeConfigs')).toBe(true)
-    expect(label?.props.backgroundColor).toBe('#a21caf')
-    await ui.unmount()
-  })
-
-  // By their names alone Darrow, Lemonade and Payoneer land on the same blue,
-  // and Acme and Wix on the same teal. Side by side each gets its own.
-  const BESIDE = ['Wix', 'Payoneer', 'Darrow', 'Acme', 'Lemonade']
-  const COLORS: Record<string, string> = {
-    Acme: '#0f766e',
-    Darrow: '#2563eb',
-    Lemonade: '#7c3aed',
-    Payoneer: '#a21caf',
-    Wix: '#be185d',
-  }
-
-  for (const client of BESIDE) {
-    test(`clients side by side each get a color of their own: ${client}`, async ($, on) => {
-      const kit = install(on, {
-        env: { CLAUDE_CONFIG_DIR: `C:\\ClaudeConfigs\\${client}`, USERPROFILE: 'C:\\Users\\Dana' },
-        siblings: BESIDE,
-        // A file beside the folders is not a client.
-        siblingFiles: ['Aaa.txt', 'New Claude client.lnk'],
-      })
+  for (const [who, env] of WINDOWS) {
+    test(`is the same in a window of ${who}`, async ($, on) => {
+      const kit = install(on, { env })
 
       await start($, kit)
 
       const ui = await bandOn($, 'desktop')
-      const label = await ui.find({ type: 'Text', text: ` ${client} ` })
 
-      expect(label?.props.backgroundColor).toBe(COLORS[client])
-      expect(new Set(Object.values(COLORS)).size).toBe(BESIDE.length)
+      expect(await wordsOn(ui)).toBe('site-web | all committed')
+      expect(kit.world.listed).toEqual([])
       await ui.unmount()
     })
   }
-
-  test('a folder that is missing from the listing keeps the color of its name', async ($, on) => {
-    const kit = install(on, { siblings: ['Lemonade', 'Payoneer'] })
-
-    await start($, kit)
-
-    const ui = await bandOn($, 'terminal')
-
-    expect((await ui.find({ type: 'Text', text: ' Darrow ' }))?.props.backgroundColor).toBe('#2563eb')
-    await ui.unmount()
-  })
-
-  onEachSurface('a client window does not name the project', async ($, on, surface) => {
-    const kit = install(on)
-
-    await start($, kit)
-
-    const ui = await bandOn($, surface)
-
-    expect(await wordsOn(ui)).toBe(' Darrow  | all committed')
-    await ui.unmount()
-  })
-})
-
-// A personal window has no client to name. It names the project instead, in
-// plain text with no color behind it: the owner asked for the repository's
-// name where the row first said Personal (2026-10-03).
-describe('the label of a personal window', () => {
-  const PERSONAL = { USERPROFILE: 'C:\\Users\\Dana' }
-
-  onEachSurface('names the repository in plain text when no profile is set', async ($, on, surface) => {
-    const kit = install(on, { env: PERSONAL, siblings: ['Darrow'] })
-
-    await start($, kit)
-
-    const ui = await bandOn($, surface)
-    const label = await ui.find({ type: 'Text', text: 'site' })
-
-    expect(label?.text).toBe('site')
-    expect(label?.props.bold).toBe(true)
-    expect(label?.props.backgroundColor).toBeUndefined()
-    expect(label?.props.color).toBeUndefined()
-    expect(await wordsOn(ui)).toBe('site | all committed')
-    // The personal window lists no folder: it has no color to pick.
-    expect(kit.world.listed).toEqual([])
-    await ui.unmount()
-  })
-
-  onEachSurface('names the repository when the profile is the home folder itself', async ($, on, surface) => {
-    const kit = install(on, {
-      env: { CLAUDE_CONFIG_DIR: 'C:\\Users\\Dana\\.claude', USERPROFILE: 'C:\\Users\\Dana' },
-    })
-
-    await start($, kit)
-
-    const ui = await bandOn($, surface)
-
-    expect(await wordsOn(ui)).toBe('site | all committed')
-    await ui.unmount()
-  })
 
   const ADDRESSES: [string, string][] = [
     ['https://github.com/rotem914/RotemE.git', 'RotemE'],
@@ -666,7 +569,7 @@ describe('the label of a personal window', () => {
 
   for (const [address, name] of ADDRESSES) {
     test(`reads the name from the online address: ${address}`, async ($, on) => {
-      const kit = install(on, { env: PERSONAL, origin: address })
+      const kit = install(on, { origin: address })
 
       await start($, kit)
 
@@ -678,10 +581,7 @@ describe('the label of a personal window', () => {
   }
 
   onEachSurface('a sign-in token in the address never reaches the row', async ($, on, surface) => {
-    const kit = install(on, {
-      env: PERSONAL,
-      origin: 'https://dana:ghp_secret123@github.com/example/site.git',
-    })
+    const kit = install(on, { origin: 'https://dana:ghp_secret123@github.com/example/site.git' })
 
     await start($, kit)
 
@@ -692,7 +592,7 @@ describe('the label of a personal window', () => {
   })
 
   onEachSurface('a repository with no online copy is named by its top folder', async ($, on, surface) => {
-    const kit = install(on, { env: PERSONAL, origin: null, upstream: null })
+    const kit = install(on, { origin: null, upstream: null })
 
     await start($, kit)
 
@@ -703,7 +603,7 @@ describe('the label of a personal window', () => {
   })
 
   onEachSurface('outside a repository it is the folder\'s name, alone', async ($, on, surface) => {
-    const kit = install(on, { env: PERSONAL, top: null, folder: 'D:\\Work\\Notes' })
+    const kit = install(on, { top: null, folder: 'D:\\Work\\Notes' })
 
     await start($, kit)
 
@@ -714,37 +614,8 @@ describe('the label of a personal window', () => {
     await ui.unmount()
   })
 
-  onEachSurface('draws nothing until git has named the project, then the name before the counts', async ($, on, surface) => {
-    const kit = install(on, {
-      env: PERSONAL,
-      changed: 3,
-      ahead: 2,
-      slow: { 'rev-parse': 5_000, status: 4_000 },
-    })
-
-    await open($, kit)
-
-    const ui = await bandOn($, surface)
-
-    await kit.clock.settle()
-    // Nothing to say yet: the engine's own drawing stands, not an empty row.
-    expect(await ui.drawn()).toEqual({ type: 'engine', ref: 0 })
-
-    // Git answers where the project is, and the name is there at once. The
-    // count of files is still under way and holds nothing back.
-    await kit.clock.advance(5_000)
-    expect(await wordsOn(ui)).toBe('site')
-
-    await kit.clock.advance(1_500)
-    expect(await wordsOn(ui)).toBe('site | 2 commits to push')
-
-    await kit.clock.advance(2_500)
-    expect(await wordsOn(ui)).toBe('site | 3 files not committed \u{b7} 2 commits to push')
-    await ui.unmount()
-  })
-
   test('asks git for the name once, however many passes follow', async ($, on) => {
-    const kit = install(on, { env: PERSONAL })
+    const kit = install(on)
     const asksForName = () =>
       gitRuns(kit.world, 'remote').filter(
         call => !call.args.includes('--push') && plain(call.cwd) === plain('D:/Work/Site'),
@@ -763,7 +634,6 @@ describe('the label of a personal window', () => {
 
   test('a name longer than the label is cut', async ($, on) => {
     const kit = install(on, {
-      env: PERSONAL,
       origin: 'https://github.com/example/a-very-long-repository-name-indeed.git',
     })
 
@@ -775,8 +645,8 @@ describe('the label of a personal window', () => {
     await ui.unmount()
   })
 
-  onEachSurface('the push question keeps the plain name in front', async ($, on, surface) => {
-    const kit = install(on, { env: PERSONAL, ahead: 2 })
+  onEachSurface('the push question keeps the name in front', async ($, on, surface) => {
+    const kit = install(on, { ahead: 2 })
 
     await start($, kit)
 
@@ -785,11 +655,11 @@ describe('the label of a personal window', () => {
     await ui.press({ key: 'push' })
     await kit.clock.settle()
 
-    const label = await ui.find({ type: 'Text', text: 'site' })
+    const label = await ui.find({ type: 'Text', text: 'site-web' })
 
     expect(label?.props.backgroundColor).toBeUndefined()
     expect(await wordsOn(ui)).toBe(
-      'site | Push 2 commits from main to https://github.com/example/site.git?',
+      'site-web | Push 2 commits from main to https://github.com/example/site.git?',
     )
     expect(await buttonsOn(ui)).toEqual(['Cancel', 'Push'])
     await ui.unmount()
@@ -808,7 +678,8 @@ describe('what is waiting', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(' Darrow ')
+    // Outside a repository the name is the folder's own.
+    expect(await wordsOn(ui)).toBe('Site')
     expect(await buttonsOn(ui)).toEqual([])
     expect(gitRuns(kit.world, 'status')).toHaveLength(0)
     expect(gitRuns(kit.world, 'ls-remote')).toHaveLength(0)
@@ -822,7 +693,7 @@ describe('what is waiting', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(' Darrow  | 3 files not committed \u00b7 2 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | 3 files not committed \u00b7 2 commits to push')
     expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push', 'More'])
     await ui.unmount()
   })
@@ -845,7 +716,7 @@ describe('what is waiting', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(' Darrow  | all committed')
+    expect(await wordsOn(ui)).toBe('site-web | all committed')
     expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
     await ui.unmount()
   })
@@ -857,12 +728,12 @@ describe('what is waiting', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(' Darrow  | all committed \u00b7 2 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | all committed \u00b7 2 commits to push')
 
     // Only behind: nothing waits to be pushed.
     kit.world.ahead = 0
     await endTurn($, kit)
-    expect(await wordsOn(ui)).toBe(' Darrow  | all committed')
+    expect(await wordsOn(ui)).toBe('site-web | all committed')
     expect(await buttonsOn(ui)).not.toContain('Push')
     await ui.unmount()
   })
@@ -874,7 +745,7 @@ describe('what is waiting', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(' Darrow  | 2 files not committed \u00b7 no online copy yet')
+    expect(await wordsOn(ui)).toBe('site-web | 2 files not committed \u00b7 no online copy yet')
     expect(await buttonsOn(ui)).not.toContain('Push')
     await ui.unmount()
   })
@@ -899,11 +770,11 @@ describe('what is waiting', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(' Darrow  | 1 file not committed')
+    expect(await wordsOn(ui)).toBe('site-web | 1 file not committed')
 
     kit.world.branch = null
     await endTurn($, kit)
-    expect(await wordsOn(ui)).toBe(' Darrow  | 1 file not committed')
+    expect(await wordsOn(ui)).toBe('site-web | 1 file not committed')
     expect(await buttonsOn(ui)).not.toContain('Push')
     await ui.unmount()
   })
@@ -921,19 +792,19 @@ describe('what is waiting', () => {
     // the branch is read apart from the files, so its part stays.
     kit.world.broken = ['status']
     await endTurn($, kit)
-    expect(await wordsOn(ui)).toBe(' Darrow  | 2 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | 2 commits to push')
     expect(await buttonsOn(ui)).toContain('Push')
 
     // The branch cannot be read: files only, and no Push.
     kit.world.broken = ['symbolic-ref']
     await endTurn($, kit)
-    expect(await wordsOn(ui)).toBe(' Darrow  | 3 files not committed')
+    expect(await wordsOn(ui)).toBe('site-web | 3 files not committed')
     expect(await buttonsOn(ui)).not.toContain('Push')
 
     // The same when its online copy cannot be read.
     kit.world.broken = ['for-each-ref']
     await endTurn($, kit)
-    expect(await wordsOn(ui)).toBe(' Darrow  | 3 files not committed')
+    expect(await wordsOn(ui)).toBe('site-web | 3 files not committed')
     expect(await buttonsOn(ui)).not.toContain('Push')
 
     // The address cannot be read: the count is real, but no Push without it.
@@ -942,10 +813,11 @@ describe('what is waiting', () => {
     expect(await wordsOn(ui)).toContain('2 commits to push')
     expect(await buttonsOn(ui)).not.toContain('Push')
 
-    // Outside the repository altogether: the label alone.
+    // Git cannot even say where the folder is: the name alone, and the same
+    // name as before. A git that fails for a moment does not rename the row.
     kit.world.broken = ['rev-parse']
     await endTurn($, kit)
-    expect(await wordsOn(ui)).toBe(' Darrow ')
+    expect(await wordsOn(ui)).toBe('site-web')
     expect(await buttonsOn(ui)).toEqual([])
     await ui.unmount()
   })
@@ -957,7 +829,7 @@ describe('what is waiting', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(' Darrow  | 2 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | 2 commits to push')
     expect((await ui.find({ key: 'go-commit' }))?.props.variant).toBeUndefined()
     await ui.unmount()
   })
@@ -969,7 +841,7 @@ describe('what is waiting', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(' Darrow  | 2 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | 2 commits to push')
 
     // Every git run is given a time limit, so a silent one cannot hang a pass.
     expect(kit.world.git.every(call => typeof call.timeoutMs === 'number' && call.timeoutMs <= 120_000)).toBe(true)
@@ -1055,7 +927,7 @@ describe('what is waiting', () => {
       const ui = await looking
 
       await kit.clock.settle()
-      expect(await wordsOn(ui)).toBe(' Darrow  | 3 files not committed \u00b7 2 commits to push')
+      expect(await wordsOn(ui)).toBe('site-web | 3 files not committed \u00b7 2 commits to push')
       expect(gitRuns(kit.world, 'rev-parse').filter(call => call.args.includes('--show-toplevel'))).toHaveLength(1)
       expect(gitRuns(kit.world, 'status')).toHaveLength(1)
 
@@ -1085,7 +957,7 @@ describe('what is waiting', () => {
       const ui = await looking
 
       await kit.clock.settle()
-      expect(await wordsOn(ui)).toBe(' Darrow  | 3 files not committed \u00b7 2 commits to push')
+      expect(await wordsOn(ui)).toBe('site-web | 3 files not committed \u00b7 2 commits to push')
       expect(gitRuns(kit.world, 'rev-parse').filter(call => call.args.includes('--show-toplevel'))).toHaveLength(1)
       expect(gitRuns(kit.world, 'status')).toHaveLength(1)
       await ui.unmount()
@@ -1108,7 +980,7 @@ describe('a session nobody looks at', () => {
 
     await kit.clock.settle()
     expect(await wordsOn(ui)).toBe(
-      ' Darrow  | 3 files not committed \u00b7 2 commits to push \u00b7 plugin update ready',
+      'site-web | 3 files not committed \u00b7 2 commits to push \u00b7 plugin update ready',
     )
     expect(gitRuns(kit.world, 'status')).toHaveLength(1)
 
@@ -1134,19 +1006,32 @@ describe('a session nobody looks at', () => {
 })
 
 describe('each part as soon as it is known', () => {
-  onEachSurface('the label is there before git has said anything', async ($, on, surface) => {
-    const kit = install(on, { changed: 3, ahead: 2, slow: { 'rev-parse': 5_000 } })
+  onEachSurface('nothing is drawn until git has named the project, then the name before the counts', async ($, on, surface) => {
+    const kit = install(on, {
+      changed: 3,
+      ahead: 2,
+      slow: { 'rev-parse': 5_000, status: 4_000 },
+    })
 
     await open($, kit)
 
     const ui = await bandOn($, surface)
 
     await kit.clock.settle()
-    expect(await wordsOn(ui)).toBe(' Darrow ')
+    // Nothing to say yet: the engine's own drawing stands, not an empty row.
+    expect(await ui.drawn()).toEqual({ type: 'engine', ref: 0 })
+
+    // Git answers where the project is, and the name is there at once. The
+    // count of files is still under way and holds nothing back.
+    await kit.clock.advance(5_000)
+    expect(await wordsOn(ui)).toBe('site-web')
     expect(await buttonsOn(ui)).toEqual([])
 
-    await kit.clock.advance(5_000)
-    expect(await wordsOn(ui)).toBe(' Darrow  | 3 files not committed \u00b7 2 commits to push')
+    await kit.clock.advance(1_500)
+    expect(await wordsOn(ui)).toBe('site-web | 2 commits to push')
+
+    await kit.clock.advance(2_500)
+    expect(await wordsOn(ui)).toBe('site-web | 3 files not committed \u{b7} 2 commits to push')
     await ui.unmount()
   })
 
@@ -1159,19 +1044,19 @@ describe('each part as soon as it is known', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(' Darrow  | 3 files not committed \u00b7 2 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | 3 files not committed \u00b7 2 commits to push')
     expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push', 'More'])
 
     // A turn ends while the check still hangs: the new counts are not kept
     // waiting behind it, and no second check is sent after the first.
     kit.world.changed = 5
     await endTurn($, kit)
-    expect(await wordsOn(ui)).toBe(' Darrow  | 5 files not committed \u00b7 2 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | 5 files not committed \u00b7 2 commits to push')
     expect(gitRuns(kit.world, 'ls-remote')).toHaveLength(1)
 
     await kit.clock.advance(15_000)
     expect(await wordsOn(ui)).toBe(
-      ' Darrow  | 5 files not committed \u00b7 2 commits to push \u00b7 plugin update ready',
+      'site-web | 5 files not committed \u00b7 2 commits to push \u00b7 plugin update ready',
     )
     await ui.unmount()
   })
@@ -1183,14 +1068,14 @@ describe('each part as soon as it is known', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(' Darrow ')
+    expect(await wordsOn(ui)).toBe('site-web')
 
     await kit.clock.advance(1_500)
-    expect(await wordsOn(ui)).toBe(' Darrow  | 2 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | 2 commits to push')
     expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push', 'More'])
 
     await kit.clock.advance(2_500)
-    expect(await wordsOn(ui)).toBe(' Darrow  | 3 files not committed \u00b7 2 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | 3 files not committed \u00b7 2 commits to push')
     await ui.unmount()
   })
 
@@ -1206,10 +1091,10 @@ describe('each part as soon as it is known', () => {
     kit.world.ahead = 3
     await endTurn($, kit)
     await kit.clock.advance(1_500)
-    expect(await wordsOn(ui)).toBe(' Darrow  | 3 files not committed \u00b7 3 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | 3 files not committed \u00b7 3 commits to push')
 
     await kit.clock.advance(2_500)
-    expect(await wordsOn(ui)).toBe(' Darrow  | 9 files not committed \u00b7 3 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | 9 files not committed \u00b7 3 commits to push')
     await ui.unmount()
   })
 })
@@ -1223,14 +1108,14 @@ describe('a count of files that runs out of time', () => {
     const ui = await bandOn($, 'terminal')
 
     // The first count ran out of time: no number, and the rest is there.
-    expect(await wordsOn(ui)).toBe(' Darrow  | 2 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | 2 commits to push')
     expect(gitRuns(kit.world, 'status')).toHaveLength(1)
 
     // Ten minutes on. The next count waited two minutes, the one after it
     // four: two more, where every minute used to start one.
     await kit.clock.advance(10 * 60_000)
     expect(gitRuns(kit.world, 'status')).toHaveLength(3)
-    expect(await wordsOn(ui)).toBe(' Darrow  | 2 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | 2 commits to push')
 
     // An hour more. The wait doubles up to a quarter of an hour and stays.
     await kit.clock.advance(60 * 60_000)
@@ -1260,10 +1145,10 @@ describe('a count of files that runs out of time', () => {
 
     kit.world.silent = []
     await kit.clock.advance(60_000)
-    expect(await wordsOn(ui)).toBe(' Darrow  | 2 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | 2 commits to push')
 
     await kit.clock.advance(60_000)
-    expect(await wordsOn(ui)).toBe(' Darrow  | 3 files not committed \u00b7 2 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | 3 files not committed \u00b7 2 commits to push')
     expect(gitRuns(kit.world, 'status')).toHaveLength(2)
 
     // Back to a count on every pass.
@@ -1474,7 +1359,7 @@ describe('More', () => {
     const ui = await bandOn($, surface)
 
     await ui.press({ key: 'more' })
-    expect(await wordsOn(ui)).toBe(' Darrow ')
+    expect(await wordsOn(ui)).toBe('site-web')
     expect(await buttonsOn(ui)).toEqual([
       'Go backup',
       'Go audit',
@@ -1507,7 +1392,7 @@ describe('More', () => {
     expect(await buttonsOn(ui)).toContain('Back')
     await ui.press({ key: 'cancel' })
     expect(kit.world.prompts).toEqual([])
-    expect(await wordsOn(ui)).toBe(' Darrow  | 2 files not committed')
+    expect(await wordsOn(ui)).toBe('site-web | 2 files not committed')
     expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
     await ui.unmount()
   })
@@ -1585,7 +1470,7 @@ describe('the Push button', () => {
     const words = await wordsOn(ui)
 
     expect(words).toBe(
-      ' Darrow  | Push 2 commits from feature/new-header to https://github.com/example/site.git?',
+      'site-web | Push 2 commits from feature/new-header to https://github.com/example/site.git?',
     )
     expect(words).not.toContain('ghp_secret123')
 
@@ -1671,7 +1556,7 @@ describe('the Push button', () => {
     await ui.press({ key: 'cancel' })
     expect(gitRuns(kit.world, 'push')).toHaveLength(0)
     expect(kit.world.toasts).toEqual([])
-    expect(await wordsOn(ui)).toBe(' Darrow  | all committed \u00b7 2 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | all committed \u00b7 2 commits to push')
     expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push', 'More'])
     await ui.unmount()
   })
@@ -1740,7 +1625,7 @@ describe('the Push button', () => {
     expect(kit.world.toasts).toEqual(['Pushed 2 commits'])
 
     // The row follows: nothing left to push, so no Push button.
-    expect(await wordsOn(ui)).toBe(' Darrow  | 1 file not committed')
+    expect(await wordsOn(ui)).toBe('site-web | 1 file not committed')
     expect(await buttonsOn(ui)).not.toContain('Push')
     await ui.unmount()
   })
@@ -2019,7 +1904,7 @@ describe('a project with a push step of its own', () => {
     const ui = await bandOn($, surface)
 
     expect(await wordsOn(ui)).toBe(
-      ' Darrow  | 1 file not committed \u00b7 2 commits to push from your git app',
+      'site-web | 1 file not committed \u00b7 2 commits to push from your git app',
     )
     expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
 
@@ -2035,7 +1920,7 @@ describe('a project with a push step of its own', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(' Darrow  | all committed \u00b7 2 commits to push')
+    expect(await wordsOn(ui)).toBe('site-web | all committed \u00b7 2 commits to push')
     expect(await buttonsOn(ui)).toContain('Push')
     await ui.unmount()
   })
@@ -2113,7 +1998,7 @@ describe('a project with a push step of its own', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(' Darrow  | all committed \u00b7 2 commits to push from your git app')
+    expect(await wordsOn(ui)).toBe('site-web | all committed \u00b7 2 commits to push from your git app')
     expect(await buttonsOn(ui)).not.toContain('Push')
     await ui.unmount()
   })
@@ -2199,7 +2084,7 @@ describe('the plugin copy of the kit', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(' Darrow  | all committed')
+    expect(await wordsOn(ui)).toBe('site-web | all committed')
     expect(await buttonsOn(ui)).not.toContain('Update plugin')
 
     // It did ask, in the plugin folder, and quietly.
@@ -2220,7 +2105,7 @@ describe('the plugin copy of the kit', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(' Darrow  | all committed \u00b7 plugin update ready')
+    expect(await wordsOn(ui)).toBe('site-web | all committed \u00b7 plugin update ready')
     expect(await buttonsOn(ui)).toEqual(['Go commit', 'Update plugin', 'More'])
     await ui.unmount()
   })
@@ -2234,7 +2119,7 @@ describe('the plugin copy of the kit', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site | all committed \u00b7 plugin update ready')
+    expect(await wordsOn(ui)).toBe('site-web | all committed \u00b7 plugin update ready')
     expect(gitRuns(kit.world, 'ls-remote')[0]?.cwd).toBe('C:\\Users\\Dana\\.claude\\skills\\projectos')
     await ui.unmount()
   })
@@ -2256,12 +2141,11 @@ describe('the plugin copy of the kit', () => {
     const ui = await bandOn($, surface)
 
     expect(await wordsOn(ui)).toBe(
-      ' Darrow  | 2 files not committed \u00b7 1 commit to push \u00b7 plugin update ready',
+      'site-web | 2 files not committed \u00b7 1 commit to push \u00b7 plugin update ready',
     )
     expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push', 'Update plugin', 'More'])
     expect(gitRuns(kit.world, 'ls-remote')[0]?.cwd).toBe('/Users/dana/claude-configs/Darrow/skills/projectos')
-    expect(kit.world.listed).toHaveLength(1)
-    expect(isAt(kit.world.listed[0] ?? '', '/Users/dana/claude-configs')).toBe(true)
+    expect(kit.world.listed).toEqual([])
 
     // A push hook is found there too.
     kit.world.present = ['/Users/dana/work/site/.git/hooks/pre-push']
@@ -2279,7 +2163,7 @@ describe('the plugin copy of the kit', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(' Darrow  | all committed')
+    expect(await wordsOn(ui)).toBe('site-web | all committed')
     await ui.unmount()
   })
 
@@ -2292,7 +2176,7 @@ describe('the plugin copy of the kit', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(' Darrow  | all committed')
+    expect(await wordsOn(ui)).toBe('site-web | all committed')
     expect(gitRuns(kit.world, 'ls-remote')).toHaveLength(0)
     expect(kit.world.git.every(call => plain(call.cwd) !== plain(kit.world.plugin.dir))).toBe(true)
     await ui.unmount()
@@ -2306,7 +2190,7 @@ describe('the plugin copy of the kit', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(' Darrow  | all committed')
+    expect(await wordsOn(ui)).toBe('site-web | all committed')
 
     // And it is not asked again on every pass.
     await endTurn($, kit)
@@ -2360,7 +2244,7 @@ describe('the plugin copy of the kit', () => {
     const words = await wordsOn(ui)
 
     expect(words).toBe(
-      ' Darrow  | Update the ProjectOS plugin in C:\\ClaudeConfigs\\Darrow\\skills\\projectos from https://github.com/example/kit?',
+      'site-web | Update the ProjectOS plugin in C:\\ClaudeConfigs\\Darrow\\skills\\projectos from https://github.com/example/kit?',
     )
     expect(words).not.toContain('token')
     expect(await buttonsOn(ui)).toEqual(['Cancel', 'Update'])
@@ -2386,7 +2270,7 @@ describe('the plugin copy of the kit', () => {
     expect(pulls[0]?.cwd).toBe('C:\\ClaudeConfigs\\Darrow\\skills\\projectos')
     expect(pulls[0]?.env.GIT_TERMINAL_PROMPT).toBe('0')
     expect(kit.world.toasts).toEqual(['Plugin updated'])
-    expect(await wordsOn(ui)).toBe(' Darrow  | all committed')
+    expect(await wordsOn(ui)).toBe('site-web | all committed')
     expect(await buttonsOn(ui)).not.toContain('Update plugin')
     await ui.unmount()
   })
@@ -2402,7 +2286,7 @@ describe('the plugin copy of the kit', () => {
     kit.world.broken = ['remote']
     await ui.press({ key: 'update-plugin' })
     expect(await wordsOn(ui)).toBe(
-      ' Darrow  | Update the ProjectOS plugin in C:\\ClaudeConfigs\\Darrow\\skills\\projectos?',
+      'site-web | Update the ProjectOS plugin in C:\\ClaudeConfigs\\Darrow\\skills\\projectos?',
     )
     await ui.unmount()
   })
@@ -2482,13 +2366,13 @@ describe('a narrow row', () => {
 
     const wide = await bandOn($, surface, width(surface, 82))
 
-    expect(await wordsOn(wide)).toBe(' Darrow  | 3 files not committed \u00b7 2 commits to push')
+    expect(await wordsOn(wide)).toBe('site-web | 3 files not committed \u00b7 2 commits to push')
     expect(await buttonsOn(wide)).toEqual(['Go commit', 'Push', 'More'])
     await wide.unmount()
 
     const narrower = await bandOn($, surface, width(surface, 81))
 
-    expect(await wordsOn(narrower)).toBe(' Darrow  | 3 not committed \u00b7 2 to push')
+    expect(await wordsOn(narrower)).toBe('site-web | 3 not committed \u00b7 2 to push')
     expect(await buttonsOn(narrower)).toEqual(['Go commit', 'Push', 'More'])
     await narrower.redraw({
       hasSurvey: false,
@@ -2503,7 +2387,7 @@ describe('a narrow row', () => {
 
     const narrow = await bandOn($, surface, width(surface, 67))
 
-    expect(await wordsOn(narrow)).toBe(' Darrow  | 3 not committed \u00b7 2 to push')
+    expect(await wordsOn(narrow)).toBe('site-web | 3 not committed \u00b7 2 to push')
     expect(await buttonsOn(narrow)).toEqual(['Push', 'More'])
 
     // Go commit did not vanish: it leads More, still the main action while
@@ -2534,19 +2418,19 @@ describe('a narrow row', () => {
     const terminal = await bandOn($, 'terminal', 84)
 
     expect(await terminal.drawn()).toMatchObject({ type: 'Box', props: { paddingRight: 4 } })
-    expect(await wordsOn(terminal)).toBe(' Darrow  | 3 not committed \u00b7 2 to push')
+    expect(await wordsOn(terminal)).toBe('site-web | 3 not committed \u00b7 2 to push')
     await terminal.unmount()
 
     const roomy = await bandOn($, 'terminal', 86)
 
-    expect(await wordsOn(roomy)).toBe(' Darrow  | 3 files not committed \u00b7 2 commits to push')
+    expect(await wordsOn(roomy)).toBe('site-web | 3 files not committed \u00b7 2 commits to push')
     await roomy.unmount()
 
     // The desktop draws no such mark, and keeps no cells for one.
     const desktop = await bandOn($, 'desktop', 84)
 
     expect(await desktop.drawn()).toMatchObject({ type: 'Box', props: { paddingRight: 0 } })
-    expect(await wordsOn(desktop)).toBe(' Darrow  | 3 files not committed \u00b7 2 commits to push')
+    expect(await wordsOn(desktop)).toBe('site-web | 3 files not committed \u00b7 2 commits to push')
     await desktop.unmount()
 
     // A question and More keep clear of the mark too.
@@ -2569,7 +2453,7 @@ describe('a narrow row', () => {
     for (const columns of [200, 120, 100, 80, 60, 40]) {
       const ui = await bandOn($, surface, columns)
 
-      expect((await ui.find({ type: 'Text', text: ' Darrow ' }))?.text, `${columns} columns`).toBe(' Darrow ')
+      expect((await ui.find({ type: 'Text', text: 'site-web' }))?.text, `${columns} columns`).toBe('site-web')
       expect(await buttonsOn(ui)).toContain('Push')
       await ui.unmount()
     }
@@ -2579,40 +2463,37 @@ describe('a narrow row', () => {
     for (const columns of [20, 8, 1]) {
       const ui = await bandOn($, surface, columns)
 
-      expect((await ui.findAll({ type: 'Text' }))[0]?.text, `${columns} columns`).toBe(' D\u2026 ')
+      expect((await ui.findAll({ type: 'Text' }))[0]?.text, `${columns} columns`).toBe('s\u2026')
       expect(await buttonsOn(ui)).toContain('Push')
       await ui.unmount()
     }
   })
 
   // The name is 24 letters at the most. With Push and More beside it the
-  // label then needs 44 cells, more than a narrow window has.
-  onEachSurface('a long client name gives way before Push does', async ($, on, surface) => {
+  // label then needs 42 cells, more than a narrow window has.
+  onEachSurface('a long name gives way before Push does', async ($, on, surface) => {
     const kit = install(on, {
       changed: 3,
       ahead: 2,
-      env: {
-        CLAUDE_CONFIG_DIR: 'C:\\ClaudeConfigs\\Northwind-Traders-Europe-Holdings',
-        USERPROFILE: 'C:\\Users\\Dana',
-      },
+      origin: 'https://github.com/example/Northwind-Traders-Europe-Holdings.git',
     })
 
     await start($, kit)
 
     const wide = await bandOn($, surface, 160)
 
-    expect((await wide.findAll({ type: 'Text' }))[0]?.text).toBe(' Northwind-Traders-Europ\u2026 ')
+    expect((await wide.findAll({ type: 'Text' }))[0]?.text).toBe('Northwind-Traders-Europ\u{2026}')
     await wide.unmount()
 
-    for (const usable of [44, 43, 30, 26]) {
+    for (const usable of [42, 41, 30, 26]) {
       const ui = await bandOn($, surface, width(surface, usable))
       const label = (await ui.findAll({ type: 'Text' }))[0]?.text ?? ''
       const buttons = await buttonsOn(ui)
 
       expect(buttons, `${usable} cells`).toEqual(['Push', 'More'])
-      expect(label.startsWith(' N'), `${usable} cells`).toBe(true)
+      expect(label.startsWith('N'), `${usable} cells`).toBe(true)
 
-      // The label and the buttons fit the cells there are, and no words are
+      // The name and the buttons fit the cells there are, and no words are
       // squeezed in between them.
       expect(await ui.findAll({ type: 'Text' })).toHaveLength(1)
       expect(label.length + buttons.reduce((sum, text) => sum + 1 + text.length + 4, 0)).toBeLessThanOrEqual(usable)
@@ -2621,7 +2502,7 @@ describe('a narrow row', () => {
 
     const tight = await bandOn($, surface, width(surface, 30))
 
-    expect((await tight.findAll({ type: 'Text' }))[0]?.text).toBe(' Northwind\u2026 ')
+    expect((await tight.findAll({ type: 'Text' }))[0]?.text).toBe('Northwind-T\u{2026}')
     await tight.unmount()
   })
 
@@ -2645,7 +2526,7 @@ describe('a narrow row', () => {
 
     const ui = await bandOn($, surface, width(surface, 86))
 
-    expect(await wordsOn(ui)).toBe(' Darrow  | 3 not committed \u00b7 2 to push \u00b7 update ready')
+    expect(await wordsOn(ui)).toBe('site-web | 3 not committed \u00b7 2 to push \u00b7 update ready')
     expect(await buttonsOn(ui)).toEqual(['Push', 'More'])
     await ui.press({ key: 'more' })
     expect(await buttonsOn(ui)).toContain('Update plugin')
@@ -2676,12 +2557,12 @@ describe('a narrow row', () => {
 
     const enough = await bandOn($, surface, width(surface, 35))
 
-    expect(await wordsOn(enough)).toBe(' Darrow  | 3 not committed \u00b7 2 to push')
+    expect(await wordsOn(enough)).toBe('site-web | 3 not committed \u00b7 2 to push')
     await enough.unmount()
 
     const tooFew = await bandOn($, surface, width(surface, 34))
 
-    expect(await wordsOn(tooFew)).toBe(' Darrow ')
+    expect(await wordsOn(tooFew)).toBe('site-web')
     expect(await buttonsOn(tooFew)).toEqual(['Push', 'More'])
     await tooFew.unmount()
   })
@@ -2698,17 +2579,13 @@ describe('a new conversation in the same window', () => {
       await start($, kit)
 
       const ui = await bandOn($, 'terminal')
-      const listings = kit.world.listed.length
 
       kit.world.changed = 7
       await $.classic.SessionStart({ source, cwd: kit.world.folder })
       await kit.clock.settle()
 
       // No turn ended and the clock did not move: the hook alone did it.
-      expect(await wordsOn(ui)).toBe(' Darrow  | 7 files not committed \u00b7 2 commits to push')
-
-      // Whose window this is was read again too.
-      expect(kit.world.listed.length).toBe(listings + 1)
+      expect(await wordsOn(ui)).toBe('site-web | 7 files not committed \u00b7 2 commits to push')
       await ui.unmount()
     })
   }
@@ -2852,7 +2729,7 @@ describe('good manners', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('another mod |  Darrow  | 3 files not committed')
+    expect(await wordsOn(ui)).toBe('another mod | site-web | 3 files not committed')
     await ui.unmount()
   })
 
@@ -2865,7 +2742,7 @@ describe('good manners', () => {
 
     // The look came first and the start after it: the row still fills in.
     await open($, kit)
-    expect(await wordsOn(ui)).toBe(' Darrow  | all committed')
+    expect(await wordsOn(ui)).toBe('site-web | all committed')
     await ui.unmount()
   })
 
@@ -2894,7 +2771,8 @@ describe('good manners', () => {
     const ui = await bandOn($, 'terminal')
 
     await kit.clock.settle()
-    expect(await wordsOn(ui)).toBe(' Darrow ')
+    // With git silent the row still names the folder, and nothing else.
+    expect(await wordsOn(ui)).toBe('Site')
     await ui.unmount()
   })
 

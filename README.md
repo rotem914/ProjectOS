@@ -112,10 +112,8 @@ own window, in the desktop app and in the terminal, in every folder you open.
 
 **A row above the message box.**
 
-- Where the window is. In a window opened for a client, a colored label with
-  the client's name; up to eight clients each get a color of their own. In
-  your own window, the project's name in plain text: the repository's name,
-  or the folder's name outside a repository.
+- The project's name, in plain text: the repository's name, or the folder's
+  name outside a repository.
 - What is waiting, inside a git project: files not committed, commits to
   push, and a newer kit ready for this computer's copy.
 - Buttons. One for each kit shortcut the project's `CLAUDE.md` carries:

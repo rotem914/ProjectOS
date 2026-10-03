@@ -467,7 +467,7 @@ describe('the two parts in one session', () => {
       const words = (await ui.findAll({ type: 'Text' })).map(one => one.text)
       const buttons = (await ui.findAll({ type: 'Button' })).map(one => String(one.props.label))
 
-      expect(words).toEqual([' Darrow ', '2 files not committed'])
+      expect(words).toEqual(['site', '2 files not committed'])
       expect(buttons).toEqual(['Go commit'])
 
       // The reply check, in the same session: the dash is fixed as the reply
@@ -500,7 +500,7 @@ describe('the two parts in one session', () => {
 
       // The same end of turn sent the band for fresh values, and it still draws.
       expect(seen.statusRuns).toBe(passesBefore + 1)
-      expect((await ui.find({ type: 'Text', text: ' Darrow ' }))?.text).toBe(' Darrow ')
+      expect((await ui.find({ type: 'Text', text: 'site' }))?.text).toBe('site')
 
       // /clear puts a new conversation in the window with no session start.
       // Both parts hear of it: the old note goes, and the row is gathered
@@ -510,7 +510,7 @@ describe('the two parts in one session', () => {
       expect(seen.status).toEqual(['Reply: 4 lines, limit 3', undefined])
       expect(seen.statusRuns).toBe(passesBefore + 2)
       expect((await ui.findAll({ type: 'Text' })).map(one => one.text)).toEqual([
-        ' Darrow ',
+        'site',
         '2 files not committed',
       ])
       await ui.unmount()

@@ -1,7 +1,7 @@
 {
   "name": "projectos-mods",
-  "version": "0.1.1",
-  "description": "ProjectOS mods for every Claude Code window on this computer: a row above the message box that names the client or the project, shows what is waiting to be committed or pushed, and carries buttons for the kit's shortcuts, plus a live check that fixes long dashes and notes a reply that ran long. Early access and optional; see README.md, \"Mods\".",
+  "version": "0.1.2",
+  "description": "ProjectOS mods for every Claude Code window on this computer: a row above the message box that names the project, shows what is waiting to be committed or pushed, and carries buttons for the kit's shortcuts, plus a live check that fixes long dashes and notes a reply that ran long. Early access and optional; see README.md, \"Mods\".",
   "author": { "name": "Rotem Elimelech" },
   "types": "./types/Mod-state.d.ts"
 }

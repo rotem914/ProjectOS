@@ -1,17 +1,17 @@
 // Project-band.tsx: the band above the message box.
 //
-// WHAT IT SHOWS. One compact row with three things the owner asked for: where
-// this window is (a client's name in a small colored label, or the project's
-// name in plain text in a personal window), what is waiting in the folder the
-// session was opened in (files not committed, commits to push, an update for
-// the plugin copy of the kit), and the buttons that act on it.
+// WHAT IT SHOWS. One compact row with three things the owner asked for: which
+// project this window is in (the repository's name, in plain text), what is
+// waiting in the folder the session was opened in (files not committed,
+// commits to push, an update for the plugin copy of the kit), and the buttons
+// that act on it.
 //
 // WHY IT NEVER SLOWS A SESSION. Drawing reads values the session already
 // holds and does no git, file or network work. The values are gathered in the
-// background, and each part is written the moment it is known: whose window
-// this is as the session starts, the repository once the row has been looked
-// at, and the plugin copy from a pass of its own, so a network that does not
-// answer never holds the label or the counts back. A session nobody looks at
+// background, and each part is written the moment it is known: the project's
+// name first, then the repository, once the row has been looked at, and the
+// plugin copy from a pass of its own, so a network that does not answer
+// never holds the name or the counts back. A session nobody looks at
 // runs no git at all. Every git command has a time limit. A command that
 // fails or runs out of time leaves its part of the row empty: a count that
 // cannot be read is never guessed.
@@ -36,7 +36,6 @@ import type {
   ProjectBandBusy,
   ProjectBandFacts,
   ProjectBandOnline,
-  ProjectBandProfile,
   ProjectBandRepo,
 } from '../types/Mod-state'
 
@@ -117,20 +116,7 @@ const PLUGIN_CHECK_KEY = 'band.pluginCheck'
 // manager.
 const QUIET_GIT = { GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' }
 
-// The label colors. All are dark enough for white text. Red is left out
-// because it reads as an error.
-const LABEL_COLORS = [
-  '#2563eb',
-  '#7c3aed',
-  '#a21caf',
-  '#be185d',
-  '#c2410c',
-  '#a16207',
-  '#15803d',
-  '#0f766e',
-] as const
-const PERSONAL_COLOR = '#6b7280'
-const LABEL_TEXT_COLOR = '#ffffff'
+// The longest name the label shows.
 const LABEL_MAX = 24
 
 const SHA = /^[0-9a-f]{40,64}$/
@@ -222,6 +208,16 @@ function isSamePath(one: string, other: string): boolean {
   return plain(one) === plain(other)
 }
 
+// True when a folder is the other folder itself, or sits anywhere inside it.
+function isInside(folder: string, outer: string): boolean {
+  const plain = (path: string) =>
+    withoutTrailingSlash(path).replace(/\\/g, '/').toLowerCase()
+  const inner = plain(folder)
+  const around = plain(outer)
+
+  return inner === around || inner.startsWith(`${around}/`)
+}
+
 // The last name in a path: the folder itself, without what it sits in.
 function nameOf(path: string): string {
   return withoutTrailingSlash(path).split(/[\\/]/).pop() ?? ''
@@ -274,91 +270,12 @@ function repoNameIn(url: string): string | undefined {
   return nonEmpty(plain.split(/[\\/:]/).pop())
 }
 
-// What the label says. A window opened for a client names the client. A
-// personal window names the project instead, where it first said Personal
-// (owner, 2026-10-03), and says nothing until the project's name is known.
+// What the label says: the project's name, in plain text, and nothing until
+// it is known. The row first named the window's owner there, Personal or a
+// client, on a colored label. The owner asked for the repository's name
+// instead, with no box around it, in every window (2026-10-03).
 function labelOf(known: ProjectBandFacts): string {
-  return known.profile.isPersonal ? (known.project ?? '') : known.profile.name
-}
-
-// The cells the label takes. A client's name sits between two spaces on its
-// color; the project's name is plain text with nothing around it.
-function labelCells(profile: ProjectBandProfile, name: string): number {
-  if (name === '') {
-    return 0
-  }
-
-  return profile.isPersonal ? name.length : name.length + 2
-}
-
-function profileOf(
-  configDir: string | undefined,
-  home: string | undefined,
-): { name: string; isPersonal: boolean } {
-  const personal = { name: 'Personal', isPersonal: true }
-
-  if (configDir === undefined) {
-    return personal
-  }
-
-  // A profile pointed at the home folder's own .claude is the personal one,
-  // whatever set the variable.
-  if (home !== undefined && isSamePath(configDir, joinPath(home, '.claude'))) {
-    return personal
-  }
-
-  const name = nameOf(configDir)
-
-  if (name === '') {
-    return personal
-  }
-
-  return {
-    name: name.length > LABEL_MAX ? `${name.slice(0, LABEL_MAX - 1)}\u2026` : name,
-    isPersonal: false,
-  }
-}
-
-// The place in the color list a name lands on by itself: a small stable hash
-// (FNV-1a), the same in every window and every session.
-function ownColorOf(name: string): number {
-  let hash = 0x811c9dc5
-
-  for (const letter of name.toLowerCase()) {
-    hash ^= letter.codePointAt(0) ?? 0
-    hash = Math.imul(hash, 0x01000193) >>> 0
-  }
-
-  return hash % LABEL_COLORS.length
-}
-
-// The color of one client folder among the folders beside it. Every folder
-// would take the color of its own name, and two names often land on the same
-// one. So the folders are walked in name order, and one whose color is taken
-// moves on to the next free color: up to eight clients get eight colors, and
-// each window works out the same answer. Past eight, and for a folder that is
-// not in the list, the color of the name stands.
-function colorOf(folder: string, siblings: readonly string[]): string {
-  const wanted = folder.toLowerCase()
-  const taken = new Set<number>()
-
-  for (const sibling of [...new Set(siblings.map(name => name.toLowerCase()))].sort()) {
-    let place = ownColorOf(sibling)
-
-    if (taken.size < LABEL_COLORS.length) {
-      while (taken.has(place)) {
-        place = (place + 1) % LABEL_COLORS.length
-      }
-
-      taken.add(place)
-    }
-
-    if (sibling === wanted) {
-      return LABEL_COLORS[place] ?? PERSONAL_COLOR
-    }
-  }
-
-  return LABEL_COLORS[ownColorOf(wanted)] ?? PERSONAL_COLOR
+  return known.project ?? ''
 }
 
 // An address can carry a sign-in token (https://name:token@host/...). It must
@@ -1042,7 +959,6 @@ function planOf(
   const canPush = pushTarget(known.repo) !== null
   const canUpdate = isInRepo && known.pluginUpdate !== null
   const fullName = labelOf(known)
-  const labelWidth = labelCells(known.profile, fullName)
   const steps = [
     { isShort: false, hasCommit: hasMain, hasUpdate: canUpdate },
     { isShort: true, hasCommit: hasMain, hasUpdate: canUpdate },
@@ -1080,7 +996,7 @@ function planOf(
       moreHasUpdate,
     }
 
-    if (labelWidth + (words === '' ? 0 : 1 + words.length) + fixed <= columns) {
+    if (fullName.length + (words === '' ? 0 : 1 + words.length) + fixed <= columns) {
       return plan
     }
   }
@@ -1088,12 +1004,11 @@ function planOf(
   // The layout cuts the words to the cells that are left after the label,
   // the buttons and the one cell between. Too few to read anything in, and
   // the words are left out.
-  const wordsRoom = columns - labelWidth - fixed - 1
+  const wordsRoom = columns - fullName.length - fixed - 1
   const words = wordsRoom >= WORDS_MIN_CELLS ? plan.words : ''
-  // What the buttons leave is all the label can have: the name, and around a
-  // client's name its two spaces. Never less than one letter and the mark of
-  // a cut.
-  const room = Math.max(columns - fixed - (labelWidth - fullName.length), 2)
+  // What the buttons leave is all the name can have, and never less than one
+  // letter and the mark of a cut.
+  const room = Math.max(columns - fixed, 2)
 
   return {
     ...plan,
@@ -1118,22 +1033,10 @@ function keyOf(phrase: string): string {
   return phrase.toLowerCase().replace(/\s+/g, '-')
 }
 
-function drawLabel({ Box, Text }: Table, profile: ProjectBandProfile, name: string): RenderElement {
-  // The project's name stands as plain bold text. The colored label is kept
-  // for a client's name: it is what tells one client's window from another's.
-  if (profile.isPersonal) {
-    return (
-      <Box flexShrink={0}>
-        <Text bold>{name}</Text>
-      </Box>
-    )
-  }
-
+function drawLabel({ Box, Text }: Table, name: string): RenderElement {
   return (
     <Box flexShrink={0}>
-      <Text backgroundColor={profile.color} color={LABEL_TEXT_COLOR} bold>
-        {` ${name} `}
-      </Text>
+      <Text bold>{name}</Text>
     </Box>
   )
 }
@@ -1154,8 +1057,8 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
   const mainLook = files !== null && files > 0 ? { variant: 'primary' as const } : {}
   const hasButtons = plan.hasCommit || canPush || plan.hasUpdate || hasMore
 
-  // A personal window has nothing to say before git has named the project:
-  // no label, no counts, no buttons. Nothing is drawn then, not an empty row.
+  // The row has nothing to say before git has named the project: no name, no
+  // counts, no buttons. Nothing is drawn then, not an empty row.
   if (plan.name === '' && plan.words === '' && !hasButtons) {
     return null
   }
@@ -1164,7 +1067,7 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
   // text, and the label and the words should sit level with it.
   return (
     <Box flexDirection="row" alignItems="center" gap={1} paddingRight={look.reserve}>
-      {plan.name !== '' && drawLabel(table, known.profile, plan.name)}
+      {plan.name !== '' && drawLabel(table, plan.name)}
       {plan.words !== '' && (
         <Box flexShrink={1}>
           <Text wrap="truncate-end" dimColor={isCalm}>
@@ -1218,11 +1121,9 @@ function drawQuestion(
   acts: Acts,
 ): RenderElement {
   const { Box, Text, Button } = table
-  const profile = look.known.profile
   const name = labelOf(look.known)
   const isOneRow =
-    labelCells(profile, name) + 1 + said.length + buttonsWidth(['Cancel', yes.label]) <=
-    look.columns
+    name.length + 1 + said.length + buttonsWidth(['Cancel', yes.label]) <= look.columns
   const buttons = (
     <Box flexDirection="row" gap={1} flexShrink={0}>
       <Button key="cancel" label="Cancel" autoFocus onPress={() => acts.cancel()} />
@@ -1233,7 +1134,7 @@ function drawQuestion(
   if (isOneRow) {
     return (
       <Box flexDirection="row" alignItems="center" gap={1} paddingRight={look.reserve}>
-        {name !== '' && drawLabel(table, profile, name)}
+        {name !== '' && drawLabel(table, name)}
         <Box flexShrink={1}>
           <Text bold>{said}</Text>
         </Box>
@@ -1245,7 +1146,7 @@ function drawQuestion(
   return (
     <Box flexDirection="column" paddingRight={look.reserve}>
       <Box flexDirection="row" gap={1}>
-        {name !== '' && drawLabel(table, profile, name)}
+        {name !== '' && drawLabel(table, name)}
         <Box flexShrink={1}>
           <Text bold wrap="wrap">
             {said}
@@ -1277,7 +1178,7 @@ function drawMore(
       columnGap={1}
       paddingRight={look.reserve}
     >
-      {name !== '' && drawLabel(table, look.known.profile, name)}
+      {name !== '' && drawLabel(table, name)}
       {open.phrases.map(phrase => (
         <Button
           key={keyOf(phrase)}
@@ -1504,38 +1405,11 @@ async function folderOf($: Dollar): Promise<string> {
   return work.startFolder
 }
 
-// Whose window this is. Three reads of the environment and one look at the
-// folders beside the profile's own, for the color: no git, so it is written
-// first and the label is there before anything else is known.
-async function writeProfile($: Dollar): Promise<void> {
-  const configDir = nonEmpty(await $.env.get('CLAUDE_CONFIG_DIR'))
-  const named = profileOf(configDir, await homeOf($))
-  let color: string = PERSONAL_COLOR
-
-  if (!named.isPersonal && configDir !== undefined) {
-    let siblings: string[] = []
-
-    try {
-      const beside = parentOf(configDir)
-
-      if (beside !== null) {
-        siblings = (await $.fs.list(beside))
-          .filter(entry => entry.kind === 'dir')
-          .map(entry => entry.name)
-      }
-    } catch {
-      // A folder that cannot be listed: the name alone picks the color.
-    }
-
-    color = colorOf(nameOf(configDir), siblings)
-  }
-
-  const profile: ProjectBandProfile = { ...named, color }
-
+// The session's first value: nothing known yet. Every later write adds to
+// it, so it has to be there before the first pass.
+async function writeStart($: Dollar): Promise<void> {
   await writeFacts($, now =>
-    now === null
-      ? { profile, project: null, repo: null, shortcuts: [], pluginUpdate: null }
-      : { ...now, profile },
+    now === null ? { project: null, repo: null, shortcuts: [], pluginUpdate: null } : now,
   )
 }
 
@@ -1546,6 +1420,13 @@ async function writeProfile($: Dollar): Promise<void> {
 // the session was opened in.
 async function projectOf($: Dollar, top: string | null, folder: string): Promise<string | null> {
   if (top === null) {
+    // Git did not say where the folder is. Inside a repository whose name is
+    // already known that is a git that failed for a moment, and the row keeps
+    // the name it shows: a failure must not rename the project.
+    if (work.project !== null && folder !== '' && isInside(folder, work.project.top)) {
+      return work.project.name
+    }
+
     const name = nonEmpty(nameOf(folder))
 
     return name === undefined ? null : cutToLabel(name)
@@ -1610,8 +1491,8 @@ async function passRepo($: Dollar): Promise<void> {
     return
   }
 
-  // The project's name is written before the rest is asked: a personal
-  // window shows it as its label, and the label never waits for the counts.
+  // The project's name is written before the rest is asked: it is the row's
+  // label, and the label never waits for the counts.
   await writeFacts($, now => (now === null ? now : { ...now, project }))
 
   startPluginPass($)
@@ -1684,7 +1565,7 @@ async function refresh($: Dollar): Promise<void> {
       await syncBusy($)
 
       if ((await read($, facts)) === null) {
-        await writeProfile($)
+        await writeStart($)
       }
 
       await passRepo($)
@@ -2080,8 +1961,8 @@ async function cancelAsk($: Dollar, columns: number): Promise<void> {
 // push that was running in the old copy is gone with it, so a busy mark this
 // copy did not set, and any question left open, are cleared. A new
 // conversation starts with empty values instead, while a push of this copy
-// may still be on its way, so the mark is put back. Then the label, and a
-// pass when somebody is looking and the first look has not started one.
+// may still be on its way, so the mark is put back. Then the first value, and
+// a pass when somebody is looking and the first look has not started one.
 async function begin($: Dollar, isNewCode: boolean): Promise<void> {
   const passesBefore = work.passes
 
@@ -2091,7 +1972,7 @@ async function begin($: Dollar, isNewCode: boolean): Promise<void> {
     await closeAsk($)
   }
 
-  await writeProfile($)
+  await writeStart($)
 
   if (work.isSeen && work.passes === passesBefore) {
     await refresh($)
