@@ -74,6 +74,7 @@ Each one ships with its structure already in place and a worked example at the e
 | `README.md`, `LICENSE` | This page, and the license below. |
 | `.gitignore`, `.gitattributes` | This repository's own git settings. |
 | `.claude-plugin/plugin.json`, `hooks/hooks.json`, `hooks/dispatch.mjs` | The plugin the once-per-computer step below sets up. Its one dispatcher decides, project by project, whether the hooks apply. |
+| `mods/` | Two optional mods for Claude Code's own window, with their tests: a second plugin that rides in the same once-per-computer copy. See "Mods" below. |
 | `tests/` | The kit's test suites, one per guard or script, run from the kit root before a change to any of them ships. |
 | `scripts/Multiple-claude-accounts.ps1` | Windows only, and separate from the install. Gives each client their own Claude Desktop, kept apart from your personal one: run it once, then double-click "New Claude client" on your desktop for each new client. |
 
@@ -103,6 +104,85 @@ updates this computer's copy only; each project's own copy is updated with
 Skip this and the install still works: the assistant then writes the hooks into
 each project's own settings, and asks you for one command whenever its
 environment refuses that write.
+
+## Mods
+
+Optional, and early access. Two small additions that draw inside Claude Code's
+own window, in the desktop app and in the terminal, in every folder you open.
+
+**A row above the message box.**
+
+- A colored label that says whose window this is: the client's name in a
+  window opened for a client, `Personal` otherwise. Up to eight clients each
+  get a color of their own.
+- What is waiting, inside a git project: files not committed, commits to
+  push, and a newer kit ready for this computer's copy.
+- Buttons. One for each kit shortcut the project's `CLAUDE.md` carries:
+  `Go commit` in the row, the rest behind `More`. A press sends the phrase as
+  your own message. `Push` and `Update plugin` show only while there is
+  something to push or to update, and both ask in the row before they do
+  anything.
+- No `Push` in a project with a push step of its own, such as push checks or
+  large files kept in Git LFS. Claude Code runs a mod's git without that
+  step, so a push from the row would skip it. The row says
+  `to push from your git app` there instead.
+
+**A live check on replies**, only in a project that carries
+`project-os/Conversations.md`. A long dash is replaced as the reply is saved,
+where that file asks for it. A reply that ran past the limits the file states
+gets one quiet status line under the message box. The reply itself is never
+cut and never held back.
+
+Claude Code puts the plugin's name on everything a mod shows. The terminal
+draws that status line as a warning sign and then
+`projectos-mods: Reply: 5 lines, limit 3`, and the short notice after a push
+and the message a button sends carry the same name.
+
+The mods ride in the copy the once-per-computer step made, in its `mods/`
+folder, so a newer kit brings newer mods. This updates that copy, on every
+system:
+
+```
+git -C "$HOME/.claude/skills/projectos" pull
+```
+
+A copy made before the mods existed needs that update first. One more step,
+once, then switches the mods on in every way of opening Claude. In Windows
+PowerShell:
+
+```
+$mods = "$HOME\.claude\skills\projectos\mods"; if (-not (Test-Path -LiteralPath $mods)) { "The mods folder is not on this computer yet: $mods. Do the Once per computer step, or run the update command above, then run this again." } else { $dirs = @("$([Environment]::GetEnvironmentVariable('CLAUDE_CODE_PLUGIN_DIRS', 'User'))" -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ }); if ($dirs -notcontains $mods) { [Environment]::SetEnvironmentVariable('CLAUDE_CODE_PLUGIN_DIRS', (($dirs + $mods) -join ';'), 'User') }; "The mods are switched on. Quit Claude completely and open it again." }
+```
+
+The command answers in words: the mods are switched on, or their folder is
+not on this computer yet and what to do about it. It adds the folder to your
+own `CLAUDE_CODE_PLUGIN_DIRS` setting, keeps whatever was already in it, and
+changes nothing when run a second time. Then quit Claude completely and open
+it again. On Windows it keeps running beside the clock after its window
+closes, so quit it there too; a terminal needs a new window.
+
+To switch the mods off again, in Windows PowerShell:
+
+```
+$mods = "$HOME\.claude\skills\projectos\mods"; $dirs = @("$([Environment]::GetEnvironmentVariable('CLAUDE_CODE_PLUGIN_DIRS', 'User'))" -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ -and $_ -ne $mods }); [Environment]::SetEnvironmentVariable('CLAUDE_CODE_PLUGIN_DIRS', $(if ($dirs) { $dirs -join ';' } else { $null }), 'User'); "The mods are switched off. Quit Claude completely and open it again."
+```
+
+It takes the folder out of the same setting and leaves the rest of it as it
+was.
+
+On macOS or Linux, name the same folder in the `env` block of
+`~/.claude/settings.json` instead:
+`"CLAUDE_CODE_PLUGIN_DIRS": "~/.claude/skills/projectos/mods"`. Take that
+line out again to switch the mods off.
+
+A window opened for a client runs the mods from that same personal copy. Its
+`Update plugin` button updates the client's own copy of the kit, the one that
+client's hooks read; the update command above is what brings newer mods.
+
+Early access means Claude Code may change this kind of plugin, or switch it
+off, in any release. The two mods are one plugin, so when a newer Claude Code
+refuses something in either of them, both stop together. The row and the
+status line then stop showing, and the rest of the kit works as before.
 
 ## Install
 
