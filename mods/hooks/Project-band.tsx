@@ -1230,13 +1230,18 @@ function keyOf(phrase: string): string {
   return phrase.toLowerCase().replace(/\s+/g, '-')
 }
 
+// The name's color is the owner's choice (2026-10-04), a quiet grey.
+const NAME_COLOR = '#92949F'
+
 function drawLabel({ Box, Text, Svg }: Table, name: string): RenderElement {
   return (
     <Box flexDirection="row" alignItems="center" gap={1} flexShrink={0}>
       {Svg !== undefined && (
         <Svg source={MARK_SVG} alt={MARK_ALT} width={MARK_PIXELS} height={MARK_PIXELS} />
       )}
-      <Text bold>{name}</Text>
+      <Text bold color={NAME_COLOR}>
+        {name}
+      </Text>
     </Box>
   )
 }
