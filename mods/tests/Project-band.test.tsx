@@ -2745,13 +2745,13 @@ describe('the plugin copy of the kit', () => {
     await ui.unmount()
   })
 
-  test('asks online at most once per thirty minutes', async ($, on) => {
+  test('asks online at most once per five minutes', async ($, on) => {
     const kit = install(on)
 
     await start($, kit)
     await endTurn($, kit)
     await endTurn($, kit)
-    await kit.clock.advance(29 * 60_000)
+    await kit.clock.advance(4 * 60_000)
     expect(gitRuns(kit.world, 'ls-remote')).toHaveLength(1)
 
     await kit.clock.advance(2 * 60_000)
@@ -2762,7 +2762,7 @@ describe('the plugin copy of the kit', () => {
     const dir = 'C:\\ClaudeConfigs\\Darrow\\skills\\projectos'
     const kit = install(on, {
       stored: {
-        'band.pluginCheck': { dir, checkedAt: startOfTime + 3_600_000 - 5 * 60_000, remoteHead: ONLINE_HEAD },
+        'band.pluginCheck': { dir, checkedAt: startOfTime + 3_600_000 - 2 * 60_000, remoteHead: ONLINE_HEAD },
       },
     })
 

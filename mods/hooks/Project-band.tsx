@@ -104,7 +104,9 @@ const BACKUP_BUTTON_DAYS = 30
 const DAY_MS = 24 * 60 * 60_000
 
 const REFRESH_MS = 60_000
-const PLUGIN_CHECK_MS = 30 * 60_000
+// Five minutes, where it was thirty: after the owner pushes the kit he should
+// not wait half an hour for the row to say so (2026-10-04).
+const PLUGIN_CHECK_MS = 5 * 60_000
 // The kit's own listing of heavy files walks the whole project, so it runs
 // in a pass of its own, this far apart, and is given this long.
 const HEAVY_CHECK_MS = 30 * 60_000
@@ -149,7 +151,7 @@ const WORDS_MIN_CELLS = 8
 
 // Where the answer of the last online check of the plugin copy is kept. The
 // store outlives the session, so every window of one profile shares the one
-// check per half hour.
+// check per five minutes.
 const PLUGIN_CHECK_KEY = 'band.pluginCheck'
 
 // A missing sign-in must fail instead of waiting for an answer nobody can
@@ -972,10 +974,10 @@ async function shortcutsOf($: Dollar, folders: readonly string[]): Promise<strin
   return SHORTCUTS.filter(phrase => found.has(phrase))
 }
 
-// What origin's main points at, asked online at most once per half hour. The
+// What origin's main points at, asked online at most once per five minutes. The
 // claim is written before the question goes out, so several windows that
 // refresh together send one question between them, and a network that does
-// not answer is not asked again for half an hour either.
+// not answer is not asked again for five minutes either.
 async function remoteHeadOf($: Dollar, dir: string): Promise<string | null> {
   const now = await $.clock.now()
   const kept = asPluginCheck(await $.store.get(PLUGIN_CHECK_KEY))
