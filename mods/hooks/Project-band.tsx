@@ -124,7 +124,27 @@ const SHA = /^[0-9a-f]{40,64}$/
 type Dollar = EngineInterface
 
 // Every surface has these three elements, so one drawing serves them all.
-type Table = Pick<Elements['mobile'], 'Box' | 'Text' | 'Button'>
+// The mark before the name is a drawing, which the terminal cannot show: it
+// is drawn only where the surface offers the element.
+type Table = Pick<Elements['mobile'], 'Box' | 'Text' | 'Button'> & {
+  Svg?: Elements['desktop']['Svg']
+}
+
+// The Rotem E mark: the light triangle on its blue tile, so it reads on a
+// dark window and on a light one. One path, no nesting. The size, the tile's
+// corners, the triangle's color and its 16% of air at each side are the
+// owner's, set on a mock (2026-10-03).
+const MARK_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">' +
+  '<rect width="64" height="64" rx="13" fill="#2436C0"/>' +
+  '<path fill="#E6E6E6" fill-rule="evenodd" ' +
+  'transform="translate(10.24 17.01) scale(0.888) translate(-62 -42)" ' +
+  'd="M86.5,58.7a3.465,3.465,0,1,1,3.548-3.464A3.507,3.507,0,0,1,86.5,58.7ZM108.866,42H64.132a2.069,2.069,0,0,0-1.816,3.09L63.022,46.1l5.76,0.085L68.1,46.1l36.987,0.088L89.321,68.39,86.5,72.415,71.315,50.372H66.248l13.808,20.1L84.5,76.817a1.965,1.965,0,0,0,.366.491,2.271,2.271,0,0,0,3.28-.014,1.953,1.953,0,0,0,.348-0.469L106.056,51.7l4.627-6.607A2.07,2.07,0,0,0,108.866,42Z"/>' +
+  '</svg>'
+const MARK_ALT = 'Rotem E'
+// The mark's side on screen, and the cells of the row it and its gap take.
+const MARK_PIXELS = 25
+const MARK_CELLS = 4
 
 type GitAnswer = {
   /** The exit code; null when git could not be run or was stopped. */
@@ -1030,9 +1050,12 @@ function keyOf(phrase: string): string {
   return phrase.toLowerCase().replace(/\s+/g, '-')
 }
 
-function drawLabel({ Box, Text }: Table, name: string): RenderElement {
+function drawLabel({ Box, Text, Svg }: Table, name: string): RenderElement {
   return (
-    <Box flexShrink={0}>
+    <Box flexDirection="row" alignItems="center" gap={1} flexShrink={0}>
+      {Svg !== undefined && (
+        <Svg source={MARK_SVG} alt={MARK_ALT} width={MARK_PIXELS} height={MARK_PIXELS} />
+      )}
       <Text bold>{name}</Text>
     </Box>
   )
@@ -2051,7 +2074,17 @@ export function registerProjectBand(on: On): void {
 
         if (known !== null) {
           const reserve = e.surface === 'terminal' ? TERMINAL_MARK_CELLS : 0
-          const columns = (e.props.bodyColumns > 0 ? e.props.bodyColumns : 1_000) - reserve
+          const resolved: Table = $.ui.resolve(e)
+          // The terminal has no drawing to show, whatever its table holds.
+          const table: Table =
+            e.surface === 'terminal'
+              ? { Box: resolved.Box, Text: resolved.Text, Button: resolved.Button }
+              : resolved
+          // Where the mark is drawn, the row is planned without its cells.
+          const columns =
+            (e.props.bodyColumns > 0 ? e.props.bodyColumns : 1_000) -
+            reserve -
+            (table.Svg !== undefined ? MARK_CELLS : 0)
           const look: Look = {
             known,
             state: await read($, busy),
@@ -2063,7 +2096,7 @@ export function registerProjectBand(on: On): void {
           // The presses that ask are handed back to the engine, which waits
           // for them. The two that push or pull run on in the background:
           // they can take minutes, and nothing should wait that long.
-          row = drawBand($.ui.resolve(e), look, {
+          row = drawBand(table, look, {
             shortcut: phrase =>
               submitShortcut($, phrase, columns).catch(error =>
                 note($, 'a shortcut press failed', error),

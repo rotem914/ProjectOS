@@ -21,6 +21,8 @@ const SURFACES = ['terminal', 'desktop'] as const
 
 // The cells the terminal keeps at the end of the band for its collapse mark.
 const MARK = 4
+// The cells the desktop row gives the drawing before the name, and its gap.
+const MARK_CELLS = 4
 
 const KIT_HEADINGS = [
   '# Project rules',
@@ -500,9 +502,10 @@ function gitRuns(world: World, command: string): GitCall[] {
 }
 
 // The band's width that leaves `usable` cells for the row: the terminal keeps
-// a few cells at the end for its own mark, the desktop none.
+// a few cells at the end for its own mark, the desktop a few at the start
+// for the drawing before the name.
 function width(surface: Surface, usable: number): number {
-  return usable + (surface === 'terminal' ? MARK : 0)
+  return usable + (surface === 'terminal' ? MARK : MARK_CELLS)
 }
 
 // One test per surface, with the surface in its name.
@@ -2425,8 +2428,9 @@ describe('a narrow row', () => {
     expect(await wordsOn(roomy)).toBe('site-web | 3 to commit \u00b7 2 commits to push')
     await roomy.unmount()
 
-    // The desktop draws no such mark, and keeps no cells for one.
-    const desktop = await bandOn($, 'desktop', 74)
+    // The desktop draws no such mark at the end. It keeps cells at the start
+    // instead, for the drawing before the name.
+    const desktop = await bandOn($, 'desktop', 76)
 
     expect(await desktop.drawn()).toMatchObject({ type: 'Box', props: { paddingRight: 0 } })
     expect(await wordsOn(desktop)).toBe('site-web | 3 to commit \u00b7 2 commits to push')
@@ -2441,6 +2445,27 @@ describe('a narrow row', () => {
     await asking.press({ key: 'more' })
     expect(await asking.drawn()).toMatchObject({ type: 'Box', props: { paddingRight: 4 } })
     await asking.unmount()
+  })
+
+  // The drawing before the name is for a surface that can show one.
+  test('the mark is drawn before the name on the desktop and not on the terminal', async ($, on) => {
+    const kit = install(on, { changed: 1 })
+
+    await start($, kit)
+
+    const desktop = await bandOn($, 'desktop')
+    const marks = await desktop.findAll({ type: 'Svg' })
+
+    expect(marks).toHaveLength(1)
+    expect(marks[0]?.props).toMatchObject({ alt: 'Rotem E', width: 25, height: 25 })
+    await desktop.press({ key: 'more' })
+    expect(await desktop.findAll({ type: 'Svg' })).toHaveLength(1)
+    await desktop.unmount()
+
+    const terminal = await bandOn($, 'terminal')
+
+    expect(await terminal.findAll({ type: 'Svg' })).toHaveLength(0)
+    await terminal.unmount()
   })
 
   onEachSurface('keeps the label and Push at any width', async ($, on, surface) => {
