@@ -1,9 +1,9 @@
 // Register-mods.tsx: the one module Claude Code loads for this plugin.
 //
 // WHAT IT DOES. It switches on the plugin's parts, one after the other: the
-// band above the message box and the live reply check. Each part lives in
-// its own file beside this one, registers its own hooks and keeps its own
-// rules. This file adds no behavior of its own.
+// band above the message box and the live fix for long dashes. Each part
+// lives in its own file beside this one, registers its own hooks and keeps
+// its own rules. This file adds no behavior of its own.
 //
 // WHAT THE GUARDS DO, AND WHAT THEY CANNOT. Each part registers inside a
 // guard of its own. A part that throws while it registers is left out, and
@@ -12,8 +12,8 @@
 // finds something it does not accept, an event a newer Claude Code no longer
 // has for one, it refuses the whole module: `register` never runs, no guard
 // gets its turn, and both parts are off together. A plugin has one hooks
-// module, so the two parts cannot be loaded apart either. The row and the
-// status line then stop showing, and the session itself is untouched.
+// module, so the two parts cannot be loaded apart either. The row then stops
+// showing, long dashes stay as written, and the session itself is untouched.
 //
 // WHY A PART LEFT OUT IS WRITTEN DOWN. A guard that swallows a failure also
 // hides its reason. So when a part is left out, one line about it goes to the

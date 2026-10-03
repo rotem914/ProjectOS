@@ -1,16 +1,16 @@
-// Reply-check.test.ts - tests for the live reply check, hooks/Reply-check.ts.
+// Reply-check.test.ts - tests for the live fix of long dashes, hooks/Reply-check.ts.
 //
 // Run with the engine itself, from anywhere:
 //
 //   claude plugin test <the plugin folder>
 //
-// Two layers. The text work (the dash fix, reading the rules, the counting,
-// the note) is pure, so the first half calls it directly, one rule at a time.
-// The second half drives the hooks through the engine: each test stands in
-// for the world beneath the plugin (the disk, the clock, the status line, the
-// conversation's store) and raises the events a session raises, once as the
-// terminal and once as the desktop app, since the check must not depend on
-// where the session draws.
+// Two layers. The text work (the dash fix and reading the rules) is pure, so
+// the first half calls it directly, one rule at a time. The second half
+// drives the hooks through the engine: each test stands in for the world
+// beneath the plugin (the disk, the clock, the status line that must stay
+// silent, the conversation's store) and raises the events a session raises,
+// once as the terminal and once as the desktop app, since the fix must not
+// depend on where the session draws.
 //
 // Every long dash and every Hebrew letter the tests need as data is written
 // as an escape, so this file obeys the rule it tests and no editor or shell
@@ -19,39 +19,17 @@ import type { Args, Frozen, On, RenderSurface } from 'claude-code'
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import {
-  countReply,
-  fixLongDashes,
-  fixRowDashes,
-  foldersUp,
-  isReportAsk,
-  readReplyRules,
-  replyNote,
-} from '../hooks/Reply-check'
-import type { ReplyLimits, ReplyRules } from '../hooks/Reply-check'
+import { fixLongDashes, fixRowDashes, foldersUp, readReplyRules } from '../hooks/Reply-check'
 
 const EM = '\u{2014}'
 const EN = '\u{2013}'
-// The middle dot the note puts between two problems.
-const DOT = '\xb7'
 // Hebrew for "hello" and "world": text that runs right to left beside a dash.
 const SHALOM = '\u{5e9}\u{5dc}\u{5d5}\u{5dd}'
 const OLAM = '\u{5e2}\u{5d5}\u{5dc}\u{5dd}'
-// Hebrew for "report" in its three spellings (plain, with the Hebrew quote
-// mark, with a typed double quote), then "full" and "daily".
-const DOCH = '\u{5d3}\u{5d5}\u{5d7}'
-const DOCH_MARKED = '\u{5d3}\u{5d5}\u{5f4}\u{5d7}'
-const DOCH_QUOTED = '\u{5d3}\u{5d5}"\u{5d7}'
-const MALE = '\u{5de}\u{5dc}\u{5d0}'
-const YOMI = '\u{5d9}\u{5d5}\u{5de}\u{5d9}'
 
 /** So many short prose lines, one sentence each. */
 const lines = (count: number): string =>
   Array.from({ length: count }, (_, at) => `Line ${at + 1} is short.`).join('\n')
-
-/** One line of so many words, with no capital and no full stop. */
-const words = (count: number): string =>
-  Array.from({ length: count }, (_, at) => `w${at + 1}`).join(' ')
 
 // ---------------------------------------------------------------------------
 // The dash fix, called directly
@@ -415,145 +393,30 @@ const KIT_RULES = [
   '### 1 Cut hard',
   '',
   'Short by default: 3 prose lines, each at most 16 WORDS.',
-  '16 is a ceiling, not a target: use the fewest words that still explain.',
-  'The ceiling holds for EVERY reply, work behind it or not.',
-  'A findings list (rule 10) has no ceiling: every item in full.',
-  'Otherwise it lifts ONLY when the owner asks for a `full report`: 16 prose lines,',
-  'and twice more for the two messages `Installation.md` defines.',
   '',
   '### 18 Never a long dash',
   '',
   `Never write a dash longer than a hyphen: not \`${EM}\`, not \`${EN}\`, not a \`--\` pair.`,
 ].join('\n')
 
-// The same rules as one project reworded them, with its own numbers.
-const PROJECT_RULES = [
-  'The prose budget dropped to 3 lines.',
-  'Short by default: 3 prose lines, each at most 14 WORDS.',
-  'A findings list (rule 10) has no ceiling.',
-  'Otherwise it lifts ONLY on an owner report phrase, to 20 prose lines:',
-  `Never write a dash longer than a hyphen: not \`${EM}\`, not \`${EN}\`, not a \`--\` pair.`,
-].join('\n')
-
 describe('reading the rules', () => {
-  test('the kit wording gives the kit numbers', () => {
-    expect(readReplyRules(KIT_RULES)).toEqual({
-      hasDashRule: true,
-      limits: { lines: 3, words: 16, reportLines: 16, hasOpenFindings: true },
-    })
+  test('the kit wording carries the dash rule', () => {
+    expect(readReplyRules(KIT_RULES)).toEqual({ hasDashRule: true })
   })
 
-  test('a project that reworded them is read by its own numbers', () => {
-    expect(readReplyRules(PROJECT_RULES)).toEqual({
-      hasDashRule: true,
-      limits: { lines: 3, words: 14, reportLines: 20, hasOpenFindings: true },
-    })
-  })
-
-  test('a file without the sentences asks for nothing', () => {
-    const rules = readReplyRules('# Reply rules\n\nBe kind. Keep it short, 3 lines or so.')
-    expect(rules.hasDashRule).toBe(false)
-    expect(rules.limits).toBeUndefined()
-    expect(readReplyRules('').limits).toBeUndefined()
-  })
-
-  test('each sentence is read on its own', () => {
-    const onlyDashes = readReplyRules('Never write a dash longer than a hyphen.')
-    expect(onlyDashes.hasDashRule).toBe(true)
-    expect(onlyDashes.limits).toBeUndefined()
-
-    const onlyLimits = readReplyRules('Short by default: 4 prose lines, each at most 12 WORDS.')
-    expect(onlyLimits).toEqual({
+  test('a file without the sentence asks for nothing', () => {
+    expect(readReplyRules('# Reply rules\n\nBe kind. Keep it short, 3 lines or so.')).toEqual({
       hasDashRule: false,
-      limits: { lines: 4, words: 12, reportLines: undefined, hasOpenFindings: false },
     })
-    expect(onlyLimits.limits?.reportLines).toBeUndefined()
-  })
-
-  test('the report ceiling is the next count of prose lines after the sentence', () => {
-    const before = readReplyRules(
-      'A report runs to 30 prose lines.\nShort by default: 3 prose lines, each at most 14 WORDS.',
-    )
-    expect(before.limits?.reportLines).toBeUndefined()
-
-    const after = readReplyRules(
-      [
-        'A report runs to 30 prose lines.',
-        'Short by default: 3 prose lines, each at most 14 WORDS.',
-        'A report: 9 prose lines.',
-        'Never 99 prose lines.',
-      ].join('\n'),
-    )
-    expect(after.limits?.reportLines).toBe(9)
+    expect(readReplyRules('')).toEqual({ hasDashRule: false })
+    // The limits a file states are no longer this part's business.
+    expect(readReplyRules('Short by default: 3 prose lines, each at most 14 WORDS.')).toEqual({
+      hasDashRule: false,
+    })
   })
 
   test('a sentence wrapped over two lines or in another case is still read', () => {
-    const wrapped = readReplyRules(
-      [
-        'short by default: 5 prose',
-        'lines, each at most 9 words.',
-        'A findings',
-        'list has no ceiling.',
-        'longer than',
-        'a hyphen',
-      ].join('\n'),
-    )
-    expect(wrapped).toEqual({
-      hasDashRule: true,
-      limits: { lines: 5, words: 9, reportLines: undefined, hasOpenFindings: true },
-    })
-  })
-
-  test('an older copy of the rules, with a dash after "default", is read the same', () => {
-    const older = [
-      `Short by default ${EM} 3 prose lines, each at most 16 WORDS.`,
-      'It lifts ONLY when the owner asks for a `full report`: 16 prose lines.',
-    ].join('\n')
-    expect(readReplyRules(older)).toEqual({
-      hasDashRule: false,
-      limits: { lines: 3, words: 16, reportLines: 16, hasOpenFindings: false },
-    })
-    expect(readReplyRules('Short by default, 3 prose lines, each at most 16 WORDS.').limits?.lines).toBe(3)
-    // Other words between "default" and the number are another sentence.
-    expect(readReplyRules('Short by default it was 3 prose lines, each at most 16 WORDS.').limits).toBeUndefined()
-  })
-
-  test('zero is not a limit', () => {
-    expect(readReplyRules('Short by default: 0 prose lines, each at most 14 WORDS.').limits).toBeUndefined()
-    expect(readReplyRules('Short by default: 3 prose lines, each at most 0 WORDS.').limits).toBeUndefined()
-  })
-})
-
-describe('asking for a report', () => {
-  test('full report and daily report, in any case and either language', () => {
-    const asks = [
-      'full report',
-      'Please give me a Full Report on this.',
-      'FULL REPORT',
-      'full-report',
-      'full_report',
-      'Daily report 2026-10-01',
-      'daily report (2026-10-01-2026-10-03)',
-      `${DOCH} ${MALE}`,
-      `${DOCH_MARKED} ${MALE}`,
-      `${DOCH_QUOTED} ${MALE}`,
-      `${DOCH_MARKED} ${YOMI}`,
-      `${SHALOM}, ${DOCH}${MALE} ${OLAM}`,
-    ]
-    for (const ask of asks) expect(isReportAsk(ask), ask).toBe(true)
-  })
-
-  test('any other prompt is not a report', () => {
-    const others = [
-      '',
-      'report',
-      'a full and honest report',
-      'it was fully reported',
-      'daily notes',
-      DOCH,
-      `${SHALOM} ${OLAM}`,
-    ]
-    for (const other of others) expect(isReportAsk(other), other).toBe(false)
+    expect(readReplyRules('never LONGER than\na hyphen')).toEqual({ hasDashRule: true })
   })
 })
 
@@ -591,231 +454,6 @@ describe('the folders above', () => {
     const deep = `/${Array.from({ length: 200 }, (_, at) => `d${at}`).join('/')}`
     expect(foldersUp(deep)).toHaveLength(40)
     expect(foldersUp(deep)[0]).toBe(deep)
-  })
-})
-
-// ---------------------------------------------------------------------------
-// The counting and the note, called directly
-// ---------------------------------------------------------------------------
-
-/** Rules with the usual numbers, any of them replaced. */
-const rulesWith = (limits: Partial<ReplyLimits> = {}, hasDashRule = true): ReplyRules => ({
-  hasDashRule,
-  limits: { lines: 3, words: 14, reportLines: 16, hasOpenFindings: true, ...limits },
-})
-
-const CLEAN = { wordyLines: 0, packedLines: 0, doubleHyphens: 0 }
-
-const FINDINGS = [
-  '----',
-  '**1 Status column is unclear**',
-  '',
-  'Problem:',
-  'The column shows the stage, not the item.',
-  '',
-  'Proposal:',
-  'Pick one meaning and label it.',
-  '',
-  'In practice:',
-  'Everyone reads the column the same way.',
-  '',
-  'Your workflow:',
-  'No change for you.',
-].join('\n')
-
-describe('the counting', () => {
-  test('prose lines leave out fenced blocks, headings, dividers and blank lines', () => {
-    const scaffold = [
-      '----',
-      '# What changed',
-      '',
-      'The first line.',
-      'The second line.',
-      '```',
-      'code line one',
-      'code line two',
-      '```',
-      '~~~',
-      'more code',
-      'and more',
-      '~~~',
-      '---',
-      '## A smaller heading',
-      '   ',
-      'The third line.',
-    ].join('\n')
-
-    expect(countReply(scaffold, rulesWith(), false)).toEqual(CLEAN)
-    expect(countReply(`${scaffold}\nThe fourth line.`, rulesWith(), false)).toEqual({
-      ...CLEAN,
-      tooLong: { lines: 4, limit: 3 },
-    })
-    // The same reply with Windows line breaks counts the same.
-    expect(countReply(`${scaffold}\nThe fourth line.`.replace(/\n/g, '\r\n'), rulesWith(), false)).toEqual({
-      ...CLEAN,
-      tooLong: { lines: 4, limit: 3 },
-    })
-  })
-
-  test('a table row and a list item are prose lines like any other', () => {
-    const table = '| a | b |\n|---|---|\n| c | d |\n- one more'
-    expect(countReply(table, rulesWith(), false).tooLong).toEqual({ lines: 4, limit: 3 })
-  })
-
-  test('an unclosed fence hides everything after it', () => {
-    const reply = `One line.\n\`\`\`\n${lines(9)}`
-    expect(countReply(reply, rulesWith(), false)).toEqual(CLEAN)
-  })
-
-  test('a line past the word cap is counted, and the cap is the project number', () => {
-    expect(countReply(words(14), rulesWith(), false)).toEqual(CLEAN)
-    expect(countReply(words(15), rulesWith(), false)).toEqual({ ...CLEAN, wordyLines: 1 })
-    expect(countReply(words(15), rulesWith({ words: 16 }), false)).toEqual(CLEAN)
-    expect(countReply(`${words(15)}\n${words(3)}\n${words(20)}`, rulesWith(), false).wordyLines).toBe(2)
-  })
-
-  test('inline code is one word, and a mark with no letter is none', () => {
-    const coded = `${words(12)} \`npm run build and then four more words\``
-    expect(countReply(coded, rulesWith(), false)).toEqual(CLEAN)
-    expect(countReply(`${words(14)} | -> + ...`, rulesWith(), false)).toEqual(CLEAN)
-    // Hebrew words are words.
-    expect(countReply(`${words(13)} ${SHALOM} ${OLAM}`, rulesWith(), false).wordyLines).toBe(1)
-  })
-
-  test('headings and fenced lines are never too wordy', () => {
-    const reply = `# ${words(30)}\n\`\`\`\n${words(30)}\n\`\`\`\n~~~\n${words(30)}\n~~~`
-    expect(countReply(reply, rulesWith(), false)).toEqual(CLEAN)
-  })
-
-  test('a line packs two sentences when a full stop is followed by another sentence', () => {
-    const expectPacked = (reply: string, count: number): void => {
-      expect(countReply(reply, rulesWith(), false).packedLines, reply).toBe(count)
-    }
-
-    expectPacked('It works. Next comes the test.', 1)
-    expectPacked('Really? Yes it is.', 1)
-    expectPacked('Done! Now the rest.', 1)
-    expectPacked('It is version 2. Then came 3.', 1)
-    expectPacked('He said "stop". Then he left.', 1)
-    expectPacked('(An aside.) Then the point.', 0)
-    expectPacked('(An aside). Then the point.', 1)
-    expectPacked('Read `a.b`. Next the other file.', 1)
-
-    expectPacked('It works.', 0)
-    expectPacked('It works, and the test passes.', 0)
-    expectPacked('lowercase follows. like this', 0)
-    expectPacked('See e.g. The docs for more.', 0)
-    expectPacked('Ask Dr. Smith first.', 0)
-    expectPacked('It ships at 9 a.m. Monday.', 0)
-    expectPacked('Run `one. Two` as written', 0)
-    expectPacked('```\nOne. Two.\n```', 0)
-    expectPacked('~~~\nOne. Two.\n~~~', 0)
-
-    expectPacked('One. Two.\nThree. Four.\nFive only.', 2)
-  })
-
-  test('a findings list has no line ceiling where the project says so', () => {
-    expect(countReply(FINDINGS, rulesWith(), false)).toEqual(CLEAN)
-    // Where the project does not say so, the ceiling holds.
-    expect(countReply(FINDINGS, rulesWith({ hasOpenFindings: false }), false)).toEqual({
-      ...CLEAN,
-      tooLong: { lines: 9, limit: 3 },
-    })
-  })
-
-  test('the word cap still holds inside a findings list', () => {
-    const wordy = FINDINGS.replace('Pick one meaning and label it.', words(15))
-    expect(countReply(wordy, rulesWith(), false)).toEqual({ ...CLEAN, wordyLines: 1 })
-  })
-
-  test('the two labels must each stand alone on a line, outside a fence', () => {
-    const tooLong = { lines: 5, limit: 3 }
-    const inline = 'Problem: the column is unclear.\nProposal:\nOne.\nTwo.\nThree.'
-    expect(countReply(inline, rulesWith(), false).tooLong).toEqual(tooLong)
-
-    const onlyOne = 'Problem:\nOne.\nTwo.\nThree.\nFour.'
-    expect(countReply(onlyOne, rulesWith(), false).tooLong).toEqual(tooLong)
-
-    const fenced = '```\nProblem:\nProposal:\n```\nOne.\nTwo.\nThree.\nFour.\nFive.'
-    expect(countReply(fenced, rulesWith(), false).tooLong).toEqual(tooLong)
-
-    // Spaces around a label are fine.
-    const spaced = '  Problem:  \nOne.\n Proposal: \nTwo.\nThree.'
-    expect(countReply(spaced, rulesWith(), false).tooLong).toBeUndefined()
-  })
-
-  test('a report is held to the report ceiling', () => {
-    expect(countReply(lines(16), rulesWith(), true)).toEqual(CLEAN)
-    expect(countReply(lines(17), rulesWith(), true).tooLong).toEqual({ lines: 17, limit: 16 })
-    expect(countReply(lines(16), rulesWith(), false).tooLong).toEqual({ lines: 16, limit: 3 })
-    // A project that states no report ceiling has none for a report.
-    expect(countReply(lines(40), rulesWith({ reportLines: undefined }), true)).toEqual(CLEAN)
-    // The word cap holds for a report too.
-    expect(countReply(`${lines(5)}\n${words(15)}`, rulesWith(), true)).toEqual({ ...CLEAN, wordyLines: 1 })
-  })
-
-  test('a double hyphen counts only alone between two words', () => {
-    const pairs = (reply: string): number => countReply(reply, rulesWith(), false).doubleHyphens
-
-    expect(pairs('This works -- mostly.')).toBe(1)
-    expect(pairs('a -- b -- c')).toBe(2)
-    expect(pairs(`${SHALOM} -- ${OLAM}`)).toBe(1)
-    expect(pairs('one -- two\nthree -- four')).toBe(2)
-
-    expect(pairs('Run it with --apply to write.')).toBe(0)
-    expect(pairs('npm test -- --watch')).toBe(0)
-    expect(pairs('a--b')).toBe(0)
-    expect(pairs('-- at the start')).toBe(0)
-    expect(pairs('at the end --')).toBe(0)
-    expect(pairs('----\n---\n| -- | -- |\n|--|--|')).toBe(0)
-    expect(pairs('`a -- b` in code')).toBe(0)
-    expect(pairs('```\na -- b\n```')).toBe(0)
-    expect(pairs('~~~\na -- b\n~~~')).toBe(0)
-    expect(pairs('1. Run:\n\n    ```\n    git add -- file\n    ```')).toBe(0)
-  })
-
-  test('a double hyphen is counted only where the project has the dash rule', () => {
-    expect(countReply('This works -- mostly.', rulesWith({}, false), false)).toEqual(CLEAN)
-  })
-
-  test('rules with no limits count no lines and no words', () => {
-    const reply = `${lines(9)}\n${words(40)}\nOne. Two.\na -- b`
-    expect(countReply(reply, { hasDashRule: true }, false)).toEqual({ ...CLEAN, doubleHyphens: 1 })
-    expect(countReply(reply, { hasDashRule: false }, false)).toEqual(CLEAN)
-  })
-})
-
-describe('the note', () => {
-  test('a clean reply has no note', () => {
-    expect(replyNote(CLEAN, rulesWith())).toBeUndefined()
-  })
-
-  test('each problem has its own plain words', () => {
-    expect(replyNote({ ...CLEAN, tooLong: { lines: 5, limit: 3 } }, rulesWith())).toBe('Reply: 5 lines, limit 3')
-    expect(replyNote({ ...CLEAN, wordyLines: 2 }, rulesWith())).toBe('Reply: 2 lines over 14 words')
-    expect(replyNote({ ...CLEAN, wordyLines: 1 }, rulesWith({ words: 16 }))).toBe('Reply: 1 line over 16 words')
-    expect(replyNote({ ...CLEAN, packedLines: 1 }, rulesWith())).toBe('Reply: 1 line holds two sentences')
-    expect(replyNote({ ...CLEAN, packedLines: 2 }, rulesWith())).toBe('Reply: 2 lines hold two sentences')
-    expect(replyNote({ ...CLEAN, doubleHyphens: 1 }, rulesWith())).toBe('Reply: 1 double hyphen')
-    expect(replyNote({ ...CLEAN, doubleHyphens: 3 }, rulesWith())).toBe('Reply: 3 double hyphens')
-  })
-
-  test('several problems share the one line, the worst first', () => {
-    const all = { tooLong: { lines: 5, limit: 3 }, wordyLines: 2, packedLines: 1, doubleHyphens: 3 }
-    expect(replyNote(all, rulesWith())).toBe(
-      `Reply: 5 lines, limit 3 ${DOT} 2 lines over 14 words ${DOT} 1 line holds two sentences ${DOT} 3 double hyphens`,
-    )
-  })
-
-  test('a project that states no limits is never noted', () => {
-    expect(replyNote({ ...CLEAN, doubleHyphens: 2 }, { hasDashRule: true })).toBeUndefined()
-  })
-
-  test('the note itself holds no long dash', () => {
-    const all = { tooLong: { lines: 5, limit: 3 }, wordyLines: 2, packedLines: 1, doubleHyphens: 3 }
-    const note = replyNote(all, rulesWith()) ?? ''
-    expect(fixLongDashes(note)).toBe(note)
-    expect(countReply(note, rulesWith(), false).doubleHyphens).toBe(0)
   })
 })
 
@@ -1098,7 +736,7 @@ describe('the dash fix as the reply is kept', () => {
     expect(seen.kept).toEqual([sent])
   })
 
-  onEachSurface('a line the engine wrote in the model place is not fixed or counted', async ($, on, surface) => {
+  onEachSurface('a line the engine wrote in the model place is not fixed', async ($, on, surface) => {
     const { seen } = world(on, KIT_PROJECT)
     await open($, surface)
 
@@ -1192,7 +830,7 @@ describe('which projects the check runs in', () => {
     expect(seen.status).toEqual([])
   })
 
-  onEachSurface('with the limits alone, dashes stay and the limits are noted', async ($, on, surface) => {
+  onEachSurface('with the limits alone, nothing is touched and nothing is said', async ($, on, surface) => {
     const { seen } = world(on, { [RULES_PATH]: LIMITS_TEXT })
     await open($, surface)
 
@@ -1200,7 +838,7 @@ describe('which projects the check runs in', () => {
     await turn($, 't1', 'hello', [reply])
 
     expect(keptTexts(seen)).toEqual([[reply]])
-    expect(seen.status).toEqual(['Reply: 6 lines, limit 3'])
+    expect(seen.status).toEqual([])
   })
 
   onEachSurface('the file is found in a folder above the one the session opened in', async ($, on, surface) => {
@@ -1252,296 +890,23 @@ describe('which projects the check runs in', () => {
     await turn($, 't1', 'hello', [`a ${EM} b\n${lines(4)}`])
 
     expect(keptTexts(seen)).toEqual([[`a, b\n${lines(4)}`]])
-    expect(seen.status).toEqual(['Reply: 5 lines, limit 3'])
+    expect(seen.status).toEqual([])
   })
 })
 
-describe('the note when the turn ends', () => {
-  onEachSurface('a long reply is noted and a clean one clears the note', async ($, on, surface) => {
+// This part first noted a reply that ran past the project's limits, in a
+// status line beside the message box. The owner did not want the line, so
+// nothing is said about a reply's length, in any project.
+describe('no status line', () => {
+  onEachSurface('a reply far past the limits is kept and nothing is said', async ($, on, surface) => {
     const { seen } = world(on, KIT_PROJECT)
     await open($, surface)
 
-    expect(await turn($, 't1', 'hello', [lines(5)])).toEqual({ text: lines(5) })
-    expect(seen.status).toEqual(['Reply: 5 lines, limit 3'])
-
-    await turn($, 't2', 'and again', [lines(3)])
-    expect(seen.status).toEqual(['Reply: 5 lines, limit 3', undefined])
-
-    // The reply itself is never rewritten for length.
-    expect(keptTexts(seen)).toEqual([[lines(5)], [lines(3)]])
-  })
-
-  onEachSurface('the numbers come from the project file', async ($, on, surface) => {
-    const { seen } = world(on, {
-      [RULES_PATH]: 'Short by default: 2 prose lines, each at most 5 WORDS.\nA report: 4 prose lines.',
-    })
-    await open($, surface)
-
-    await turn($, 't1', 'hello', [`${words(5)}\n${words(6)}\n${words(2)}`])
-    await turn($, 't2', 'a full report please', [lines(5)])
-
-    expect(seen.status).toEqual([
-      `Reply: 3 lines, limit 2 ${DOT} 1 line over 5 words`,
-      'Reply: 5 lines, limit 4',
-    ])
-  })
-
-  onEachSurface('two sentences on a line and a double hyphen are noted, not rewritten', async ($, on, surface) => {
-    const { seen } = world(on, KIT_PROJECT)
-    await open($, surface)
-
-    const reply = 'It works. Next comes the test.\nThis part -- mostly.\nRun it with --apply.'
-    await turn($, 't1', 'hello', [reply])
+    const reply = `${lines(9)}\nOne. Two.\nc -- d`
+    expect(await turn($, 't1', 'please give me a full report', [reply])).toEqual({ text: reply })
+    await $.classic.SessionStart({ source: 'clear', cwd: HOME })
 
     expect(keptTexts(seen)).toEqual([[reply]])
-    expect(seen.status).toEqual([`Reply: 1 line holds two sentences ${DOT} 1 double hyphen`])
-  })
-
-  onEachSurface('every problem is on the one line, the worst first', async ($, on, surface) => {
-    const { seen } = world(on, KIT_PROJECT)
-    await open($, surface)
-
-    await turn($, 't1', 'hello', [`One. Two.\n${words(15)}\nThis part -- mostly.\nLine four.\nLine five.`])
-
-    expect(seen.status).toEqual([
-      `Reply: 5 lines, limit 3 ${DOT} 1 line over 14 words ${DOT} 1 line holds two sentences ${DOT} 1 double hyphen`,
-    ])
-  })
-
-  onEachSurface('a report the owner asked for gets the report ceiling', async ($, on, surface) => {
-    const { seen } = world(on, KIT_PROJECT)
-    await open($, surface)
-
-    await turn($, 't1', 'Please give me a full report on this', [lines(6)])
-    await turn($, 't2', 'Daily report 2026-10-01', [lines(7)])
-    await turn($, 't3', `${DOCH_MARKED} ${MALE}`, [lines(6)])
-    await turn($, 't4', 'thanks', [lines(4)])
-
-    expect(seen.status).toEqual([
-      undefined,
-      'Reply: 7 lines, limit 6',
-      undefined,
-      'Reply: 4 lines, limit 3',
-    ])
-  })
-
-  onEachSurface('a report asked for over the running turn lifts that turn', async ($, on, surface) => {
-    const { seen } = world(on, KIT_PROJECT)
-    await open($, surface)
-
-    const over = async (id: string, typed: Args<'prompt.submit'>) => {
-      await $.turn.start({ text: 'hello', turnId: id })
-      expect(await $.prompt.submit(typed)).toEqual({ text: typed.text })
-      await keep($, row([text(lines(6))]))
-      await $.turn.complete({ answer: lines(6), durationMs: 1, isAborted: false, turnId: id, reason: 'answer' })
-    }
-
-    // The owner's own words lift it, however they reach the session.
-    await over('t1', { text: 'make it a FULL REPORT', wait: false, origin: { kind: 'composer' }, turnId: 't1' })
-    await over('t2', { text: 'full report', wait: true, origin: { kind: 'bridge' }, turnId: 't2' })
-    await over('t3', { text: 'daily report', wait: false, origin: { kind: 'sdk' }, turnId: 't3' })
-    // A notification, another session, or a prompt over another turn do not.
-    await over('t4', { text: 'full report', wait: false, origin: { kind: 'task-notification' }, turnId: 't4' })
-    await over('t5', { text: 'full report', wait: false, origin: { kind: 'peer' }, turnId: 't5' })
-    await over('t6', { text: 'full report', wait: false, origin: { kind: 'composer' }, turnId: 't-other' })
-    await over('t7', { text: 'full report', wait: false, origin: { kind: 'composer' } })
-    await over('t8', { text: 'no such ask', wait: false, origin: { kind: 'composer' }, turnId: 't8' })
-
-    const noted = 'Reply: 6 lines, limit 3'
-    expect(seen.status).toEqual([undefined, undefined, undefined, noted, noted, noted, noted, noted])
-  })
-
-  onEachSurface('a findings list has no line ceiling, and the word cap still holds', async ($, on, surface) => {
-    const { seen } = world(on, KIT_PROJECT)
-    await open($, surface)
-
-    await turn($, 't1', 'the review please', [FINDINGS])
-    await turn($, 't2', 'again', [FINDINGS.replace('Pick one meaning and label it.', words(15))])
-
-    expect(seen.status).toEqual([undefined, 'Reply: 1 line over 14 words'])
-  })
-
-  onEachSurface('a findings list is held to the ceiling where the file does not lift it', async ($, on, surface) => {
-    const { seen } = world(on, {
-      [RULES_PATH]: 'Short by default: 3 prose lines, each at most 14 WORDS.',
-    })
-    await open($, surface)
-
-    await turn($, 't1', 'the review please', [FINDINGS])
-
-    expect(seen.status).toEqual(['Reply: 9 lines, limit 3'])
-  })
-
-  onEachSurface('the last text the model wrote in the turn is what is counted', async ($, on, surface) => {
-    const { seen } = world(on, KIT_PROJECT)
-    await open($, surface)
-
-    await $.turn.start({ text: 'hello', turnId: 't1' })
-    await keep($, row([text(lines(8))]))
-    await keep($, row([{ type: 'tool_use', id: 'tool-1', name: 'Read', input: { file_path: 'a.md' } }]))
-    await keep($, row([{ type: 'thinking', thinking: lines(9), signature: 'sig' }]))
-    await keep($, row([text(lines(9))], { agentId: 'agent-7' }))
-    await keep($, row([text('   ')]))
-    await keep($, row([text('All done.')]))
-    await $.turn.complete({ answer: 'All done.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-
-    expect(seen.status).toEqual([undefined])
-  })
-
-  onEachSurface('a tool call or a blank block after the last text does not hide it', async ($, on, surface) => {
-    const { seen } = world(on, KIT_PROJECT)
-    await open($, surface)
-
-    await $.turn.start({ text: 'hello', turnId: 't1' })
-    await keep($, row([text(lines(5))]))
-    await keep($, row([{ type: 'tool_use', id: 'tool-1', name: 'Read', input: { file_path: 'a.md' } }]))
-    await keep($, row([text(' \n ')]))
-    await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-
-    expect(seen.status).toEqual(['Reply: 5 lines, limit 3'])
-  })
-
-  onEachSurface('the reply is counted as it was kept, after the dash fix', async ($, on, surface) => {
-    const { seen } = world(on, KIT_PROJECT)
-    await open($, surface)
-
-    // Fourteen words as written, fifteen once the dash became a comma.
-    await turn($, 't1', 'hello', [`${words(13)} x${EM}y`])
-
-    expect(keptTexts(seen)).toEqual([[`${words(13)} x, y`]])
-    expect(seen.status).toEqual(['Reply: 1 line over 14 words'])
-  })
-
-  onEachSurface('a subagent turn and a turn that did not end on an answer are not counted', async ($, on, surface) => {
-    const { seen } = world(on, KIT_PROJECT)
-    await open($, surface)
-
-    await $.turn.start({ text: 'hello', turnId: 't1' })
-    await keep($, row([text(lines(5))]))
-
-    const ended = { answer: lines(9), durationMs: 1, turnId: 't1' }
-    await $.turn.complete({ ...ended, isAborted: false, reason: 'answer', agentId: 'agent-7', turnId: 'helper-1' })
-    await $.turn.complete({ ...ended, isAborted: true, reason: 'aborted' })
-    await $.turn.complete({ ...ended, isAborted: false, reason: 'error' })
-    await $.turn.complete({
-      ...ended,
-      isAborted: false,
-      reason: 'refusal',
-      refusal: { category: null, explanation: null },
-    })
-    expect(seen.status).toEqual([])
-
-    // The same turn ending on its answer is counted, by its own rows.
-    await $.turn.complete({ ...ended, isAborted: false, reason: 'answer' })
-    expect(seen.status).toEqual(['Reply: 5 lines, limit 3'])
-  })
-
-  onEachSurface('with no row seen, the answer the turn ended on is counted', async ($, on, surface) => {
-    const { seen } = world(on, KIT_PROJECT)
-    await open($, surface)
-
-    await $.turn.start({ text: 'hello', turnId: 't1' })
-    await $.turn.complete({ answer: lines(5), durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    expect(seen.status).toEqual(['Reply: 5 lines, limit 3'])
-
-    // A turn the check never saw start is counted by its own answer too, and
-    // never by what an earlier turn wrote or was asked for.
-    await turn($, 't2', 'a full report', [lines(6)])
-    await $.turn.complete({ answer: lines(4), durationMs: 1, isAborted: false, turnId: 't9', reason: 'answer' })
-    expect(seen.status).toEqual(['Reply: 5 lines, limit 3', undefined, 'Reply: 4 lines, limit 3'])
-  })
-
-  onEachSurface('a turn with no text leaves the note as it stands', async ($, on, surface) => {
-    const { seen } = world(on, KIT_PROJECT)
-    await open($, surface)
-
-    await turn($, 't1', 'hello', [lines(5)])
-    await $.turn.start({ text: 'and now', turnId: 't2' })
-    await keep($, row([{ type: 'tool_use', id: 'tool-1', name: 'Read', input: { file_path: 'a.md' } }]))
-    await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
-
-    expect(seen.status).toEqual(['Reply: 5 lines, limit 3'])
-  })
-
-  onEachSurface('every event is handed on with its answer unchanged', async ($, on, surface) => {
-    world(on, KIT_PROJECT)
-
-    expect(await open($, surface)).toEqual({ cwd: HOME })
-    expect(await $.turn.start({ text: 'a full report', turnId: 't1' })).toEqual({ turnId: 't1' })
-    expect(
-      await $.prompt.submit({ text: 'typed over it', wait: false, origin: { kind: 'composer' }, turnId: 't1' }),
-    ).toEqual({ text: 'typed over it' })
-    expect(
-      await $.turn.complete({ answer: lines(9), durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' }),
-    ).toEqual({ text: lines(9) })
-  })
-})
-
-describe('a new conversation in the same window', () => {
-  // /clear, a resume or a fork puts another conversation in the window with
-  // no session start. The note spoke of a reply of the one that left.
-  for (const source of ['clear', 'resume', 'fork'] as const) {
-    onEachSurface(`after ${source} the note of the old conversation is taken off`, async ($, on, surface) => {
-      const { seen } = world(on, KIT_PROJECT)
-      await open($, surface)
-
-      await turn($, 't1', 'hello', [lines(5)])
-      expect(seen.status).toEqual(['Reply: 5 lines, limit 3'])
-
-      expect(await $.classic.SessionStart({ source })).toEqual({})
-      expect(seen.status).toEqual(['Reply: 5 lines, limit 3', undefined])
-
-      // The check itself is still on in the new conversation.
-      await turn($, 't2', 'hello again', [`a ${EM} b\n${lines(4)}`])
-      expect(keptTexts(seen).at(-1)).toEqual([`a, b\n${lines(4)}`])
-      expect(seen.status).toEqual(['Reply: 5 lines, limit 3', undefined, 'Reply: 5 lines, limit 3'])
-    })
-  }
-
-  onEachSurface('a turn of the old conversation is forgotten with it', async ($, on, surface) => {
-    const { seen } = world(on, KIT_PROJECT)
-    await open($, surface)
-
-    // A report was asked for, and the conversation was cleared before the
-    // turn ended. The same turn id ending later is counted by the plain limit.
-    await $.turn.start({ text: 'a full report please', turnId: 't1' })
-    await keep($, row([text(lines(6))]))
-    await $.classic.SessionStart({ source: 'clear' })
-    await $.turn.complete({ answer: lines(6), durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-
-    expect(seen.status).toEqual([undefined, 'Reply: 6 lines, limit 3'])
-  })
-
-  onEachSurface('a compaction leaves the note and the running turn alone', async ($, on, surface) => {
-    const { seen } = world(on, KIT_PROJECT)
-    await open($, surface)
-
-    await turn($, 't1', 'hello', [lines(5)])
-
-    // A compaction can come in the middle of a turn: the conversation stays
-    // the same one, and the turn goes on as a report if it was asked as one.
-    await $.turn.start({ text: 'a full report please', turnId: 't2' })
-    await keep($, row([text(lines(6))]))
-    expect(await $.classic.SessionStart({ source: 'compact' })).toEqual({})
-    expect(seen.status).toEqual(['Reply: 5 lines, limit 3'])
-
-    await $.turn.complete({ answer: lines(6), durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
-    expect(seen.status).toEqual(['Reply: 5 lines, limit 3', undefined])
-  })
-
-  onEachSurface('in a project without the limits nothing is touched', async ($, on, surface) => {
-    const { seen } = world(on, { [RULES_PATH]: DASH_TEXT })
-    await open($, surface)
-
-    expect(await $.classic.SessionStart({ source: 'clear' })).toEqual({})
-    expect(seen.status).toEqual([])
-  })
-
-  onEachSurface('in a project without the kit nothing is touched either', async ($, on, surface) => {
-    const { seen } = world(on)
-    await open($, surface)
-
-    expect(await $.classic.SessionStart({ source: 'resume' })).toEqual({})
     expect(seen.status).toEqual([])
   })
 })

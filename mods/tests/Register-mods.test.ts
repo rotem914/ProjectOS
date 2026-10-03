@@ -104,18 +104,14 @@ describe('the guards around each part', () => {
 
     expect(register(on, {})).toBeUndefined()
 
-    // Four hooks from the band, then six from the reply check.
+    // Four hooks from the band, then two from the dash fix.
     expect(eventsOf(registered)).toEqual([
       'session.start',
       'classic.SessionStart',
       'turn.complete',
       'ui.render',
       'session.start',
-      'classic.SessionStart',
-      'turn.start',
-      'prompt.submit',
       'session.append',
-      'turn.complete',
     ])
   })
 
@@ -132,16 +128,16 @@ describe('the guards around each part', () => {
     ])
   })
 
-  test('both parts hear of a new conversation in the same window', () => {
+  test('only the band hears of a new conversation in the same window', () => {
     const { on, registered } = standIn()
 
     register(on, {})
 
-    // The band gathers again after a compaction too; the reply check leaves
-    // one alone, because it can come in the middle of a turn.
+    // The band gathers again after /clear, a resume, a compaction or a fork.
+    // The dash fix keeps nothing from one conversation to the next, so it
+    // has no hook there.
     expect(registered.filter(one => one.event === 'classic.SessionStart').map(one => one.matcher)).toEqual([
       { source: ['clear', 'resume', 'compact', 'fork'] },
-      { source: ['clear', 'resume', 'fork'] },
     ])
   })
 
@@ -170,11 +166,7 @@ describe('the guards around each part', () => {
       'classic.SessionStart',
       'turn.complete',
       'session.start',
-      'classic.SessionStart',
-      'turn.start',
-      'prompt.submit',
       'session.append',
-      'turn.complete',
       'session.start',
     ])
 
@@ -207,9 +199,6 @@ describe('the guards around each part', () => {
       'turn.complete',
       'ui.render',
       'session.start',
-      'classic.SessionStart',
-      'turn.start',
-      'prompt.submit',
       'session.start',
     ])
 
@@ -470,8 +459,8 @@ describe('the two parts in one session', () => {
       expect(words).toEqual(['site', '2 files not committed'])
       expect(buttons).toEqual(['Go commit'])
 
-      // The reply check, in the same session: the dash is fixed as the reply
-      // is kept, and the length is noted when the turn ends.
+      // The dash fix, in the same session: the dash is fixed as the reply is
+      // kept, and nothing is said about the reply's length.
       const reply = `Done ${EM} it works.\nLine two.\nLine three.\nLine four.`
 
       expect(await $.turn.start({ text: 'hello', turnId: 't1' })).toEqual({ turnId: 't1' })
@@ -496,18 +485,17 @@ describe('the two parts in one session', () => {
       await clock.settle()
 
       expect(seen.kept).toEqual([['Done, it works.\nLine two.\nLine three.\nLine four.']])
-      expect(seen.status).toEqual(['Reply: 4 lines, limit 3'])
+      expect(seen.status).toEqual([])
 
       // The same end of turn sent the band for fresh values, and it still draws.
       expect(seen.statusRuns).toBe(passesBefore + 1)
       expect((await ui.find({ type: 'Text', text: 'site' }))?.text).toBe('site')
 
       // /clear puts a new conversation in the window with no session start.
-      // Both parts hear of it: the old note goes, and the row is gathered
-      // again at once.
+      // The band hears of it, and the row is gathered again at once.
       expect(await $.classic.SessionStart({ source: 'clear', cwd: FOLDER })).toEqual({})
       await clock.settle()
-      expect(seen.status).toEqual(['Reply: 4 lines, limit 3', undefined])
+      expect(seen.status).toEqual([])
       expect(seen.statusRuns).toBe(passesBefore + 2)
       expect((await ui.findAll({ type: 'Text' })).map(one => one.text)).toEqual([
         'site',

@@ -126,16 +126,13 @@ own window, in the desktop app and in the terminal, in every folder you open.
   step, so a push from the row would skip it. The row says
   `to push from your git app` there instead.
 
-**A live check on replies**, only in a project that carries
-`project-os/Conversations.md`. A long dash is replaced as the reply is saved,
-where that file asks for it. A reply that ran past the limits the file states
-gets one quiet status line under the message box. The reply itself is never
-cut and never held back.
+**A live fix for long dashes**, only in a project whose
+`project-os/Conversations.md` asks for it. A long dash is replaced as the
+reply is saved. Nothing else about a reply is changed, and a reply is never
+held back.
 
-Claude Code puts the plugin's name on everything a mod shows. The terminal
-draws that status line as a warning sign and then
-`projectos-mods: Reply: 5 lines, limit 3`, and the short notice after a push
-and the message a button sends carry the same name.
+Claude Code puts the plugin's name on what a mod shows: the short notice
+after a push and the message a button sends both carry it.
 
 The mods ride in the copy the once-per-computer step made, in its `mods/`
 folder, so a newer kit brings newer mods. This updates that copy, on every
@@ -180,8 +177,8 @@ client's hooks read; the update command above is what brings newer mods.
 
 Early access means Claude Code may change this kind of plugin, or switch it
 off, in any release. The two mods are one plugin, so when a newer Claude Code
-refuses something in either of them, both stop together. The row and the
-status line then stop showing, and the rest of the kit works as before.
+refuses something in either of them, both stop together. The row then stops
+showing, long dashes stay as written, and the rest of the kit works as before.
 
 ## Install
 
