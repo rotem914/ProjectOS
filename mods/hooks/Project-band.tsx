@@ -85,6 +85,9 @@ const FAST_OFF_SENT = 'FAST OFF'
 // The backup's age is read from the newest ZIP in the project's backups
 // folder, where the kit's backup puts it. It is quiet words until the backup
 // is this many days old, and a button from then on (owner, 2026-10-04).
+// A press on the quiet words takes them out of the row, and runs no backup:
+// they come back when the backup is a day older, or in the next conversation
+// (owner, 2026-10-04).
 const BACKUP_SHORTCUT = 'Go backup'
 const BACKUP_FOLDER = 'backups'
 const BACKUP_BUTTON_DAYS = 30
@@ -210,6 +213,7 @@ type Acts = {
   askUpdate: () => Promise<void>
   askMore: (phrases: string[], hasUpdate: boolean) => Promise<void>
   compact: () => Promise<void>
+  hideBackup: () => Promise<void>
   confirmPush: () => void
   confirmUpdate: () => void
   cancel: () => Promise<void>
@@ -238,6 +242,8 @@ type RowPlan = {
   fastLabel: string
   /** What the backup button reads; empty when the row draws none. */
   backup: string
+  /** The backup's age as quiet words a press hides; empty when not shown. */
+  backupQuiet: string
   /** True once the newest backup is old enough to call for a new one. */
   isBackupDue: boolean
   hasUpdate: boolean
@@ -1121,6 +1127,13 @@ function planOf(
     isInRepo && known.shortcuts.includes(BACKUP_SHORTCUT) ? (known.backup?.days ?? null) : null
   const backupText = backupDays === null ? '' : backupTextOf(backupDays)
   const isBackupDue = backupDays !== null && backupDays >= BACKUP_BUTTON_DAYS
+  // Before it is due the age is quiet words of its own, which a press hides
+  // until the backup is a day older. Like the percentage it is drawn without
+  // a frame, so it takes its own cells and the one that separates it.
+  const hiddenAt = known.backupHidden ?? null
+  const isBackupHidden = backupDays !== null && hiddenAt !== null && backupDays <= hiddenAt
+  const backupQuiet = isBackupDue || isBackupHidden ? '' : backupText
+  const quietCells = backupQuiet === '' ? 0 : backupQuiet.length + 1
   const fullName = labelOf(known)
   // The percentage alone, before the words (owner, 2026-10-03). It is drawn
   // without a frame, so it takes its own cells and the one that separates it.
@@ -1141,6 +1154,7 @@ function planOf(
     hasFast: false,
     fastLabel,
     backup: '',
+    backupQuiet,
     isBackupDue,
     hasUpdate: false,
     more: [],
@@ -1151,14 +1165,14 @@ function planOf(
   for (const step of steps) {
     // Fast keeps Go commit's company: in the row with it, behind More with it.
     // So does the backup button, which the row draws only for a backup that
-    // is due; until then, and behind More, its age is in the words.
+    // is due. A due backup behind More has its age in the words.
     const isFastInRow = hasFast && step.isInRow
     const isBackupInRow = isBackupDue && step.isInRow
     const words = wordsOf(
       known,
       step.isShort,
       step.hasCommit,
-      isBackupInRow ? '' : backupText,
+      isBackupDue && !isBackupInRow ? backupText : '',
     ).join(' \u00b7 ')
     const more = [
       ...(hasMain && !step.hasCommit ? [MAIN_SHORTCUT] : []),
@@ -1175,7 +1189,7 @@ function planOf(
       ...(more.length > 0 || moreHasUpdate ? ['More'] : []),
     ]
 
-    fixed = buttonsWidth(buttons) + fillCells
+    fixed = buttonsWidth(buttons) + fillCells + quietCells
     plan = {
       name: fullName,
       fill: fillText,
@@ -1184,6 +1198,7 @@ function planOf(
       hasFast: isFastInRow,
       fastLabel,
       backup: isBackupInRow ? backupText : '',
+      backupQuiet,
       isBackupDue,
       hasUpdate: step.hasUpdate,
       more,
@@ -1217,6 +1232,7 @@ function keysOf(known: ProjectBandFacts, state: ProjectBandBusy, columns: number
 
   return [
     ...(plan.fill !== '' ? ['fill'] : []),
+    ...(plan.backupQuiet !== '' ? ['backup-age'] : []),
     ...(plan.hasCommit ? ['go-commit'] : []),
     ...(plan.hasFast ? [keyOf(FAST_SHORTCUT)] : []),
     ...(pushTarget(known.repo) !== null ? ['push'] : []),
@@ -1269,7 +1285,13 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
 
   // The row has nothing to say before git has named the project: no name, no
   // counts, no buttons. Nothing is drawn then, not an empty row.
-  if (plan.name === '' && plan.fill === '' && plan.words === '' && !hasButtons) {
+  if (
+    plan.name === '' &&
+    plan.fill === '' &&
+    plan.words === '' &&
+    plan.backupQuiet === '' &&
+    !hasButtons
+  ) {
     return null
   }
 
@@ -1306,6 +1328,16 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
             <Text wrap="truncate-end" dimColor={isCalm}>
               {plan.words}
             </Text>
+          </Box>
+        )}
+        {plan.backupQuiet !== '' && (
+          <Box flexShrink={0}>
+            <Button
+              key="backup-age"
+              plain
+              label={plan.backupQuiet}
+              onPress={() => acts.hideBackup()}
+            />
           </Box>
         )}
         {hasButtons && (
@@ -1516,6 +1548,8 @@ const work: {
    * compaction empties the session's values while the mode goes on.
    */
   isFast: boolean
+  /** The backup's age the owner hid its words at; kept here the same way. */
+  backupHidden: number | null
 } = {
   startFolder: '',
   isSeen: false,
@@ -1540,6 +1574,7 @@ const work: {
   afterDrawing: [],
   project: null,
   isFast: false,
+  backupHidden: null,
 }
 
 function note($: Dollar, what: string, error: unknown): void {
@@ -1822,6 +1857,19 @@ async function backupOf(
 async function setFast($: Dollar, isFast: boolean): Promise<void> {
   work.isFast = isFast
   await writeFacts($, now => (now === null ? now : { ...now, isFast }))
+}
+
+// A press on the backup's quiet words: they leave the row at the age they
+// show, and nothing is sent. An older backup shows them again.
+async function hideBackup($: Dollar): Promise<void> {
+  const days = (await read($, facts))?.backup?.days
+
+  if (days === undefined) {
+    return
+  }
+
+  work.backupHidden = days
+  await writeFacts($, now => (now === null ? now : { ...now, backupHidden: days }))
 }
 
 // The repository the session is in: the branch, its online copy, the
@@ -2390,6 +2438,7 @@ async function cancelAsk($: Dollar, columns: number): Promise<void> {
 // from the session's values, which a reload leaves in place and a new session
 // starts without. A compaction goes on in the same conversation, so the mode
 // is kept through it; any other new conversation starts with the mode off.
+// The backup words the owner hid follow the same road.
 async function begin($: Dollar, isNewCode: boolean, keepsFast: boolean): Promise<void> {
   const passesBefore = work.passes
 
@@ -2397,13 +2446,20 @@ async function begin($: Dollar, isNewCode: boolean, keepsFast: boolean): Promise
 
   if (isNewCode) {
     await closeAsk($)
-    work.isFast = (await read($, facts))?.isFast === true
+    const kept = await read($, facts)
+
+    work.isFast = kept?.isFast === true
+    work.backupHidden = kept?.backupHidden ?? null
   } else if (!keepsFast) {
     work.isFast = false
+    work.backupHidden = null
   }
 
   await writeStart($)
   await setFast($, work.isFast)
+  await writeFacts($, now =>
+    now === null ? now : { ...now, backupHidden: work.backupHidden },
+  )
 
   if (work.isSeen && work.passes === passesBefore) {
     await refresh($)
@@ -2536,6 +2592,8 @@ export function registerProjectBand(on: On): void {
               ),
             compact: () =>
               submitCompact($).catch(error => note($, 'a press on the fill failed', error)),
+            hideBackup: () =>
+              hideBackup($).catch(error => note($, 'hiding the backup words failed', error)),
             confirmPush: () =>
               inBackground($, 'the push failed', () => confirmPush($, columns)),
             confirmUpdate: () =>
