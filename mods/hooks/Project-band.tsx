@@ -1193,7 +1193,11 @@ function planOf(
   isCheckDrawn = false,
 ): RowPlan {
   const isInRepo = known.repo !== null
-  const hasMain = isInRepo && known.shortcuts.includes(MAIN_SHORTCUT)
+  // Go commit shows only while there is something to commit (owner,
+  // 2026-10-04): with nothing waiting, or before git has counted, it is in
+  // neither the row nor the More list.
+  const hasMain =
+    isInRepo && known.shortcuts.includes(MAIN_SHORTCUT) && (known.repo?.files ?? 0) > 0
   const hasFast = isInRepo && known.shortcuts.includes(FAST_SHORTCUT)
   const others: string[] = isInRepo
     ? [

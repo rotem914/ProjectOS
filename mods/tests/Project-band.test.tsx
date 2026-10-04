@@ -804,7 +804,7 @@ describe('what is waiting', () => {
     const ui = await bandOn($, surface)
 
     expect(await wordsOn(ui)).toBe('site-web | All committed')
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['More'])
     await ui.unmount()
   })
 
@@ -1159,7 +1159,7 @@ describe('each part as soon as it is known', () => {
 
     await kit.clock.advance(1_500)
     expect(await wordsOn(ui)).toBe('site-web')
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push \u00b7 2', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['Push \u00b7 2', 'More'])
 
     await kit.clock.advance(2_500)
     expect(await wordsOn(ui)).toBe('site-web')
@@ -1296,15 +1296,15 @@ describe('the shortcut buttons', () => {
   // A fence closes only on its own mark, at least as long as the one that
   // opened it. One left open hides everything below it.
   const FENCES: [string, string, string[]][] = [
-    ['a four tick fence that quotes a three tick one', '````\n```\n### `Go backup`\n```\n````\n### `Go commit`', ['Go commit']],
-    ['a four tick fence holding one three tick line', '````\n```\n````\n### `Go commit`', ['Go commit']],
-    ['a tilde fence holding backticks', '~~~\n```\n### `Go backup`\n~~~\n### `Go commit`', ['Go commit']],
-    ['a backtick fence holding tildes', '```\n~~~\n```\n### `Go commit`', ['Go commit']],
-    ['a fence with a language on it', '```md\n### `Go backup`\n```\n### `Go commit`', ['Go commit']],
+    ['a four tick fence that quotes a three tick one', '````\n```\n### `Go backup`\n```\n````\n### `Go commit`', []],
+    ['a four tick fence holding one three tick line', '````\n```\n````\n### `Go commit`', []],
+    ['a tilde fence holding backticks', '~~~\n```\n### `Go backup`\n~~~\n### `Go commit`', []],
+    ['a backtick fence holding tildes', '```\n~~~\n```\n### `Go commit`', []],
+    ['a fence with a language on it', '```md\n### `Go backup`\n```\n### `Go commit`', []],
     ['a closing fence with a word after it is no closing fence', '```\n``` not the end\n### `Go commit`\n```', []],
     ['a fence left open', '```\nsome code\n\n### `Go commit`', []],
     ['a tilde fence around the heading', '~~~\n### `Go commit`\n~~~', []],
-    ['an indented fence', '  ```\n  ### `Go backup`\n  ```\n### `Go commit`', ['Go commit']],
+    ['an indented fence', '  ```\n  ### `Go backup`\n  ```\n### `Go commit`', []],
   ]
 
   for (const [name, text, expected] of FENCES) {
@@ -1351,7 +1351,7 @@ describe('the shortcut buttons', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['More'])
     await ui.unmount()
   })
 
@@ -1452,7 +1452,7 @@ describe('the shortcut buttons', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Fast', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['Fast', 'More'])
     await ui.press({ key: 'fast-mode' })
     expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['FAST ON'])
 
@@ -1480,14 +1480,14 @@ describe('the shortcut buttons', () => {
 
     await ui.press({ key: 'fast-mode' })
     await kit.clock.settle()
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Fast on', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['Fast on', 'More'])
 
     // A later press is a new one, and sends the words that end the mode.
     await kit.clock.advance(5_000)
     await ui.press({ key: 'fast-mode' })
     await kit.clock.settle()
     expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['FAST ON', 'FAST OFF'])
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Fast', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['Fast', 'More'])
     await ui.unmount()
   })
 
@@ -1501,7 +1501,7 @@ describe('the shortcut buttons', () => {
       await $.prompt.submit(typed(text))
       await kit.clock.settle()
 
-      return (await buttonsOn(ui))[1]
+      return (await buttonsOn(ui))[0]
     }
 
     // The mode's name in a sentence is talk about it, and switches nothing.
@@ -1528,7 +1528,7 @@ describe('the shortcut buttons', () => {
     kit.world.isPromptRefused = true
     await ui.press({ key: 'fast-mode' })
     await kit.clock.settle()
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Fast', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['Fast', 'More'])
     await ui.unmount()
   })
 
@@ -1543,11 +1543,11 @@ describe('the shortcut buttons', () => {
     await kit.clock.settle()
     await $.classic.SessionStart({ source: 'compact', cwd: kit.world.folder })
     await kit.clock.settle()
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Fast on', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['Fast on', 'More'])
 
     await $.classic.SessionStart({ source: 'clear', cwd: kit.world.folder })
     await kit.clock.settle()
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Fast', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['Fast', 'More'])
     await ui.unmount()
   })
 
@@ -1567,18 +1567,18 @@ describe('the shortcut buttons', () => {
 
     // Before it is due the row says nothing about the backup.
     expect(await wordsOn(ui)).toBe('site-web | All committed')
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['More'])
     expect(await ui.find({ key: 'backup-age' })).toBeUndefined()
     expect(new Set(kit.world.listed).size).toBe(1)
 
     // The days pass, and on the thirtieth the button appears.
     kit.world.backups = [{ name: 'Site_2026-09-04_10-00.zip', daysOld: 29 }]
     await endTurn($, kit)
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['More'])
     kit.world.backups = [{ name: 'Site_2026-09-03_10-00.zip', daysOld: 30 }]
     await endTurn($, kit)
     expect(await wordsOn(ui)).toBe('site-web | All committed')
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Backup 30d', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['Backup 30d', 'More'])
 
     // The button is the backup shortcut, so More does not list it again.
     await ui.press({ key: 'go-backup' })
@@ -1601,7 +1601,7 @@ describe('the shortcut buttons', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['More'])
     await ui.unmount()
   })
 
@@ -1644,7 +1644,7 @@ describe('the shortcut buttons', () => {
     const ui = await bandOn($, surface)
 
     expect(await wordsOn(ui)).toBe('site-web | All committed')
-    expect(await buttonsOn(ui)).toEqual(['Go commit'])
+    expect(await buttonsOn(ui)).toEqual([])
     expect(kit.world.listed).toEqual([])
     await ui.unmount()
   })
@@ -1727,7 +1727,7 @@ describe('the shortcut buttons', () => {
   })
 
   // All committed is a drawing on the desktop and words on the terminal.
-  test('all committed is a check mark before Go commit on the desktop', async ($, on) => {
+  test('all committed is a check mark where Go commit would be, on the desktop', async ($, on) => {
     const kit = install(on)
 
     await start($, kit)
@@ -1735,17 +1735,20 @@ describe('the shortcut buttons', () => {
     const desktop = await bandOn($, 'desktop')
     const drawn = await desktop.findAll({})
     const check = drawn.findIndex(one => one.type === 'Svg' && one.props.alt === 'All committed')
-    const commit = drawn.findIndex(one => one.type === 'Button' && one.props.label === 'Go commit')
+    const first = drawn.findIndex(one => one.type === 'Button' && one.props.label === 'More')
 
     expect((await desktop.findAll({ type: 'Text' })).map(text => text.text)).toEqual(['site-web'])
     expect(drawn[check]?.props).toMatchObject({ width: 20, height: 20 })
     expect(check).toBeGreaterThan(-1)
-    expect(check).toBeLessThan(commit)
+    expect(check).toBeLessThan(first)
+    // With nothing to commit there is no Go commit: the check stands there.
+    expect(await buttonsOn(desktop)).toEqual(['More'])
 
-    // A file changes: the check goes, and the count rides in the button.
+    // A file changes: the check goes, and Go commit is back with its count.
     kit.world.changed = 1
     await endTurn($, kit)
     expect((await desktop.findAll({ type: 'Svg' })).some(svg => svg.props.alt === 'All committed')).toBe(false)
+    expect(await buttonsOn(desktop)).toEqual(['Go commit \u00b7 1', 'More'])
 
     // Nor is it drawn in the More list.
     kit.world.changed = 0
@@ -1923,7 +1926,7 @@ describe('More', () => {
     expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go code review'])
 
     // The list has done its job: the row is back.
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['More'])
     await ui.unmount()
   })
 
@@ -2103,7 +2106,7 @@ describe('the Push button', () => {
     expect(gitRuns(kit.world, 'push')).toHaveLength(0)
     expect(kit.world.toasts).toEqual([])
     expect(await wordsOn(ui)).toBe('site-web | All committed')
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push \u00b7 2', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['Push \u00b7 2', 'More'])
     await ui.unmount()
   })
 
@@ -2140,7 +2143,7 @@ describe('the Push button', () => {
 
     await ui.press({ key: 'push' })
     await kit.clock.advance(3 * 60_000)
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push \u00b7 2', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['Push \u00b7 2', 'More'])
     expect(gitRuns(kit.world, 'push')).toHaveLength(0)
     await ui.unmount()
   })
@@ -2395,7 +2398,7 @@ describe('the Push button', () => {
     kit.world.ahead = 0
     await ui.press({ key: 'push' })
     expect(kit.world.toasts).toEqual(['Nothing to push. Everything is already online.'])
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['More'])
     await ui.unmount()
   })
 
@@ -2562,7 +2565,7 @@ describe('a project with a push step of its own', () => {
       'This project has push steps of its own. Push it from your git app.',
     ])
     expect(gitRuns(kit.world, 'push')).toHaveLength(0)
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['More'])
     await ui.unmount()
   })
 
@@ -2613,11 +2616,11 @@ describe('a project with a push step of its own', () => {
 
     const ui = await bandOn($, 'terminal')
 
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['More'])
 
     kit.world.present = ['D:/Work/Site-fix/.git/hooks/pre-push']
     await endTurn($, kit)
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Push \u00b7 2', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['Push \u00b7 2', 'More'])
     await ui.unmount()
   })
 })
@@ -2652,7 +2655,7 @@ describe('the plugin copy of the kit', () => {
     const ui = await bandOn($, surface)
 
     expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 Plugin update ready')
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Update plugin', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['Update plugin', 'More'])
     await ui.unmount()
   })
 
@@ -2800,7 +2803,7 @@ describe('the plugin copy of the kit', () => {
     // Cancel first: nothing is pulled.
     await ui.press({ key: 'cancel' })
     expect(gitRuns(kit.world, 'pull')).toHaveLength(0)
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Update plugin', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['Update plugin', 'More'])
 
     await ui.press({ key: 'update-plugin' })
 
@@ -3257,7 +3260,7 @@ describe('a write Claude Code refuses for a moment', () => {
     expect(kit.world.logs.some(line => line.includes('clearing the busy mark failed'))).toBe(true)
 
     // The pass that follows a push writes what is really running: nothing.
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'More'])
+    expect(await buttonsOn(ui)).toEqual(['More'])
     await ui.unmount()
   })
 

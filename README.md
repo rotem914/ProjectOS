@@ -120,7 +120,7 @@ own window, in the desktop app and in the terminal, in every folder you open.
   a local address (`http://localhost:4321`): green while that address
   answers, grey while it does not, whoever started the server.
 - Buttons. One for each kit shortcut the project's `CLAUDE.md` carries:
-  `Go commit` in the row, with the count of files waiting inside it
+  `Go commit` in the row, only while files wait, with their count inside it
   (`Go commit · 1`), the rest behind `More`. A press sends the phrase as
   your own message. `Push` and `Update plugin` show only while there is
   something to push or to update, and both ask in the row before they do
