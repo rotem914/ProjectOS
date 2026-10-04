@@ -39,9 +39,9 @@ import type {
   ProjectBandRepo,
 } from '../types/Mod-state'
 
-const facts = atom({ plugin: 'projectos-mods', key: 'bandFacts' } as const, null)
-const ask = atom({ plugin: 'projectos-mods', key: 'bandAsk' } as const, null)
-const busy = atom({ plugin: 'projectos-mods', key: 'bandBusy' } as const, {
+const facts = atom({ plugin: 'time', key: 'bandFacts' } as const, null)
+const ask = atom({ plugin: 'time', key: 'bandAsk' } as const, null)
+const busy = atom({ plugin: 'time', key: 'bandBusy' } as const, {
   isPushing: false,
   isUpdating: false,
 })
