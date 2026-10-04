@@ -118,6 +118,11 @@ export type ProjectBandFacts = {
    */
   kitCommit?: string | null
   /**
+   * True where the project carries the kit's marker file and is not the kit
+   * repository itself. No such key reads the same as false.
+   */
+  hasKit?: boolean
+  /**
    * The age, in days, at which the owner pressed the backup's quiet words
    * away. They stay out of the row until the backup is older than this.
    * Null, or no such key, when they were never pressed away.

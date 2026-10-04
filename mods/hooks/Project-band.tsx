@@ -1172,10 +1172,14 @@ function fastLabelOf(isFast: boolean): string {
 }
 
 // What a shortcut's button reads, and the words a press of it sends.
-// True while the kit online is newer than what this project stands on. An
-// install older than the update shortcut is behind by definition. Otherwise
-// the commit the project records is compared with the kit's newest one; a
-// project that records none, or a computer that could not ask, shows nothing.
+// True while the kit online is newer than what this project stands on, or
+// may be. An install older than the update shortcut is behind by definition.
+// A project that records its kit commit is compared with the kit's newest
+// one. A project that carries the kit and records no commit cannot be told
+// apart from one that is behind, so the update is offered there too: the
+// update itself then finds where the project stands and records it (owner,
+// 2026-10-04: his own projects must never be left without the button). Only
+// a computer that could not ask, and a project without the kit, show nothing.
 function isKitUpdateWaiting(known: ProjectBandFacts): boolean {
   const head = known.kitHead ?? null
 
@@ -1189,7 +1193,11 @@ function isKitUpdateWaiting(known: ProjectBandFacts): boolean {
 
   const commit = known.kitCommit ?? null
 
-  return commit !== null && commit !== '' && !head.startsWith(commit)
+  if (commit === null || commit === '') {
+    return known.hasKit === true
+  }
+
+  return !head.startsWith(commit)
 }
 
 function buttonTextOf(phrase: string, isFast: boolean, isUpdateWaiting = false): string {
@@ -2188,7 +2196,19 @@ async function passRepo($: Dollar): Promise<void> {
     // The kit's marker file, in either spelling.
     Promise.all(
       KIT_MARKERS.map(marker => $.fs.exists(joinPath(where.top, marker)).catch(() => false)),
-    ).then(found => found.some(Boolean)),
+    )
+      .then(found => found.some(Boolean))
+      // The kit repository carries the marker as a template, and is never a
+      // project to update.
+      .then(async found =>
+        found &&
+        !(
+          (await $.fs.exists(joinPath(where.top, 'hooks/dispatch.mjs')).catch(() => false)) &&
+          (await $.fs
+            .exists(joinPath(where.top, '.claude-plugin/plugin.json'))
+            .catch(() => false))
+        ),
+      ),
     // The kit commit the project stands on, when it records one.
     $.fs.read(joinPath(where.top, KIT_VERSION_FILE)).then(
       text => {
@@ -2230,6 +2250,7 @@ async function passRepo($: Dollar): Promise<void> {
       repo: { ...part, files: counted.isDone ? counted.files : shown },
       shortcuts,
       isUpdateByLink,
+      hasKit,
       kitCommit,
       hasResearch,
       backup,

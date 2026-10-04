@@ -1833,7 +1833,40 @@ describe('Update Kit', () => {
     await ui.unmount()
   })
 
-  onEachSurface('a project that records no version is never offered an update it cannot tell', async ($, on, surface) => {
+  onEachSurface('a project that carries the kit and records no version is offered the update', async ($, on, surface) => {
+    const kit = install(on, { present: ['D:/Work/Site/project-os/Hooks-settings.json'] })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    await ui.press({ key: 'more' })
+    expect((await buttonsOn(ui)).slice(-2)).toEqual(['Update Kit \u00b7 1', 'X'])
+    await ui.press({ key: 'go-update-kit' })
+    await kit.clock.settle()
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go update kit'])
+    await ui.unmount()
+  })
+
+  onEachSurface('the kit repository itself is never offered an update', async ($, on, surface) => {
+    const kit = install(on, {
+      present: [
+        'D:/Work/Site/project-os/Hooks-settings.json',
+        'D:/Work/Site/hooks/dispatch.mjs',
+        'D:/Work/Site/.claude-plugin/plugin.json',
+      ],
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    await ui.press({ key: 'more' })
+    expect((await buttonsOn(ui)).some(label => label.startsWith('Update Kit'))).toBe(false)
+    await ui.unmount()
+  })
+
+  onEachSurface('the phrase alone, with no kit in the project, offers nothing', async ($, on, surface) => {
     const kit = install(on)
 
     kit.world.plugin.onlineHead = ONLINE_HEAD
