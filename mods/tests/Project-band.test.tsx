@@ -1289,7 +1289,7 @@ describe('the shortcut buttons', () => {
 
     expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 1', '\u22ee'])
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toEqual(['Go audit', 'Back'])
+    expect(await buttonsOn(ui)).toEqual(['Go audit', 'X'])
     await ui.unmount()
   })
 
@@ -1336,7 +1336,7 @@ describe('the shortcut buttons', () => {
     // prompt always carry the phrase the kit's way.
     expect(await buttonsOn(ui)).toEqual(['\u22ee'])
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toEqual(['Go backup', 'Go commit and backup', 'Back'])
+    expect(await buttonsOn(ui)).toEqual(['Go backup', 'Go commit and backup', 'X'])
     await ui.press({ key: 'go-backup' })
     expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go backup'])
     await ui.unmount()
@@ -1380,7 +1380,7 @@ describe('the shortcut buttons', () => {
 
     expect(await buttonsOn(ui)).toEqual(['\u22ee'])
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toEqual(['Go backup', 'Back'])
+    expect(await buttonsOn(ui)).toEqual(['Go backup', 'X'])
     await ui.unmount()
   })
 
@@ -1458,7 +1458,7 @@ describe('the shortcut buttons', () => {
 
     // Fast is in the row, so More does not list it again.
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toEqual(['Go backup', 'Back'])
+    expect(await buttonsOn(ui)).toEqual(['Go backup', 'X'])
     await ui.unmount()
   })
 
@@ -1587,9 +1587,8 @@ describe('the shortcut buttons', () => {
     expect(await buttonsOn(ui)).toEqual([
       'Go commit and backup',
       'Go audit',
-      'Update Kit',
       'Go code review',
-      'Back',
+      'X',
     ])
     await ui.unmount()
   })
@@ -1659,7 +1658,7 @@ describe('the shortcut buttons', () => {
     const ui = await bandOn($, surface)
 
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toEqual(['Go visual QA', 'Back'])
+    expect(await buttonsOn(ui)).toEqual(['Go visual QA', 'X'])
     await ui.press({ key: 'go-visual-qa' })
     expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['GO visual qa'])
     await ui.unmount()
@@ -1769,65 +1768,43 @@ describe('the shortcut buttons', () => {
 })
 
 describe('Update Kit', () => {
-  onEachSurface('with the phrase in CLAUDE.md the button sends the phrase', async ($, on, surface) => {
-    const kit = install(on)
+  const STANDS_ON = {
+    'D:/Work/Site/CLAUDE.md': KIT_HEADINGS,
+    'D:/Work/Site/project-os/Kit-version.json': JSON.stringify({ commit: LOCAL_HEAD.slice(0, 7), date: '2026-10-02' }),
+  }
+
+  onEachSurface('is not offered while the project stands on the newest kit', async ($, on, surface) => {
+    const kit = install(on, { files: STANDS_ON })
 
     await start($, kit)
 
     const ui = await bandOn($, surface)
 
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toContain('Update Kit')
-    await ui.press({ key: 'go-update-kit' })
-    await kit.clock.settle()
-    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go update kit'])
+    expect((await buttonsOn(ui)).some(label => label.startsWith('Update Kit'))).toBe(false)
     await ui.unmount()
   })
 
-  onEachSurface('an older install, kit but no phrase, still gets the button, and it sends the whole instruction', async ($, on, surface) => {
-    const kit = install(on, {
-      files: { 'D:/Work/Site/CLAUDE.md': '### `Go commit`\n' },
-      present: ['D:/Work/Site/project-os/Hooks-settings.json'],
-    })
+  onEachSurface('shows with its 1, last before the X, once the kit online is newer', async ($, on, surface) => {
+    const kit = install(on, { files: STANDS_ON, offered: ['compact', 'deep-research'] })
 
     await start($, kit)
 
     const ui = await bandOn($, surface)
-
-    await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toContain('Update Kit \u00b7 1')
-    await ui.press({ key: 'go-update-kit' })
-    await kit.clock.settle()
-    expect(kit.world.prompts).toHaveLength(1)
-    expect(kit.world.prompts[0]?.text).toContain('https://github.com/rotem914/ProjectOS')
-    expect(kit.world.prompts[0]?.text).toContain('Go update kit')
-    await ui.unmount()
-  })
-
-  onEachSurface('the button carries a 1 while the kit online is newer than the project', async ($, on, surface) => {
-    const kit = install(on, {
-      files: {
-        'D:/Work/Site/CLAUDE.md': KIT_HEADINGS,
-        'D:/Work/Site/project-os/Kit-version.json': JSON.stringify({ commit: LOCAL_HEAD.slice(0, 7), date: '2026-10-02' }),
-      },
-    })
-
-    await start($, kit)
-
-    const ui = await bandOn($, surface)
-
-    // The project stands on the kit's newest commit: no mark.
-    await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toContain('Update Kit')
-    await ui.press({ key: 'cancel' })
 
     // The kit moves on online, and the next check hears of it.
     kit.world.plugin.onlineHead = ONLINE_HEAD
     await kit.clock.advance(6 * 60_000)
     await endTurn($, kit)
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toContain('Update Kit \u00b7 1')
-    expect(await buttonsOn(ui)).not.toContain('Update Kit')
+
+    // After every shortcut and Deep Research: beside the X.
+    expect((await buttonsOn(ui)).slice(-4)).toEqual([
+      'Go code review',
+      'Deep Research',
+      'Update Kit \u00b7 1',
+      'X',
+    ])
 
     // The mark is on the label only: a press still sends the phrase.
     await ui.press({ key: 'go-update-kit' })
@@ -1836,22 +1813,27 @@ describe('Update Kit', () => {
     await ui.unmount()
   })
 
-  onEachSurface('an older install is behind by definition, and a project that records no version shows no mark', async ($, on, surface) => {
-    const old = install(on, {
+  onEachSurface('an older install, kit but no phrase, is behind by definition, and a press sends the whole instruction', async ($, on, surface) => {
+    const kit = install(on, {
       files: { 'D:/Work/Site/CLAUDE.md': '### `Go commit`\n' },
       present: ['D:/Work/Site/project-os/Hooks-settings.json'],
     })
 
-    await start($, old)
+    await start($, kit)
 
     const ui = await bandOn($, surface)
 
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toContain('Update Kit \u00b7 1')
+    expect(await buttonsOn(ui)).toEqual(['Update Kit \u00b7 1', 'X'])
+    await ui.press({ key: 'go-update-kit' })
+    await kit.clock.settle()
+    expect(kit.world.prompts).toHaveLength(1)
+    expect(kit.world.prompts[0]?.text).toContain('https://github.com/rotem914/ProjectOS')
+    expect(kit.world.prompts[0]?.text).toContain('Go update kit')
     await ui.unmount()
   })
 
-  onEachSurface('with the phrase and no recorded version, no mark is shown', async ($, on, surface) => {
+  onEachSurface('a project that records no version is never offered an update it cannot tell', async ($, on, surface) => {
     const kit = install(on)
 
     kit.world.plugin.onlineHead = ONLINE_HEAD
@@ -1860,7 +1842,7 @@ describe('Update Kit', () => {
     const ui = await bandOn($, surface)
 
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toContain('Update Kit')
+    expect((await buttonsOn(ui)).some(label => label.startsWith('Update Kit'))).toBe(false)
     await ui.unmount()
   })
 
@@ -1872,7 +1854,7 @@ describe('Update Kit', () => {
     const ui = await bandOn($, surface)
 
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).not.toContain('Update Kit')
+    expect((await buttonsOn(ui)).some(label => label.startsWith('Update Kit'))).toBe(false)
     await ui.unmount()
   })
 })
@@ -1889,7 +1871,7 @@ describe('Deep Research', () => {
 
     const listed = await buttonsOn(ui)
 
-    expect(listed.slice(-2)).toEqual(['Deep Research', 'Back'])
+    expect(listed.slice(-2)).toEqual(['Deep Research', 'X'])
     await ui.press({ key: '/deep-research' })
     await kit.clock.settle()
     expect(kit.world.commands).toEqual(['deep-research'])
@@ -2016,9 +1998,8 @@ describe('More', () => {
       'Go backup',
       'Go commit and backup',
       'Go audit',
-      'Update Kit',
       'Go code review',
-      'Back',
+      'X',
     ])
 
     // The list is drawn where the row is, so it needs no pane, and its
@@ -2047,7 +2028,7 @@ describe('More', () => {
     const ui = await bandOn($, surface)
 
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toContain('Back')
+    expect(await buttonsOn(ui)).toContain('X')
     await ui.press({ key: 'cancel' })
     expect(kit.world.prompts).toEqual([])
     expect(await wordsOn(ui)).toBe('site-web')
@@ -2066,7 +2047,7 @@ describe('More', () => {
       const ui = await bandOn($, surface, columns)
 
       await ui.press({ key: 'more' })
-      expect((await buttonsOn(ui)).at(-1), `${columns} columns`).toBe('Back')
+      expect((await buttonsOn(ui)).at(-1), `${columns} columns`).toBe('X')
       await ui.press({ key: 'cancel' })
       await ui.unmount()
     }
@@ -2084,7 +2065,7 @@ describe('More', () => {
 
     await ui.press({ key: 'more' })
     await kit.clock.advance(60_000)
-    expect(await buttonsOn(ui)).toContain('Back')
+    expect(await buttonsOn(ui)).toContain('X')
 
     await kit.clock.advance(2 * 60_000)
     expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
@@ -3056,9 +3037,8 @@ describe('a narrow row', () => {
       'Go backup',
       'Go commit and backup',
       'Go audit',
-      'Update Kit',
       'Go code review',
-      'Back',
+      'X',
     ])
     expect((await narrow.find({ key: 'go-commit' }))?.props.variant).toBeUndefined()
     await narrow.press({ key: 'go-commit' })
@@ -3324,7 +3304,7 @@ describe('a write Claude Code refuses for a moment', () => {
     await kit.clock.advance(30)
     await kit.clock.advance(30)
     await pressing
-    expect(await buttonsOn(ui)).toContain('Back')
+    expect(await buttonsOn(ui)).toContain('X')
     expect(kit.world.refusals).toBe(0)
     await ui.unmount()
   })
@@ -3346,7 +3326,7 @@ describe('a write Claude Code refuses for a moment', () => {
     expect(kit.world.logs.some(line => line.includes('opening More failed'))).toBe(true)
 
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toContain('Back')
+    expect(await buttonsOn(ui)).toContain('X')
     await ui.unmount()
   })
 

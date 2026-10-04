@@ -90,6 +90,9 @@ const VISUAL_LABEL = 'Go visual QA'
 // the button shows wherever the project carries the kit's marker file, and
 // where the phrase is missing a press sends the whole instruction instead.
 const UPDATE_SHORTCUT = 'Go update kit'
+// The button that closes the list of shortcuts reads X (owner, 2026-10-04; it
+// read Back).
+const CLOSE_LABEL = 'X'
 const UPDATE_LABEL = 'Update Kit'
 const UPDATE_BY_LINK =
   'Update this project to the newest ProjectOS kit: fetch https://github.com/rotem914/ProjectOS and follow the "Go update kit" steps in its CLAUDE.md.'
@@ -1252,9 +1255,16 @@ function planOf(
           phrase =>
             phrase !== MAIN_SHORTCUT &&
             phrase !== FAST_SHORTCUT &&
+            phrase !== UPDATE_SHORTCUT &&
             known.shortcuts.includes(phrase),
         ),
         ...(known.hasResearch === true ? [RESEARCH_SHORTCUT] : []),
+        // The kit's update is offered only while one waits, and it comes
+        // last, so it sits beside the button that closes the list (owner,
+        // 2026-10-04).
+        ...(known.shortcuts.includes(UPDATE_SHORTCUT) && isKitUpdateWaiting(known)
+          ? [UPDATE_SHORTCUT]
+          : []),
       ]
     : []
   const canPush = pushTarget(known.repo) !== null
@@ -1634,21 +1644,27 @@ function drawMore(
         flexGrow={1}
         flexShrink={1}
       >
-        {open.phrases.map(phrase => (
-          <Button
-            key={keyOf(phrase)}
-            label={buttonTextOf(
-              phrase,
-              look.known.isFast === true,
-              isKitUpdateWaiting(look.known),
-            )}
-            onPress={() => acts.shortcut(phrase)}
-          />
-        ))}
+        {open.phrases
+          .filter(phrase => phrase !== UPDATE_SHORTCUT)
+          .map(phrase => (
+            <Button
+              key={keyOf(phrase)}
+              label={buttonTextOf(phrase, look.known.isFast === true)}
+              onPress={() => acts.shortcut(phrase)}
+            />
+          ))}
         {open.hasUpdate && (
           <Button key="update-plugin" label="Update plugin" onPress={() => acts.askUpdate()} />
         )}
-        <Button key="cancel" label="Back" onPress={() => acts.cancel()} />
+        {/* The kit's update comes last, beside the button that closes the list. */}
+        {open.phrases.includes(UPDATE_SHORTCUT) && (
+          <Button
+            key={keyOf(UPDATE_SHORTCUT)}
+            label={buttonTextOf(UPDATE_SHORTCUT, false, isKitUpdateWaiting(look.known))}
+            onPress={() => acts.shortcut(UPDATE_SHORTCUT)}
+          />
+        )}
+        <Button key="cancel" label={CLOSE_LABEL} onPress={() => acts.cancel()} />
       </Box>
     </Box>
   )
