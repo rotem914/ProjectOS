@@ -195,9 +195,9 @@ const STAGES = [
       ['8', 'The install report', 'What was set, what broke, every clash, what waits on you.', null, null, true],
       ['9', 'Clean up', 'The fetch is deleted. Installation.md stays.'],
     ] } },
-  { id: 'task', title: 'A task', text: 'Sixteen steps from request to delivery. Size never unlocks a shortcut.',
+  { id: 'task', title: 'Task flow', text: 'Sixteen steps from request to delivery. Size never unlocks a shortcut.',
     serves: ['rules', 'living', 'guards', 'shortcuts', 'tools'],
-    scene: { title: 'A task: from idea to delivery',
+    scene: { title: 'Task flow: from idea to delivery',
       groups: [['Understand', 4], ['Plan', 2], ['Build', 2], ['Prove', 4], ['Record', 4]], steps: [
       ['1', 'Idea or request', 'Understand the need. No editor yet.', 'Feature, change, bug, UX, infra, docs, process, architecture.'],
       ['2', 'Classify and state risk', 'Name the kind of change. Say low, medium or high.', 'Medium or high arms the automatic review in step 12.'],
@@ -216,7 +216,7 @@ const STAGES = [
       ['15', 'History row', 'Two rows: one to scan, one with the detail.', 'What changed, the checks, the risk, how to undo.'],
       ['16', 'Delivery summary', 'The short report Conversations.md prescribes.', 'Uncommitted work is said so.'],
     ] } },
-  { id: 'commit', title: 'Go commit and push', text: 'The assistant checks, records and commits. Only you push.',
+  { id: 'commit', title: 'Commit and push', text: 'The assistant checks, records and commits. Only you push.',
     serves: ['living', 'scripts', 'shortcuts', 'strip'],
     scene: { title: 'Go commit and push', steps: [
       ['1', 'End fast mode, pay the paperwork', 'Work with no History row is documented first.', 'Also a fast burst whose chat was closed.'],
@@ -230,7 +230,7 @@ const STAGES = [
       ['7', 'Stop', 'The assistant reports the commit and ends.', 'A cloud session pushes its own branch, never main.'],
       ['You', 'Push', 'Main is the owner\'s. You push, every time.', 'From the strip, or from your git app.', null, true],
     ] } },
-  { id: 'update', title: 'Go update kit', text: 'A newer kit comes in. Your records and your own edits stay untouched.',
+  { id: 'update', title: 'Kit update', text: 'A newer kit comes in. Your records and your own edits stay untouched.',
     serves: ['rules', 'guards', 'scripts', 'strip'],
     scene: { title: 'Go update kit', steps: [
       ['1', 'Fetch the kit', 'Into the scratch folder, with its full history.'],
@@ -437,11 +437,6 @@ STAGES.forEach((s, i) => {
   nodes[s.id] = { el: b, rect, focus: rect, drill: true, title: s.title, links: [], kin: new Set(s.serves) };
   if (i > 0) path('M' + (x - STAGE.gap + 8) + ' ' + (STAGE.y + STAGE.h / 2) + ' H' + (x - 10), 'seq').setAttribute('marker-end', 'url(#head)');
 });
-// A task and a commit repeat: the arc back from Go commit to the next task.
-(() => {
-  const a = nodes.commit.rect, b = nodes.task.rect, y = STAGE.y - 6;
-  path('M' + (a.x + a.w / 2) + ' ' + y + ' C' + (a.x + a.w / 2) + ' ' + (y - 70) + ' ' + (b.x + b.w / 2) + ' ' + (y - 70) + ' ' + (b.x + b.w / 2) + ' ' + (y - 4), 'seq').setAttribute('marker-end', 'url(#head)');
-})();
 
 PARTS.forEach((p, i) => {
   const x = PART.x0 + i * (PART.w + PART.gap);
