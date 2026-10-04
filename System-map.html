@@ -76,16 +76,16 @@
 
   /* The inside of a block, drawn small and shown when the camera is close */
   .inner {
-    position: absolute; left: 0; top: 0; width: 1700px; height: 960px; transform-origin: 0 0;
-    padding: 28px 44px 32px; display: flex; flex-direction: column;
+    position: absolute; left: 0; top: 0; width: 2300px; height: 1299px; transform-origin: 0 0;
+    padding: 100px; display: flex; flex-direction: column;
     opacity: 0; visibility: hidden; transition: opacity .4s, visibility 0s .4s; cursor: default;
   }
   .open .inner { opacity: 1; visibility: visible; transition: opacity .45s .3s, visibility 0s; }
   .open .face { opacity: 0; pointer-events: none; }
   .open { cursor: default; }
-  .inner h3 { margin: 0 0 20px; font-size: 34px; font-weight: 700; text-align: center; letter-spacing: -.01em; }
+  .inner h3 { margin: 0 0 32px; font-size: 34px; font-weight: 700; text-align: center; letter-spacing: -.01em; }
   .flow {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 26px 40px;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px 40px;
     margin: auto 0; min-height: 0;
   }
   .gflow { margin: auto 0; min-height: 0; display: flex; flex-direction: column; gap: 24px; }
@@ -103,8 +103,6 @@
     flex: none; padding-left: 6px; font-size: 23px; line-height: 28px; font-weight: 700; color: var(--brand);
   }
   .gcards { flex: 1; min-height: 0; display: grid; gap: 40px; }
-  .inner.roomy { padding: 100px; }
-  .inner.roomy h3 { margin-bottom: 32px; }
   .roomy .group { padding: 32px; gap: 16px; }
   .gcards .card { padding: 24px; gap: 5px; }
   .gcards .card p { font-size: 15.5px; }
@@ -112,7 +110,7 @@
   .gcards .ct .tag { margin-left: auto; align-self: center; white-space: nowrap; }
   .card {
     position: relative; background: var(--card); border: 2px solid var(--brand); border-radius: 15px;
-    padding: 16px 18px; display: flex; flex-direction: column; gap: 7px; min-height: 0;
+    padding: 24px; display: flex; flex-direction: column; gap: 7px; min-height: 0;
   }
   .card:not(.end)::after {
     content: ""; position: absolute; right: -29px; top: 50%; width: 12px; height: 12px;
@@ -134,7 +132,7 @@
   .card.owner .ct i { color: #C9D0F5; }
   .card.owner .note { color: #E3E7FB; border-color: #8E9AE0; }
   .cols { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px; min-height: 0; }
-  .cols .card { padding: 22px 22px; gap: 12px; }
+  .cols .card { padding: 24px; gap: 12px; }
   .cols .card::after { display: none; }
   .when { font-size: 14px; font-weight: 600; color: var(--brand); background: var(--panel); border-radius: 20px; padding: 4px 12px; align-self: flex-start; }
   .cols ul { margin: 0; padding: 0 0 0 18px; font-size: 15.5px; line-height: 1.4; display: flex; flex-direction: column; gap: 7px; }
@@ -200,7 +198,6 @@ const STAGES = [
   { id: 'task', title: 'A task', text: 'Sixteen steps from request to delivery. Size never unlocks a shortcut.',
     serves: ['rules', 'living', 'guards', 'shortcuts', 'tools'],
     scene: { title: 'A task: from idea to delivery',
-      size: [2300, 1299],
       groups: [['Understand', 4], ['Plan', 2], ['Build', 2], ['Prove', 4], ['Record', 4]], steps: [
       ['1', 'Idea or request', 'Understand the need. No editor yet.', 'Feature, change, bug, UX, infra, docs, process, architecture.'],
       ['2', 'Classify and state risk', 'Name the kind of change. Say low, medium or high.', 'Medium or high arms the automatic review in step 12.'],
@@ -344,7 +341,7 @@ const GUARDS = { title: 'Guards and hooks: rules that do not rely on memory', co
 const W = 2540, H = 1100;
 const STAGE = { w: 340, h: 192, y: 170, x0: 470, gap: 80 };
 const PART = { w: 300, h: 490, y: 580, x0: 100, gap: 40 };
-const INNER = { w: 1700, h: 960 };
+const INNER = { w: 2300, h: 1299 };
 const BOUNDS = { x: 60, y: 10, w: 2420, h: 1090 };
 
 const world = document.getElementById('world');
@@ -403,7 +400,7 @@ function flowScene(scene) {
   scene.steps.forEach((step, i) => grid.appendChild(card(step, i % 4 === 3 || i === scene.steps.length - 1)));
   const rows = Math.ceil(scene.steps.length / 4);
   grid.style.gridTemplateRows = 'repeat(' + rows + ', minmax(0, 1fr))';
-  grid.style.flex = '0 1 ' + (rows * 236 + (rows - 1) * 26) + 'px';
+  grid.style.flex = '0 1 ' + (rows * 236 + (rows - 1) * 24) + 'px';
   inner.appendChild(grid);
   return inner;
 }
