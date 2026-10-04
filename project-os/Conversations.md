@@ -238,8 +238,9 @@ Renaming is safe.
 
 In a list of findings, never pack a point into a paragraph.
 Give EVERY point, numbered or not, a **bold** headline with `----` above it.
-Under it, in full and never trimmed: `Problem:`, `Proposal:`, `In practice:`,
+Under it, in full and never trimmed: `Problem:`, `Proposal:`,
 `Your workflow:`, each label alone on its line, one sentence per line below.
+`Proposal:` says what to do and how it plays out, together.
 Same-topic points number the headline (`1 ·`), never a Markdown `1.` item.
 The install's two messages keep the one-line Problems shape `Installation.md` gives them.
 
@@ -255,9 +256,7 @@ The column shows the group's status, not the item's.
 
 Proposal:
 Pick one meaning and label it.
-
-In practice:
-Everyone reads the column the same way.
+Everyone then reads the column the same way.
 
 Your workflow:
 No change for you.
@@ -270,9 +269,7 @@ done / total is a bare number.
 
 Proposal:
 A thin bar beside it.
-
-In practice:
-Progress is scannable at a glance.
+Progress is then scannable at a glance.
 
 Your workflow:
 No change for you.
