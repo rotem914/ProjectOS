@@ -158,7 +158,8 @@ const ASK_KEEP_MS = 2 * 60_000
 // pushes (owner, 2026-10-05: no second row to answer). OK stays this long,
 // then the button is Push again, so a press much later cannot push.
 const PUSH_ARM_MS = 5_000
-const PUSH_OK_LABEL = 'OK'
+// The button reads Approve (owner, 2026-10-05); the comments call it OK.
+const PUSH_OK_LABEL = 'Approve'
 
 // Claude Code refuses a stored value for as long as a row is being drawn. A
 // write waits for the row's own drawing to end, but not for longer than this,
@@ -1677,6 +1678,7 @@ function drawMore(
         alignItems="center"
         justifyContent="flex-end"
         columnGap={1}
+        rowGap={1}
         flexGrow={1}
         flexShrink={1}
       >
@@ -2962,9 +2964,12 @@ export function registerProjectBand(on: On): void {
           // Where the mark is drawn, the row is planned without its cells.
           // The check mark belongs to the plain row: a question or the More
           // list in the row's place draws none, and gives up no cells for it.
+          // A push waiting for its OK is the plain row, so the mark stays.
           const open = await read($, ask)
           const isCheckDrawn =
-            open === null && table.Svg !== undefined && known.repo?.files === 0
+            (open === null || open.kind === 'push') &&
+            table.Svg !== undefined &&
+            known.repo?.files === 0
           const columns =
             (e.props.bodyColumns > 0 ? e.props.bodyColumns : 1_000) -
             reserve -

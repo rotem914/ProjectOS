@@ -753,7 +753,7 @@ describe('the label', () => {
 
     expect(label?.props.backgroundColor).toBeUndefined()
     expect(await wordsOn(ui)).toBe('site-web | All committed')
-    expect(await buttonsOn(ui)).toEqual(['OK', '\u22ee'])
+    expect(await buttonsOn(ui)).toEqual(['Approve', '\u22ee'])
     await ui.unmount()
   })
 })
@@ -1310,7 +1310,7 @@ describe('a count of files that runs out of time', () => {
     const counts = gitRuns(kit.world, 'status').length
 
     await ui.press({ key: 'push' })
-    expect(await buttonsOn(ui)).toContain('OK')
+    expect(await buttonsOn(ui)).toContain('Approve')
     await answerYes(kit, ui, 'confirm-push')
     expect(kit.world.toasts).toEqual(['Pushed 2 commits'])
 
@@ -2200,7 +2200,7 @@ describe('the Push button', () => {
 
     // The button itself turns into OK, with no second row to answer, and it
     // never asks for the keyboard, so a stray Enter never pushes.
-    expect(await buttonsOn(ui)).toContain('OK')
+    expect(await buttonsOn(ui)).toContain('Approve')
     expect(await buttonsOn(ui)).not.toContain('Cancel')
     expect((await ui.find({ key: 'confirm-push' }))?.props.autoFocus).toBeUndefined()
     expect((await ui.find({ key: 'confirm-push' }))?.props.variant).toBe('primary')
@@ -2219,11 +2219,11 @@ describe('the Push button', () => {
       const ui = await bandOn($, surface, columns)
 
       await ui.press({ key: 'push' })
-      expect(await buttonsOn(ui), `${columns} columns`).toContain('OK')
+      expect(await buttonsOn(ui), `${columns} columns`).toContain('Approve')
 
       // Left alone, OK is Push again before the next width is tried.
       await kit.clock.advance(5_000)
-      expect(await buttonsOn(ui), `${columns} columns`).not.toContain('OK')
+      expect(await buttonsOn(ui), `${columns} columns`).not.toContain('Approve')
       await ui.unmount()
     }
 
@@ -2241,7 +2241,7 @@ describe('the Push button', () => {
 
     await ui.press({ key: 'push' })
     await kit.clock.advance(4_000)
-    expect(await buttonsOn(ui)).toEqual(['OK', '\u22ee'])
+    expect(await buttonsOn(ui)).toEqual(['Approve', '\u22ee'])
     await kit.clock.advance(1_000)
     expect(gitRuns(kit.world, 'push')).toHaveLength(0)
     expect(kit.world.toasts).toEqual([])
@@ -2264,7 +2264,7 @@ describe('the Push button', () => {
     await kit.clock.advance(500)
     await ui.press({ key: 'confirm-push' })
     expect(gitRuns(kit.world, 'push')).toHaveLength(0)
-    expect(await buttonsOn(ui)).toEqual(['OK', '\u22ee'])
+    expect(await buttonsOn(ui)).toEqual(['Approve', '\u22ee'])
 
     // A moment later the same press is an answer.
     await kit.clock.advance(100)
@@ -2569,7 +2569,7 @@ describe('the Push button', () => {
     // is: nothing is asked of it between the two presses.
     await ui.press({ key: 'push' })
     expect(kit.world.logs.some(line => line.includes('moving the keyboard to a button failed'))).toBe(false)
-    expect(await buttonsOn(ui)).toEqual(['OK', '\u22ee'])
+    expect(await buttonsOn(ui)).toEqual(['Approve', '\u22ee'])
     await answerYes(kit, ui, 'confirm-push')
     expect(kit.world.toasts).toEqual(['Pushed 2 commits'])
     await ui.unmount()
@@ -3331,7 +3331,7 @@ describe('a new conversation in the same window', () => {
     await ui.press({ key: 'push' })
     await $.classic.SessionStart({ source: 'compact', cwd: kit.world.folder })
     await kit.clock.settle()
-    expect(await buttonsOn(ui)).toEqual(['OK', '\u22ee'])
+    expect(await buttonsOn(ui)).toEqual(['Approve', '\u22ee'])
     await ui.unmount()
   })
 })
