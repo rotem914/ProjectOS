@@ -699,8 +699,11 @@ Decisions with empty templates.
    stays removed. Lay the report out as `project-os/Conversations.md`
    prescribes for a reply with several parts: each part under its own `# H1`
    heading with the `----` divider above it, so a heading can never be taken
-   for a line of the report. Never a heading written as a plain line. Ask
-   one question: apply? Nothing is applied before the owner's word.
+   for a line of the report. Never a heading written as a plain line. End
+   the report on a last part headed `# Apply kit updates`, never `# Next`,
+   with one line under it: `Say GO and I start.` That is the one question
+   of the report, and a bare "Apply?" under a general heading gets missed.
+   Nothing is applied before the owner's word.
 4. On that word, run the same command with `--apply` added. It copies only
    the machinery files the kit changed and this project never touched, plus
    the machinery files new in the kit, and writes each calibrated file that
