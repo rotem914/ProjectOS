@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ProjectOS system map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&display=swap">
 <style>
   :root {
     --bg: #F4F5FA;
@@ -19,7 +22,7 @@
   body {
     background: var(--bg);
     color: var(--ink);
-    font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    font-family: "Google Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
   }
@@ -58,6 +61,7 @@
     background: var(--card); border: 2px solid var(--brand); border-radius: 13px;
     padding: 7px 12px; flex: 1; display: flex; flex-direction: column; justify-content: center; min-height: 0;
   }
+  .few .mini { flex: none; min-height: 64px; }
   .mini b { font-size: 16px; font-weight: 600; }
   .mini span { font-size: 13px; color: var(--soft); line-height: 1.25; }
 
@@ -73,17 +77,39 @@
   /* The inside of a block, drawn small and shown when the camera is close */
   .inner {
     position: absolute; left: 0; top: 0; width: 1700px; height: 960px; transform-origin: 0 0;
-    padding: 34px 44px 40px; display: flex; flex-direction: column;
+    padding: 28px 44px 32px; display: flex; flex-direction: column;
     opacity: 0; visibility: hidden; transition: opacity .4s, visibility 0s .4s; cursor: default;
   }
   .open .inner { opacity: 1; visibility: visible; transition: opacity .45s .3s, visibility 0s; }
   .open .face { opacity: 0; pointer-events: none; }
   .open { cursor: default; }
-  .inner h3 { margin: 0 0 26px; font-size: 34px; font-weight: 700; text-align: center; letter-spacing: -.01em; }
+  .inner h3 { margin: 0 0 20px; font-size: 34px; font-weight: 700; text-align: center; letter-spacing: -.01em; }
   .flow {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 26px 40px;
     margin: auto 0; min-height: 0;
   }
+  .gflow { margin: auto 0; min-height: 0; display: flex; flex-direction: column; gap: 24px; }
+  .grow { flex: 1; min-height: 0; display: flex; gap: 40px; }
+  .group {
+    position: relative; min-width: 0; display: flex; flex-direction: column; gap: 6px;
+    background: rgba(255, 255, 255, .62); border-radius: 22px; padding: 8px 12px 10px;
+  }
+  .group:not(:last-child)::after {
+    content: ""; position: absolute; right: -27px; top: 50%; width: 12px; height: 12px;
+    border-top: 2.5px solid var(--line); border-right: 2.5px solid var(--line);
+    transform: translateY(-50%) rotate(45deg);
+  }
+  .gname {
+    flex: none; padding-left: 6px; font-size: 23px; line-height: 28px; font-weight: 700; color: var(--brand);
+  }
+  .gcards { flex: 1; min-height: 0; display: grid; gap: 40px; }
+  .inner.roomy { padding: 100px; }
+  .inner.roomy h3 { margin-bottom: 32px; }
+  .roomy .group { padding: 32px; gap: 16px; }
+  .gcards .card { padding: 24px; gap: 5px; }
+  .gcards .card p { font-size: 15.5px; }
+  .gcards .note { padding: 5px 10px; }
+  .gcards .ct .tag { margin-left: auto; align-self: center; white-space: nowrap; }
   .card {
     position: relative; background: var(--card); border: 2px solid var(--brand); border-radius: 15px;
     padding: 16px 18px; display: flex; flex-direction: column; gap: 7px; min-height: 0;
@@ -152,7 +178,7 @@
 // ---------------------------------------------------------------------------
 const STAGES = [
   { id: 'install', title: 'Install', text: 'Once per project. The kit moves in, and your own rules win every clash.',
-    serves: ['rules', 'living', 'guards'],
+    serves: ['rules', 'living', 'guards', 'tools'],
     scene: { title: 'Install: one prompt, sixteen steps', steps: [
       ['0', 'Bring the kit in', 'Fetched into the scratch folder, never into the project root.'],
       ['1', 'Read everything first', 'Nothing is changed before the reading is complete.'],
@@ -172,8 +198,10 @@ const STAGES = [
       ['9', 'Clean up', 'The fetch is deleted. Installation.md stays.'],
     ] } },
   { id: 'task', title: 'A task', text: 'Sixteen steps from request to delivery. Size never unlocks a shortcut.',
-    serves: ['rules', 'living', 'guards', 'shortcuts'],
-    scene: { title: 'A task: from idea to delivery', steps: [
+    serves: ['rules', 'living', 'guards', 'shortcuts', 'tools'],
+    scene: { title: 'A task: from idea to delivery',
+      size: [2300, 1299],
+      groups: [['Understand', 4], ['Plan', 2], ['Build', 2], ['Prove', 4], ['Record', 4]], steps: [
       ['1', 'Idea or request', 'Understand the need. No editor yet.', 'Feature, change, bug, UX, infra, docs, process, architecture.'],
       ['2', 'Classify and state risk', 'Name the kind of change. Say low, medium or high.', 'Medium or high arms the automatic review in step 12.'],
       ['3', 'Read the context', 'Read the listed files before forming an opinion.', 'CLAUDE.md holds the one reading list.'],
@@ -185,7 +213,7 @@ const STAGES = [
       ['9', 'Browser QA', 'Anything visible is checked in a running app.', 'Done needs one of three paths: ran, no tool, blocked.'],
       ['10', 'QA checklist', 'Go through QA.md.', 'A missing check that will be reused is added now.'],
       ['11', 'Fix loop', 'Fix the smallest cause. Re-run it, and what sits around it.', null, 'Back to 10 until green'],
-      ['12', 'Automatic review', 'Medium or high risk: the change is reviewed now.', 'New findings are fixed. Older ones wait for the owner.', 'Low risk skips'],
+      ['12', 'Automatic review', 'Medium or high risk: reviewed now.', 'New findings are fixed. Older ones wait for the owner.', 'Low risk skips'],
       ['13', 'Decisions checkpoint', 'Did this create a choice worth keeping?', 'If yes, an entry in Decisions.md.'],
       ['14', 'Documentation routing', 'Update only what needs to change.', 'One rule, one home. Other files point there.'],
       ['15', 'History row', 'Two rows: one to scan, one with the detail.', 'What changed, the checks, the risk, how to undo.'],
@@ -228,7 +256,7 @@ const PARTS = [
     ['Code_review.md', 'How risky changes get reviewed'],
     ['Visual_QA.md', 'Testing by using the app'],
   ] },
-  { id: 'living', title: 'Living files', items: [
+  { id: 'living', title: 'Project memory', items: [
     ['History.md', 'What changed, what was checked'],
     ['Decisions.md', 'Why a choice was made'],
     ['Backlog.md', 'What you said not now to'],
@@ -249,7 +277,7 @@ const PARTS = [
     ['Backup whole project', 'One ZIP, history included'],
     ['Compare kit files', 'Brings a newer kit in safely'],
   ] },
-  { id: 'shortcuts', title: 'Shortcuts', items: [
+  { id: 'shortcuts', title: 'User commands', items: [
     ['FAST MODE', 'Tune by eye, paperwork later'],
     ['Go commit', 'Check, record, commit'],
     ['Go audit', 'Count the gaps'],
@@ -259,12 +287,16 @@ const PARTS = [
     ['Go code review', 'Review the code'],
     ['GO visual qa', 'Test by using the app'],
   ] },
-  { id: 'strip', title: 'The strip', items: [
+  { id: 'strip', title: 'Mods strip', items: [
     ['What is waiting', 'Files to commit, commits to push'],
     ['Server light', 'Green while your local address answers'],
     ['Shortcut buttons', 'One press sends the phrase'],
     ['Push', 'Asks in the row before it runs'],
     ['Kit update', 'Shows while a newer kit waits'],
+  ] },
+  { id: 'tools', title: 'Tool connections', items: [
+    ['Figma', 'Call budget, hard caps, silent traps'],
+    ['Google Analytics', 'No number that no tool gave'],
   ] },
 ];
 
@@ -309,11 +341,11 @@ const GUARDS = { title: 'Guards and hooks: rules that do not rely on memory', co
 // ---------------------------------------------------------------------------
 // Layout, in world units.
 // ---------------------------------------------------------------------------
-const W = 2200, H = 1100;
-const STAGE = { w: 340, h: 192, y: 170, x0: 300, gap: 80 };
+const W = 2540, H = 1100;
+const STAGE = { w: 340, h: 192, y: 170, x0: 470, gap: 80 };
 const PART = { w: 300, h: 490, y: 580, x0: 100, gap: 40 };
 const INNER = { w: 1700, h: 960 };
-const BOUNDS = { x: 60, y: 10, w: 2080, h: 1090 };
+const BOUNDS = { x: 60, y: 10, w: 2420, h: 1090 };
 
 const world = document.getElementById('world');
 const stage = document.getElementById('stage');
@@ -335,16 +367,40 @@ const nodes = {};   // id -> { el, rect, drill, focus, title, links }
 
 function flowScene(scene) {
   const inner = el('div', 'inner');
+  if (scene.size) { inner.style.width = scene.size[0] + 'px'; inner.style.height = scene.size[1] + 'px'; }
   inner.appendChild(el('h3', '', scene.title));
-  const grid = el('div', 'flow');
-  scene.steps.forEach(([n, t, d, note, tag, owner], i) => {
-    const c = el('div', 'card' + (owner ? ' owner' : '') + ((i % 4 === 3 || i === scene.steps.length - 1) ? ' end' : ''));
+  const card = ([n, t, d, note, tag, owner], isEnd) => {
+    const c = el('div', 'card' + (owner ? ' owner' : '') + (isEnd ? ' end' : ''));
     c.appendChild(el('div', 'ct', '<i>' + n + '</i><span>' + t + '</span>'));
     c.appendChild(el('p', '', d));
-    if (tag) c.appendChild(el('span', 'tag', tag));
+    if (tag) (scene.groups ? c.firstChild : c).appendChild(el('span', 'tag', tag));
     if (note) c.appendChild(el('div', 'note', note));
-    grid.appendChild(c);
-  });
+    return c;
+  };
+  if (scene.groups) {
+    // Named groups: each is a tinted panel with its name above its steps,
+    // and panels share a row until the row holds four steps.
+    const wrap = el('div', 'gflow');
+    let at = 0, inRow = 0, row = null, rows = 0;
+    scene.groups.forEach(([name, count]) => {
+      if (!row || inRow + count > 4) { row = el('div', 'grow'); wrap.appendChild(row); inRow = 0; rows += 1; }
+      const g = el('div', 'group');
+      g.style.flex = count + ' 1 0';
+      g.appendChild(el('div', 'gname', name));
+      const cards = el('div', 'gcards');
+      cards.style.gridTemplateColumns = 'repeat(' + count + ', minmax(0, 1fr))';
+      for (let i = 0; i < count; i++) cards.appendChild(card(scene.steps[at + i], i === count - 1));
+      g.appendChild(cards);
+      row.appendChild(g);
+      at += count; inRow += count;
+    });
+    wrap.style.flex = '1 1 0';
+    inner.classList.add('roomy');
+    inner.appendChild(wrap);
+    return inner;
+  }
+  const grid = el('div', 'flow');
+  scene.steps.forEach((step, i) => grid.appendChild(card(step, i % 4 === 3 || i === scene.steps.length - 1)));
   const rows = Math.ceil(scene.steps.length / 4);
   grid.style.gridTemplateRows = 'repeat(' + rows + ', minmax(0, 1fr))';
   grid.style.flex = '0 1 ' + (rows * 236 + (rows - 1) * 26) + 'px';
@@ -377,7 +433,7 @@ STAGES.forEach((s, i) => {
   const face = el('div', 'face', '<h2>' + s.title + '</h2><p>' + s.text + '</p><div class="plus">+</div>');
   b.appendChild(face);
   const inner = flowScene(s.scene);
-  inner.style.transform = 'scale(' + (STAGE.w / INNER.w) + ')';
+  inner.style.transform = 'scale(' + (STAGE.w / (s.scene.size ? s.scene.size[0] : INNER.w)) + ')';
   b.appendChild(inner);
   world.appendChild(b);
   const rect = { x, y: STAGE.y, w: STAGE.w, h: STAGE.h };
@@ -392,7 +448,7 @@ STAGES.forEach((s, i) => {
 
 PARTS.forEach((p, i) => {
   const x = PART.x0 + i * (PART.w + PART.gap);
-  const b = place(el('div', 'abs block part' + (p.drill ? ' drill' : '')), x, PART.y, PART.w, PART.h);
+  const b = place(el('div', 'abs block part' + (p.drill ? ' drill' : '') + (p.items.length < 4 ? ' few' : '')), x, PART.y, PART.w, PART.h);
   b.dataset.id = p.id;
   const face = el('div', 'face', '<h2>' + p.title + '</h2>' + p.items.map(([n, d]) => '<div class="mini"><b>' + n + '</b><span>' + d + '</span></div>').join('') + (p.drill ? '<div class="plus">+</div>' : ''));
   b.appendChild(face);
