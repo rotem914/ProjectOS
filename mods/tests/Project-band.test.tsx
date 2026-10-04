@@ -126,6 +126,7 @@ type World = {
   // What happened.
   git: GitCall[]
   toasts: string[]
+  statuses: (string | undefined)[]
   prompts: { text: string; origin: unknown }[]
   logs: string[]
   /**
@@ -218,6 +219,7 @@ function worldOf(changes: Partial<World> = {}): World {
     refusals: 0,
     git: [],
     toasts: [],
+    statuses: [],
     prompts: [],
     logs: [],
     backups: null,
@@ -467,6 +469,11 @@ function install(on: On, changes: Partial<World> = {}): Kit {
   })
   on('ui.toast', (_, e) => {
     world.toasts.push(e.text)
+
+    return { value: undefined }
+  })
+  on('ui.status', (_, e) => {
+    world.statuses.push(e.text)
 
     return { value: undefined }
   })
@@ -1050,6 +1057,58 @@ describe('what is waiting', () => {
       await ui.unmount()
     })
   }
+})
+
+describe('the reply time under the message box', () => {
+  test('seconds under a minute, minutes and seconds from there', async ($, on) => {
+    const kit = install(on)
+
+    await start($, kit)
+
+    for (const durationMs of [400, 5_000, 12_300, 59_400, 60_000, 156_000, 352_000]) {
+      await $.turn.complete({
+        answer: 'Done.',
+        durationMs,
+        isAborted: false,
+        turnId: 'turn-1',
+        reason: 'answer',
+      })
+    }
+
+    await kit.clock.settle()
+    expect(kit.world.statuses).toEqual(['0s', '5s', '12s', '59s', '1:00m', '2:36m', '5:52m'])
+  })
+
+  test('a turn of the main conversation pins its time', async ($, on) => {
+    const kit = install(on)
+
+    await start($, kit)
+    await $.turn.complete({
+      answer: 'Done.',
+      durationMs: 156_000,
+      isAborted: false,
+      turnId: 'turn-1',
+      reason: 'answer',
+    })
+    await kit.clock.settle()
+    expect(kit.world.statuses).toEqual(['2:36m'])
+  })
+
+  test('a subagent finishing pins nothing', async ($, on) => {
+    const kit = install(on)
+
+    await start($, kit)
+    await $.turn.complete({
+      answer: 'Done.',
+      durationMs: 5_000,
+      isAborted: false,
+      turnId: 'turn-2',
+      reason: 'answer',
+      agentId: 'agent-7',
+    })
+    await kit.clock.settle()
+    expect(kit.world.statuses).toEqual([])
+  })
 })
 
 describe('a session nobody looks at', () => {

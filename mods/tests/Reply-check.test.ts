@@ -526,7 +526,11 @@ const world = (on: On, files: Readonly<Record<string, string>> = {}, disk: Disk 
     return { value: text }
   })
   on('ui.status', (_$, e) => {
-    seen.status.push(e.text)
+    // The band pins how long each reply took (`12s`, `2:36m`). That line is
+    // the band's, so it is left out of what this suite counts.
+    if (e.text === undefined || !/^(\d+s|\d+:\d\dm)$/.test(e.text)) {
+      seen.status.push(e.text)
+    }
 
     return { value: undefined }
   })

@@ -404,6 +404,19 @@ function placeOf(path: string, base: string, home: string | undefined): string |
   return joinPath(base, path)
 }
 
+// How long the last reply took, as the line under the message box says it:
+// whole seconds under a minute (`12s`), minutes and seconds from there
+// (`2:36m`).
+function replyTimeOf(durationMs: number): string {
+  const seconds = Math.max(0, Math.round(durationMs / 1000))
+
+  if (seconds < 60) {
+    return `${seconds}s`
+  }
+
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}m`
+}
+
 function countOf(count: number, one: string): string {
   return `${count} ${count === 1 ? one : `${one}s`}`
 }
@@ -2875,6 +2888,15 @@ export function registerProjectBand(on: On): void {
     // Subagents finish all the time; the main turn's end covers their work.
     if (e.agentId === undefined && work.isSeen) {
       inBackground($, 'the pass after a turn failed', () => refresh($))
+    }
+
+    // How long the reply took stays under the message box until the next one.
+    if (e.agentId === undefined) {
+      try {
+        $.ui.status(replyTimeOf(e.durationMs))
+      } catch (error) {
+        note($, 'showing the reply time failed', error)
+      }
     }
 
     return next(e)

@@ -385,7 +385,11 @@ const world = (on: On) => {
     return { deny: `ENOENT: no such file, open '${e.path}'` }
   })
   on('ui.status', (_, e) => {
-    seen.status.push(e.text)
+    // The band pins how long each reply took (`12s`, `2:36m`). That line is
+    // the band's, so it is left out of what this suite counts.
+    if (e.text === undefined || !/^(\d+s|\d+:\d\dm)$/.test(e.text)) {
+      seen.status.push(e.text)
+    }
 
     return { value: undefined }
   })
