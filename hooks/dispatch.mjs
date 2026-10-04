@@ -1,7 +1,11 @@
 // dispatch.mjs - the ProjectOS plugin's one hook. Wired by hooks/hooks.json for
-// SessionStart, UserPromptSubmit and PreToolUse, and called with one word:
+// SessionStart, UserPromptSubmit, PreToolUse and Stop, and called with one word:
 //
-//   node hooks/dispatch.mjs session | prompt | pretool
+//   node hooks/dispatch.mjs session | prompt | pretool | stop
+//
+// A fifth word is run by hand, by the install, from a project's folder:
+//
+//   node hooks/dispatch.mjs approve
 //
 // WHY A PLUGIN. Writing hooks into a project's own .claude settings is the
 // assistant modifying its own configuration, and an environment may refuse
@@ -95,6 +99,30 @@
 // run as child processes from this plugin's copy under project-os/guards/,
 // with CLAUDE_PROJECT_DIR set to the project found above, and their verdict is
 // passed through unchanged: exit 2 with the reason blocks the tool call.
+//
+// THE CHECK WHEN A TURN ENDS. On Stop the plugin runs the project's quick
+// check through its own copy of project-os/guards/Check-on-stop.mjs, which
+// decides whether code changed, runs the check once per state, and on a
+// failure exits 2 with the errors so the assistant goes back to work. That
+// verdict is passed through unchanged. The command it runs is the one thing
+// here that comes from the project: the "command" in
+// project-os/Check-command.json.
+//
+// APPROVED PROJECTS. Everything else the plugin runs is its own code, so a
+// repository the owner merely opens can make it run nothing. A check command
+// breaks that: it is the project's. So the plugin runs it only for a project
+// approved on this computer, and only while the command is still the one that
+// was approved. `approve`, run from the project's folder, records the folder
+// and the command in .approved-checks.json in the plugin's own folder (kept
+// out of git, so a pull never touches it). The install runs it, so for the
+// owner it is automatic. A project that arrived with the kit already inside
+// it, and was never installed here, has no approval and runs no check. A
+// command changed later (a teammate's commit) stops running until the install
+// or `Go update kit` approves it again. In the kit repository itself there is
+// no check and nothing to approve.
+//
+// A project whose own settings already wire a check on Stop (a script named
+// check-on-stop) keeps its own: the plugin stands down there.
 //
 // FAIL OPEN. Any error of its own exits 0 silently. Set PROJECTOS_PLUGIN_LOG
 // to a file path to get one line per call appended there, for diagnosis.
@@ -642,6 +670,73 @@ function unchecked(name, why) {
   return 0;
 }
 
+// The projects approved for the check on Stop, and the command approved for
+// each (see APPROVED PROJECTS above). Kept in the plugin's own folder.
+// PROJECTOS_APPROVED_FILE names another file, for the kit's own tests.
+const APPROVED = process.env.PROJECTOS_APPROVED_FILE || path.join(PLUGIN_ROOT, '.approved-checks.json');
+const CHECK_FILE = path.join('project-os', 'Check-command.json');
+const CHECK_STATES = path.join(os.tmpdir(), 'ProjectOS-plugin-checks');
+const approvalKey = (root) => (process.platform === 'win32' ? norm(root).toLowerCase() : norm(root));
+
+function checkCommandOf(root) {
+  const kept = readJson(path.join(root, CHECK_FILE));
+  const command = kept && typeof kept.command === 'string' ? kept.command.trim() : '';
+  return command;
+}
+
+function readApproved() {
+  const kept = readJson(APPROVED);
+  return kept && typeof kept === 'object' && !Array.isArray(kept) ? kept : {};
+}
+
+// Run by hand from the project's folder. Says in one line what it did, since
+// the install quotes that line.
+function approve(root) {
+  if (!root) return 'No ProjectOS project here: nothing approved.';
+  if (isKitItself(root)) return 'This is the kit repository itself: it has no check to approve.';
+  const command = checkCommandOf(root);
+  const all = readApproved();
+  const key = approvalKey(root);
+  if (!command) {
+    if (key in all) {
+      delete all[key];
+      fs.writeFileSync(APPROVED, `${JSON.stringify(all, null, 2)}\n`, 'utf8');
+    }
+    return `No command in ${norm(path.join(root, CHECK_FILE))}: no automatic check for this project.`;
+  }
+  all[key] = command;
+  fs.writeFileSync(APPROVED, `${JSON.stringify(all, null, 2)}\n`, 'utf8');
+  return `Approved on this computer: when a turn ends with changed code in ${norm(root)}, the plugin runs \`${command}\`.`;
+}
+
+// A project that wires its own check on Stop keeps it.
+function ownCheckWired(root) {
+  return settingsCommands(settingsDir(root), 'Stop').some((c) => /check-on-stop/i.test(c));
+}
+
+function runCheck(rawPayload, root) {
+  const command = checkCommandOf(root);
+  if (!command) { log('stop: no check command, inert'); return 0; }
+  if (readApproved()[approvalKey(root)] !== command) { log('stop: command not approved on this computer, inert'); return 0; }
+  if (ownCheckWired(root)) { log('stop: the project wires its own check, stand down'); return 0; }
+  const script = guardScript('Check-on-stop.mjs');
+  if (!fs.existsSync(script)) { log('stop: Check-on-stop.mjs is missing, allow'); return 0; }
+  const state = path.join(CHECK_STATES, `${Buffer.from(approvalKey(root)).toString('hex').slice(-80)}.json`);
+  const r = spawnSync(process.execPath, [script], {
+    input: rawPayload,
+    encoding: 'utf8',
+    env: { ...process.env, CLAUDE_PROJECT_DIR: root, CHECK_ON_STOP_COMMAND: command, CHECK_ON_STOP_STATE: state },
+    timeout: 170000,
+  });
+  if (r.status === 2) {
+    process.stderr.write(r.stderr || 'The check failed.\n');
+    log('stop: check FAILED, sent back');
+    return 2;
+  }
+  log(`stop: allow (${r.error ? r.error.message : `exit ${r.status}`})`);
+  return 0;
+}
+
 function runGuard(name, rawPayload, root) {
   const script = guardScript(name);
   if (!fs.existsSync(script)) return unchecked(name, `${name} is missing from ${norm(path.dirname(script))}`);
@@ -669,13 +764,15 @@ try {
   // read theirs only for the session id and transcript, with a bounded wait
   // (see readStdinBriefly), and their root still comes from the environment
   // and cwd alone.
-  const raw = mode === 'pretool' ? readStdin() : mode === 'session' || mode === 'prompt' ? await readStdinBriefly() : '';
+  const raw = mode === 'pretool' || mode === 'stop' ? readStdin() : mode === 'session' || mode === 'prompt' ? await readStdinBriefly() : '';
   let payload = {};
   try { payload = raw.trim() ? JSON.parse(raw) : {}; } catch { payload = {}; }
   if (!payload || typeof payload !== 'object') payload = {};
 
-  const root = findRoot(mode === 'pretool' ? payload : {});
-  if (!root) {
+  const root = findRoot(mode === 'pretool' || mode === 'stop' ? payload : {});
+  if (mode === 'approve') {
+    process.stdout.write(`[ProjectOS plugin] ${approve(root)}\n`);
+  } else if (!root) {
     log('no marker, inert');
     const above = mode === 'session' ? aboveProjectsLine(process.env.CLAUDE_PROJECT_DIR || process.cwd()) : null;
     if (above) process.stdout.write(`${above}\n`);
@@ -721,6 +818,10 @@ try {
       const lines = runReminders(kit, root, 'UserPromptSubmit', view);
       if (lines.length) process.stdout.write(`[ProjectOS plugin] ${lines.join('\n')}\n`);
     }
+  } else if (mode === 'stop') {
+    // The kit's own project-os files are templates: nothing to check there.
+    if (isKitItself(root)) log('stop: kit repository itself, inert');
+    else code = runCheck(raw, root);
   } else if (mode === 'pretool') {
     const tool = String(payload.tool_name || '');
     const dir = settingsDir(root);

@@ -1,2 +1,6 @@
 # A `Go backup` snapshot never enters git, in the kit repo or in any project.
 /backups/
+
+# The projects approved on this computer for the check on Stop. It belongs to
+# the computer, never to the kit, and a pull must not touch it.
+/.approved-checks.json

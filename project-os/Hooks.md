@@ -293,6 +293,42 @@ Both are the same shape: read the tool call from standard input, exit 0 to
 allow, exit 2 with one line on standard error to block, and on any error of
 their own exit 0. That last part is the law below, fail open.
 
+## The check when a turn ends
+
+`guards/Check-on-stop.mjs`, run by the plugin on the Stop event. When the
+assistant finishes a turn that changed code, it runs the project's quick
+check, the `command` in `project-os/Check-command.json`. A pass is silent. A
+failure sends the assistant back to work in the same turn, with the errors:
+it fixes them, runs the check again, and adds one short reply. The reply that
+ended the turn is already on screen, so the owner sees two replies in such a
+turn, and is never left with a broken project that was called done.
+
+- **What counts as changed code.** Anything git shows as changed that is not
+  a record or a note: markdown files, and everything under `project-os/`,
+  `plans/`, `features/`, `backups/`, `.tmp/` and `.claude/`, do not count.
+- **Once per state.** A state of the changed files that passed is not checked
+  again. A state that failed is reported once: a check the assistant cannot
+  fix never traps the turn.
+- **Fast mode skips it.** A reply that ends on the line `Fast mode on` runs
+  no check, since the mode waives checks. `Go commit` still runs them all.
+- **Only for a project approved on this computer.** Everything else the
+  plugin runs is its own code. This command is the project's, so the plugin
+  runs it only after the install approved it here, from the project folder:
+
+  ```
+  node "$HOME/.claude/skills/projectos/hooks/dispatch.mjs" approve
+  ```
+
+  A project that came with the kit already inside it, and was never installed
+  on this computer, runs no check. So does a command changed after it was
+  approved, until the line above is run again.
+- **A plugin thing only.** `Hooks-settings.json` does not carry it, so a
+  project without the plugin has no automatic check. A project that wires a
+  script of its own named `check-on-stop` on Stop keeps that one, and the
+  plugin stands down.
+- **It fails open.** No git, a check that cannot start or runs past two and a
+  half minutes, any error of its own: the turn ends as usual.
+
 **Not shipped yet: the reply linter.** It would check each reply against the
 reply rules and correct the next one. It is a script of its own with a test
 suite, and it has not been made generic yet, so the kit does not carry it.
@@ -308,7 +344,9 @@ Hooks.md says so here rather than pretending; a project that wants it writes it.
   guards OFF".
 - **A guard blocks, a linter warns.** Anything that changes the world gets
   stopped before it happens. Anything about style or wording gets corrected on
-  the next message, never by forcing a redo.
+  the next message, never by forcing a redo. The check when a turn ends is
+  neither: it never asks for the reply again, it sends the assistant back to
+  mend the code.
 - **A hook points at a copy that moves with what it guards.** The project's
   own copy under `project-os/`, or the plugin's kit clone in the personal
   skills folder. Never a copy sitting in another project on the same disk:

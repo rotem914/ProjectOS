@@ -757,6 +757,10 @@ Decisions with empty templates.
    plugin's copy is then an optional tidy-up,
    `git -C "$HOME/.claude/skills/projectos" pull`; it is outside the project,
    so that command is the owner's.
+   When the update changed `project-os/Check-command.json`, or brought it
+   in for the first time, do `Installation.md` step 6f: pick the quick check
+   when the file has none, then run the approve command again, since the
+   plugin runs only the command that was approved on this computer.
 7. Log it (rule 8): one scan row and one appendix row naming the old kit
    commit and the new one, the files copied, the files merged by the tool and
    by hand, and the clashes waiting on the owner.

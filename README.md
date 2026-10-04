@@ -54,6 +54,8 @@ Each one ships with its structure already in place and a worked example at the e
 | `project-os/Install-project-hooks.mjs` | Writes that setup into the project's own settings, on a computer without the plugin below, or one whose plugin carries older guards than the project. |
 | `project-os/guards/Path-guard.mjs` | The folder guard: refuses the writes it recognises outside the project. |
 | `project-os/guards/Destructive-guard.mjs` | The destructive-command guard: refuses the one-way commands it recognises. |
+| `project-os/guards/Check-on-stop.mjs` | The check when a turn ends: runs the project's quick check after a turn that changed code, and sends the assistant back when it fails. |
+| `project-os/Check-command.json` | The quick check that runs by itself, one command, set at install. |
 
 **Five upkeep scripts.** All of them run on Node. The first two also ship as PowerShell twins that do the same thing, for anyone who prefers them.
 

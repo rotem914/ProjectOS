@@ -1043,6 +1043,46 @@ whether they are on, and acts only on the owner's yes from step 4.
 A re-run asks again only while the mods are off; a no given earlier in the
 same conversation stands (step 4).
 
+## 6f. Switch on the check that runs when a turn ends
+
+From here on, whenever the assistant finishes a turn that changed code, the
+plugin runs one quick check by itself, and a failure sends the assistant back
+to fix it before the owner is left with a broken project
+(`project-os/Hooks.md`, "The check when a turn ends"). This step picks that
+check and approves it on this computer. It asks the owner nothing.
+
+1. **Pick the quick check** from what step 3 learned. It must be ONE command
+   that is fast and only reads: a typecheck or a lint. Examples: `npm run
+   check`, `npm run typecheck`, `npx tsc --noEmit`, `cargo check`, `ruff
+   check .`. Never the full `{{CHECK_COMMAND}}` when that builds or runs the
+   tests for minutes, never a build that a running dev server shares files
+   with, never a command that starts a server, and never one that installs
+   anything. It has to exist already: run it once on the untouched project,
+   and take it only when it passes there.
+2. **Write it** as the `command` in `project-os/Check-command.json`. When the
+   project has no such command yet (a new repo with no code, or only a slow
+   full check), leave `command` empty: no automatic check, and one line under
+   What was set says so. The change that first adds a quick check fills it in.
+3. **Approve it on this computer.** The command comes from the project, and
+   the plugin runs a project's command only for a project approved here. From
+   the project folder:
+
+   ```
+   node "$HOME/.claude/skills/projectos/hooks/dispatch.mjs" approve
+   ```
+
+   Its one line is the proof: quote it in the install row (step 7). Run it
+   with an empty `command` too; it then says there is no check.
+4. **If the plugin copy is not on this computer,** the command fails with a
+   file that is not found. Then there is no automatic check here: say so in
+   one line under What was set, and that the README's "Once per computer"
+   brings it. Never copy the plugin in yourself for this.
+5. **If the command is refused,** do not retry and do not route around it:
+   put ONE Waiting-on-you item with it in its own fence.
+
+It runs from the next session, since Claude Code reads a plugin's hooks when
+a session starts.
+
 ## 7. Log the install
 
 Log the install itself in project-os/History.md: one scan row and one appendix

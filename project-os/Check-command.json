@@ -1,0 +1,4 @@
+{
+  "about": "The quick check the ProjectOS plugin runs by itself when the assistant finishes a turn that changed code. One command, fast (a typecheck or a lint, never a full build or a dev server), run from the project folder. Empty means no automatic check. The install fills it in and approves it on this computer; after changing it, run the approve command from project-os/Hooks.md again.",
+  "command": ""
+}

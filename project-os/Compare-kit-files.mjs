@@ -115,6 +115,7 @@ const KIT_FILES = [
   { path: 'Installation.md', kind: 'machinery' },
   { path: 'project-os/guards/Path-guard.mjs', kind: 'machinery' },
   { path: 'project-os/guards/Destructive-guard.mjs', kind: 'machinery' },
+  { path: 'project-os/guards/Check-on-stop.mjs', kind: 'machinery' },
   { path: 'project-os/Install-project-hooks.mjs', kind: 'machinery' },
   { path: 'project-os/Find-heavy-files.mjs', kind: 'machinery' },
   { path: 'project-os/Archive-old-rows.ps1', kind: 'machinery' },
@@ -133,6 +134,7 @@ const KIT_FILES = [
   { path: 'project-os/mcp/Figma/Figma_MCP_Rules.md', kind: 'calibrated' },
   { path: 'project-os/mcp/Google_analytics/Google_Analytics_MCP_Rules.md', kind: 'calibrated' },
   { path: 'project-os/Hooks-settings.json', kind: 'calibrated' },
+  { path: 'project-os/Check-command.json', kind: 'calibrated' }, // its command is set at install
   { path: 'project-os/Backup-whole-project.ps1', kind: 'calibrated' }, // its exclusion list is set at install
   { path: 'project-os/Backup-whole-project.mjs', kind: 'calibrated' }, // the same setup block
   // record: this project's own history, never touched.
