@@ -696,8 +696,11 @@ Decisions with empty templates.
    this project never touched, the files new in the kit, the calibrated files
    the tool merged cleanly with this project's wording kept, and what is left
    by hand (step 5). A file this project removed, such as Installation.md,
-   stays removed. Ask one question: apply? Nothing is applied before the
-   owner's word.
+   stays removed. Lay the report out as `project-os/Conversations.md`
+   prescribes for a reply with several parts: each part under its own `# H1`
+   heading with the `----` divider above it, so a heading can never be taken
+   for a line of the report. Never a heading written as a plain line. Ask
+   one question: apply? Nothing is applied before the owner's word.
 4. On that word, run the same command with `--apply` added. It copies only
    the machinery files the kit changed and this project never touched, plus
    the machinery files new in the kit, and writes each calibrated file that
