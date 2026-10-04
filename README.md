@@ -77,6 +77,7 @@ Each one ships with its structure already in place and a worked example at the e
 | `.gitignore`, `.gitattributes` | This repository's own git settings. |
 | `.claude-plugin/plugin.json`, `hooks/hooks.json`, `hooks/dispatch.mjs` | The plugin the once-per-computer step below sets up. Its one dispatcher decides, project by project, whether the hooks apply. |
 | `mods/` | Two optional mods for Claude Code's own window, with their tests: a second plugin that rides in the same once-per-computer copy. See "Mods" below. |
+| `System-map.html` | The whole system on one canvas: open it in a browser, click a block to zoom into its process. Its content is written by hand from the files above, so a change to them is carried into it. |
 | `tests/` | The kit's test suites, one per guard or script, run from the kit root before a change to any of them ships. |
 | `scripts/Multiple-claude-accounts.ps1` | Windows only, and separate from the install. Gives each client their own Claude Desktop, kept apart from your personal one: run it once, then double-click "New Claude client" on your desktop for each new client. |
 
@@ -131,6 +132,9 @@ own window, in the desktop app and in the terminal, in every folder you open.
   large files kept in Git LFS. Claude Code runs a mod's git without that
   step, so a push from the row would skip it. The row says
   `to push from your git app` there instead.
+
+**How long the last reply took**, under the message box: `12s` under a
+minute, `2:36m` from there. It stays until the next reply ends.
 
 **A live fix for long dashes**, only in a project whose
 `project-os/Conversations.md` asks for it. A long dash is replaced as the

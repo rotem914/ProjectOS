@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ProjectOS system map</title>
+<style>
+  :root {
+    --bg: #F4F5FA;
+    --panel: #E9EBF6;
+    --ink: #222222;
+    --soft: #5B6076;
+    --brand: #2C3EA1;
+    --line: #9FA7D5;
+    --card: #FFFFFF;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  #stage { position: fixed; inset: 0; cursor: grab; touch-action: none; user-select: none; }
+  #stage.dragging { cursor: grabbing; }
+  #world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  #world.fly { transition: transform 900ms cubic-bezier(.6, 0, .2, 1); }
+  @media (prefers-reduced-motion: reduce) { #world.fly { transition: none; } }
+
+  /* Macro pieces */
+  .abs { position: absolute; }
+  .pill {
+    background: var(--panel); border-radius: 34px; height: 68px; padding: 0 44px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 30px; font-weight: 700; letter-spacing: -.01em;
+  }
+  .block { background: var(--panel); border-radius: 32px; transition: opacity .3s; }
+  .drill, .part { cursor: pointer; }
+  .face { position: absolute; inset: 0; transition: opacity .35s; }
+  .stage .face {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 0 30px; gap: 10px;
+  }
+  .stage .face h2 { margin: 0; font-size: 27px; font-weight: 700; letter-spacing: -.01em; }
+  .stage .face p { margin: 0; font-size: 16.5px; line-height: 1.35; color: var(--soft); }
+  .plus {
+    position: absolute; right: 16px; top: 16px; width: 30px; height: 30px; border-radius: 50%;
+    background: var(--card); border: 2px solid var(--brand); color: var(--brand);
+    font-size: 22px; line-height: 24px; text-align: center; font-weight: 600;
+    transition: transform .2s, background .2s, color .2s;
+  }
+  .drill:hover .plus { background: var(--brand); color: #fff; transform: scale(1.12); }
+  .part .face { padding: 26px 20px 20px; display: flex; flex-direction: column; gap: 8px; }
+  .part .face h2 { margin: 0 0 10px; font-size: 22px; font-weight: 700; text-align: center; }
+  .mini {
+    background: var(--card); border: 2px solid var(--brand); border-radius: 13px;
+    padding: 7px 12px; flex: 1; display: flex; flex-direction: column; justify-content: center; min-height: 0;
+  }
+  .mini b { font-size: 16px; font-weight: 600; }
+  .mini span { font-size: 13px; color: var(--soft); line-height: 1.25; }
+
+  /* Links between stages and parts */
+  svg.links { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+  .link { fill: none; stroke: var(--line); stroke-width: 2; opacity: .55; transition: opacity .25s, stroke .25s; }
+  .seq { fill: none; stroke: var(--line); stroke-width: 2.5; }
+  #world.hl .link { opacity: .1; }
+  #world.hl .link.on { opacity: 1; stroke: var(--brand); stroke-width: 2.5; }
+  #world.hl .block:not(.on) { opacity: .4; }
+  #world.deep .link { opacity: .15; }
+
+  /* The inside of a block, drawn small and shown when the camera is close */
+  .inner {
+    position: absolute; left: 0; top: 0; width: 1700px; height: 960px; transform-origin: 0 0;
+    padding: 34px 44px 40px; display: flex; flex-direction: column;
+    opacity: 0; visibility: hidden; transition: opacity .4s, visibility 0s .4s; cursor: default;
+  }
+  .open .inner { opacity: 1; visibility: visible; transition: opacity .45s .3s, visibility 0s; }
+  .open .face { opacity: 0; pointer-events: none; }
+  .open { cursor: default; }
+  .inner h3 { margin: 0 0 26px; font-size: 34px; font-weight: 700; text-align: center; letter-spacing: -.01em; }
+  .flow {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 26px 40px;
+    margin: auto 0; min-height: 0;
+  }
+  .card {
+    position: relative; background: var(--card); border: 2px solid var(--brand); border-radius: 15px;
+    padding: 16px 18px; display: flex; flex-direction: column; gap: 7px; min-height: 0;
+  }
+  .card:not(.end)::after {
+    content: ""; position: absolute; right: -29px; top: 50%; width: 12px; height: 12px;
+    border-top: 2.5px solid var(--line); border-right: 2.5px solid var(--line);
+    transform: translateY(-50%) rotate(45deg);
+  }
+  .ct { font-size: 20px; font-weight: 700; line-height: 1.2; display: flex; gap: 9px; align-items: baseline; }
+  .ct i { font-style: normal; color: var(--brand); font-variant-numeric: tabular-nums; }
+  .card p { margin: 0; font-size: 16px; line-height: 1.35; }
+  .note {
+    margin-top: auto; border: 1.5px dashed var(--line); border-radius: 10px; padding: 7px 10px;
+    font-size: 14px; line-height: 1.3; color: var(--soft);
+  }
+  .tag {
+    align-self: flex-start; background: var(--panel); color: var(--brand); border-radius: 20px;
+    padding: 3px 11px; font-size: 13px; font-weight: 600;
+  }
+  .card.owner { background: var(--brand); color: #fff; }
+  .card.owner .ct i { color: #C9D0F5; }
+  .card.owner .note { color: #E3E7FB; border-color: #8E9AE0; }
+  .cols { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px; min-height: 0; }
+  .cols .card { padding: 22px 22px; gap: 12px; }
+  .cols .card::after { display: none; }
+  .when { font-size: 14px; font-weight: 600; color: var(--brand); background: var(--panel); border-radius: 20px; padding: 4px 12px; align-self: flex-start; }
+  .cols ul { margin: 0; padding: 0 0 0 18px; font-size: 15.5px; line-height: 1.4; display: flex; flex-direction: column; gap: 7px; }
+  .laws { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 26px; }
+  .law { border: 1.5px dashed var(--line); border-radius: 14px; padding: 13px 18px; font-size: 15.5px; line-height: 1.35; color: var(--soft); }
+  .law b { color: var(--ink); display: block; font-size: 17px; margin-bottom: 2px; }
+
+  /* Fixed interface */
+  .ui { position: fixed; z-index: 5; display: flex; align-items: center; gap: 8px; }
+  #crumbs { left: 20px; top: 16px; font-size: 15px; }
+  #zoom { right: 20px; bottom: 20px; }
+  .btn {
+    font: inherit; font-size: 15px; font-weight: 600; color: var(--ink); background: var(--card);
+    border: 1.5px solid #D5D9EE; border-radius: 12px; height: 38px; min-width: 38px; padding: 0 13px; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--brand); color: var(--brand); }
+  #here { color: var(--soft); font-weight: 600; }
+  #hint {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 5;
+    font-size: 14px; color: var(--soft); background: rgba(255,255,255,.8); border-radius: 20px; padding: 7px 16px;
+    transition: opacity .4s; pointer-events: none; white-space: nowrap;
+  }
+  body.deep #hint { opacity: 0; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="world"></div></div>
+<div class="ui" id="crumbs"><button class="btn" id="home">ProjectOS</button><span id="here"></span></div>
+<div class="ui" id="zoom">
+  <button class="btn" id="zout" aria-label="Zoom out">-</button>
+  <button class="btn" id="zin" aria-label="Zoom in">+</button>
+  <button class="btn" id="zfit">Fit</button>
+</div>
+<div id="hint">Click a block to open it. Scroll to zoom, drag to move.</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// The content. Every line comes from the kit's own files: README.md,
+// CLAUDE.md, Installation.md, project-os/Workflow.md and project-os/Hooks.md.
+// When one of those changes, this is the part to bring in line.
+// ---------------------------------------------------------------------------
+const STAGES = [
+  { id: 'install', title: 'Install', text: 'Once per project. The kit moves in, and your own rules win every clash.',
+    serves: ['rules', 'living', 'guards'],
+    scene: { title: 'Install: one prompt, sixteen steps', steps: [
+      ['0', 'Bring the kit in', 'Fetched into the scratch folder, never into the project root.'],
+      ['1', 'Read everything first', 'Nothing is changed before the reading is complete.'],
+      ['2', 'Merge with your CLAUDE.md', 'An existing rule file stays. Your rules win every clash.'],
+      ['2b', 'Checks before going further', 'Each one catches a failure that is invisible afterwards.'],
+      ['3', 'Learn the repo', 'Name, stack and commands are checked in the repo, never guessed.'],
+      ['4', 'Ask once', 'Only what the repo cannot tell, in one sitting.', null, null, true],
+      ['5', 'Replace every placeholder', 'None may survive the install.'],
+      ['6', 'Setup blocks', 'Project description, reply language, the invariants you said yes to.'],
+      ['6b', 'Install the hooks', 'A step, not a suggestion. Asking for the kit is the approval.'],
+      ['6c', 'Check the upkeep scripts', 'Archive and backup are proven to run on this machine.'],
+      ['6d', 'Give the project a browser', 'So visible work is verified, not assumed.'],
+      ['6e', 'Offer the mods', 'One switch per computer, only on your yes.'],
+      ['6f', 'Switch on the end-of-turn check', 'One quick command, approved on this computer.'],
+      ['7', 'Log the install', 'The first History rows name the kit version.'],
+      ['8', 'The install report', 'What was set, what broke, every clash, what waits on you.', null, null, true],
+      ['9', 'Clean up', 'The fetch is deleted. Installation.md stays.'],
+    ] } },
+  { id: 'task', title: 'A task', text: 'Sixteen steps from request to delivery. Size never unlocks a shortcut.',
+    serves: ['rules', 'living', 'guards', 'shortcuts'],
+    scene: { title: 'A task: from idea to delivery', steps: [
+      ['1', 'Idea or request', 'Understand the need. No editor yet.', 'Feature, change, bug, UX, infra, docs, process, architecture.'],
+      ['2', 'Classify and state risk', 'Name the kind of change. Say low, medium or high.', 'Medium or high arms the automatic review in step 12.'],
+      ['3', 'Read the context', 'Read the listed files before forming an opinion.', 'CLAUDE.md holds the one reading list.'],
+      ['4', 'Define boundaries', 'In scope, out of scope, and what must stay identical.', 'Ambiguous scope is a question, asked before the work.'],
+      ['5', 'Settle a short plan', 'Goal, files, risk, QA, how to undo, docs.', 'Three lines is fine. No plan is not.'],
+      ['6', 'Design the QA first', 'Decide how it will be proven before it exists.', 'Flows, states, reload, neighbours, done criteria.'],
+      ['7', 'Implement small', 'The requested change and nothing else.', 'A bigger problem becomes a follow-up, never extra scope.'],
+      ['8', 'Self-checks', 'Run the project check, and whatever else applies.', 'The exact checks and results are recorded.'],
+      ['9', 'Browser QA', 'Anything visible is checked in a running app.', 'Done needs one of three paths: ran, no tool, blocked.'],
+      ['10', 'QA checklist', 'Go through QA.md.', 'A missing check that will be reused is added now.'],
+      ['11', 'Fix loop', 'Fix the smallest cause. Re-run it, and what sits around it.', null, 'Back to 10 until green'],
+      ['12', 'Automatic review', 'Medium or high risk: the change is reviewed now.', 'New findings are fixed. Older ones wait for the owner.', 'Low risk skips'],
+      ['13', 'Decisions checkpoint', 'Did this create a choice worth keeping?', 'If yes, an entry in Decisions.md.'],
+      ['14', 'Documentation routing', 'Update only what needs to change.', 'One rule, one home. Other files point there.'],
+      ['15', 'History row', 'Two rows: one to scan, one with the detail.', 'What changed, the checks, the risk, how to undo.'],
+      ['16', 'Delivery summary', 'The short report Conversations.md prescribes.', 'Uncommitted work is said so.'],
+    ] } },
+  { id: 'commit', title: 'Go commit and push', text: 'The assistant checks, records and commits. Only you push.',
+    serves: ['living', 'scripts', 'shortcuts', 'strip'],
+    scene: { title: 'Go commit and push', steps: [
+      ['1', 'End fast mode, pay the paperwork', 'Work with no History row is documented first.', 'Also a fast burst whose chat was closed.'],
+      ['2', 'Archive old rows', 'Old rows move to archives that are not read by default.', 'Move only. Nothing is edited or deleted.'],
+      ['3', 'See the whole pile', 'Everything uncommitted, across every chat.', 'A folder with no history gets one, locally.'],
+      ['3b', 'List heavy files', 'Anything over 1 GB is reported with its size.', 'It deletes nothing and never blocks.'],
+      ['3c', 'Audit the records', 'Gaps in the records are counted.', 'A warning, never a gate.'],
+      ['4', 'Run the checks', 'A red check stops the commit.', 'It is reported instead.'],
+      ['5', 'Stage on purpose', 'The intended files only.', 'Never secrets, backups, scratch or build output.'],
+      ['6', 'Commit', 'One clear message covering the full scope.'],
+      ['7', 'Stop', 'The assistant reports the commit and ends.', 'A cloud session pushes its own branch, never main.'],
+      ['You', 'Push', 'Main is the owner\'s. You push, every time.', 'From the strip, or from your git app.', null, true],
+    ] } },
+  { id: 'update', title: 'Go update kit', text: 'A newer kit comes in. Your records and your own edits stay untouched.',
+    serves: ['rules', 'guards', 'scripts', 'strip'],
+    scene: { title: 'Go update kit', steps: [
+      ['1', 'Fetch the kit', 'Into the scratch folder, with its full history.'],
+      ['2', 'Compare', 'It changes none of the project\'s files.', 'It knows which kit version the project came from.'],
+      ['3', 'Show the report', 'One question: apply?', 'Nothing is applied before your word.', null, true],
+      ['4', 'Apply', 'Only what the kit changed and you never touched.', 'Rule files that merge cleanly keep your wording.'],
+      ['5', 'Settle the rest by hand', 'Your wording wins every clash.', 'Each clash goes to you for a verdict.'],
+      ['6', 'Run the checks', 'The project checks, and the guards against this computer\'s copy.'],
+      ['7', 'Log it', 'The old kit version, the new one, what came in.'],
+      ['8', 'Delete the fetch', 'The update waits, uncommitted, for Go commit.'],
+    ] } },
+];
+
+const PARTS = [
+  { id: 'rules', title: 'Rule files', items: [
+    ['CLAUDE.md', 'Read first, every session'],
+    ['Workflow.md', 'The path from request to delivery'],
+    ['QA.md', 'What must be true before done'],
+    ['Conversations.md', 'How the assistant writes back'],
+    ['Code_review.md', 'How risky changes get reviewed'],
+    ['Visual_QA.md', 'Testing by using the app'],
+  ] },
+  { id: 'living', title: 'Living files', items: [
+    ['History.md', 'What changed, what was checked'],
+    ['Decisions.md', 'Why a choice was made'],
+    ['Backlog.md', 'What you said not now to'],
+    ['Map.md', 'Where things live'],
+    ['BugAtlas.md', 'Bugs that came back'],
+    ['Mistakes.md', 'Slips waiting to become rules'],
+  ] },
+  { id: 'guards', title: 'Guards and hooks', drill: true, items: [
+    ['The reminder', 'Core rules, on every message'],
+    ['Folder guard', 'No write outside the project'],
+    ['Destructive guard', 'No one-way command by accident'],
+    ['Check when a turn ends', 'Broken code is never called done'],
+  ] },
+  { id: 'scripts', title: 'Upkeep scripts', items: [
+    ['Archive old rows', 'Growing files stay short'],
+    ['Find heavy files', 'Lists anything over 1 GB'],
+    ['Audit project records', 'Counts gaps in the records'],
+    ['Backup whole project', 'One ZIP, history included'],
+    ['Compare kit files', 'Brings a newer kit in safely'],
+  ] },
+  { id: 'shortcuts', title: 'Shortcuts', items: [
+    ['FAST MODE', 'Tune by eye, paperwork later'],
+    ['Go commit', 'Check, record, commit'],
+    ['Go audit', 'Count the gaps'],
+    ['Go update kit', 'Bring in a newer kit'],
+    ['Go backup', 'Zip the whole project'],
+    ['Backlog', 'Park an item for later'],
+    ['Go code review', 'Review the code'],
+    ['GO visual qa', 'Test by using the app'],
+  ] },
+  { id: 'strip', title: 'The strip', items: [
+    ['What is waiting', 'Files to commit, commits to push'],
+    ['Server light', 'Green while your local address answers'],
+    ['Shortcut buttons', 'One press sends the phrase'],
+    ['Push', 'Asks in the row before it runs'],
+    ['Kit update', 'Shows while a newer kit waits'],
+  ] },
+];
+
+const GUARDS = { title: 'Guards and hooks: rules that do not rely on memory', cols: [
+  ['The reminder', 'When a session opens, and on every message', [
+    'Reply exactly as Conversations.md prescribes.',
+    'Change only what was asked.',
+    'Prefer the smallest safe change.',
+    'Unclear, or the owner\'s call: ask.',
+    'Every completed change adds its History row.',
+    'Never write outside the project folder.',
+    'Never say a check passed unless it ran.',
+  ]],
+  ['Folder guard', 'Before every file write and shell command', [
+    'Refuses a write aimed outside the project folder.',
+    'Reads redirections, inline scripts, pipelines and moves between folders.',
+    'A target it cannot prove is inside is refused.',
+    'Git pointed at another folder may only read there.',
+    'The owner names any extra folder writes may reach.',
+  ]],
+  ['Destructive guard', 'Before every shell command', [
+    'Blocks recursive or forced deletes, force pushes, history rewrites, hard resets, branch deletes.',
+    'A dry run passes.',
+    'A delete inside throwaway folders passes.',
+    'Many files at once, or through a link, is judged like a recursive delete.',
+    'Everything else stops, with the reason.',
+  ]],
+  ['Check when a turn ends', 'After a turn that changed code', [
+    'Runs the project\'s one quick check.',
+    'A pass is silent.',
+    'A failure sends the assistant back to fix it, in the same turn.',
+    'Each state is checked once, so it never traps the turn.',
+    'Fast mode skips it. Go commit still runs every check.',
+    'Only for a project approved on this computer.',
+  ]],
+], laws: [
+  ['Fail open', 'A bug in a guard must never trap you inside your own project.'],
+  ['A guard blocks, a linter warns', 'What changes the world is stopped before it happens.'],
+  ['A safety net, not a wall', 'A guard stops what it recognises. The rules still do the rest.'],
+] };
+
+// ---------------------------------------------------------------------------
+// Layout, in world units.
+// ---------------------------------------------------------------------------
+const W = 2200, H = 1100;
+const STAGE = { w: 340, h: 192, y: 170, x0: 300, gap: 80 };
+const PART = { w: 300, h: 490, y: 580, x0: 100, gap: 40 };
+const INNER = { w: 1700, h: 960 };
+const BOUNDS = { x: 60, y: 10, w: 2080, h: 1090 };
+
+const world = document.getElementById('world');
+const stage = document.getElementById('stage');
+const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+const place = (e, x, y, w, h) => { Object.assign(e.style, { left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px' }); return e; };
+
+const svgNS = 'http://www.w3.org/2000/svg';
+const svg = document.createElementNS(svgNS, 'svg');
+svg.setAttribute('class', 'links'); svg.setAttribute('width', W); svg.setAttribute('height', H);
+svg.innerHTML = '<defs><marker id="head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#9FA7D5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>';
+world.appendChild(svg);
+const path = (d, cls) => { const p = document.createElementNS(svgNS, 'path'); p.setAttribute('d', d); p.setAttribute('class', cls); svg.appendChild(p); return p; };
+
+const title = el('div', 'abs pill', 'ProjectOS');
+title.style.left = (W / 2) + 'px'; title.style.top = '40px'; title.style.transform = 'translateX(-50%)';
+world.appendChild(title);
+
+const nodes = {};   // id -> { el, rect, drill, focus, title, links }
+
+function flowScene(scene) {
+  const inner = el('div', 'inner');
+  inner.appendChild(el('h3', '', scene.title));
+  const grid = el('div', 'flow');
+  scene.steps.forEach(([n, t, d, note, tag, owner], i) => {
+    const c = el('div', 'card' + (owner ? ' owner' : '') + ((i % 4 === 3 || i === scene.steps.length - 1) ? ' end' : ''));
+    c.appendChild(el('div', 'ct', '<i>' + n + '</i><span>' + t + '</span>'));
+    c.appendChild(el('p', '', d));
+    if (tag) c.appendChild(el('span', 'tag', tag));
+    if (note) c.appendChild(el('div', 'note', note));
+    grid.appendChild(c);
+  });
+  const rows = Math.ceil(scene.steps.length / 4);
+  grid.style.gridTemplateRows = 'repeat(' + rows + ', minmax(0, 1fr))';
+  grid.style.flex = '0 1 ' + (rows * 236 + (rows - 1) * 26) + 'px';
+  inner.appendChild(grid);
+  return inner;
+}
+
+function guardScene(g) {
+  const inner = el('div', 'inner');
+  inner.appendChild(el('h3', '', g.title));
+  const cols = el('div', 'cols');
+  g.cols.forEach(([t, when, list]) => {
+    const c = el('div', 'card');
+    c.appendChild(el('div', 'ct', '<span>' + t + '</span>'));
+    c.appendChild(el('span', 'when', when));
+    c.appendChild(el('ul', '', list.map(x => '<li>' + x + '</li>').join('')));
+    cols.appendChild(c);
+  });
+  inner.appendChild(cols);
+  const laws = el('div', 'laws');
+  g.laws.forEach(([t, d]) => laws.appendChild(el('div', 'law', '<b>' + t + '</b>' + d)));
+  inner.appendChild(laws);
+  return inner;
+}
+
+STAGES.forEach((s, i) => {
+  const x = STAGE.x0 + i * (STAGE.w + STAGE.gap);
+  const b = place(el('div', 'abs block stage drill'), x, STAGE.y, STAGE.w, STAGE.h);
+  b.dataset.id = s.id;
+  const face = el('div', 'face', '<h2>' + s.title + '</h2><p>' + s.text + '</p><div class="plus">+</div>');
+  b.appendChild(face);
+  const inner = flowScene(s.scene);
+  inner.style.transform = 'scale(' + (STAGE.w / INNER.w) + ')';
+  b.appendChild(inner);
+  world.appendChild(b);
+  const rect = { x, y: STAGE.y, w: STAGE.w, h: STAGE.h };
+  nodes[s.id] = { el: b, rect, focus: rect, drill: true, title: s.title, links: [], kin: new Set(s.serves) };
+  if (i > 0) path('M' + (x - STAGE.gap + 8) + ' ' + (STAGE.y + STAGE.h / 2) + ' H' + (x - 10), 'seq').setAttribute('marker-end', 'url(#head)');
+});
+// A task and a commit repeat: the arc back from Go commit to the next task.
+(() => {
+  const a = nodes.commit.rect, b = nodes.task.rect, y = STAGE.y - 6;
+  path('M' + (a.x + a.w / 2) + ' ' + y + ' C' + (a.x + a.w / 2) + ' ' + (y - 70) + ' ' + (b.x + b.w / 2) + ' ' + (y - 70) + ' ' + (b.x + b.w / 2) + ' ' + (y - 4), 'seq').setAttribute('marker-end', 'url(#head)');
+})();
+
+PARTS.forEach((p, i) => {
+  const x = PART.x0 + i * (PART.w + PART.gap);
+  const b = place(el('div', 'abs block part' + (p.drill ? ' drill' : '')), x, PART.y, PART.w, PART.h);
+  b.dataset.id = p.id;
+  const face = el('div', 'face', '<h2>' + p.title + '</h2>' + p.items.map(([n, d]) => '<div class="mini"><b>' + n + '</b><span>' + d + '</span></div>').join('') + (p.drill ? '<div class="plus">+</div>' : ''));
+  b.appendChild(face);
+  const rect = { x, y: PART.y, w: PART.w, h: PART.h };
+  let focus = rect;
+  if (p.drill) {
+    const k = PART.w / INNER.w;
+    const inner = guardScene(GUARDS);
+    inner.style.transform = 'scale(' + k + ')';
+    b.appendChild(inner);
+    focus = { x, y: PART.y, w: PART.w, h: INNER.h * k };
+  }
+  world.appendChild(b);
+  nodes[p.id] = { el: b, rect, focus, drill: !!p.drill, title: p.title, links: [], kin: new Set() };
+});
+
+// The lines: which part serves which stage.
+const ends = {};
+STAGES.forEach(s => s.serves.forEach(pid => { (ends[pid] = ends[pid] || []).push(s.id); }));
+STAGES.forEach(s => {
+  const a = nodes[s.id].rect;
+  s.serves.forEach((pid, j) => {
+    const b = nodes[pid].rect, into = ends[pid];
+    const sx = a.x + a.w / 2 + (j - (s.serves.length - 1) / 2) * 44;
+    const ex = b.x + b.w / 2 + (into.indexOf(s.id) - (into.length - 1) / 2) * 40;
+    const sy = a.y + a.h + 6, ey = b.y - 6;
+    const p = path('M' + sx + ' ' + sy + ' C' + sx + ' ' + (sy + 110) + ' ' + ex + ' ' + (ey - 110) + ' ' + ex + ' ' + ey, 'link');
+    nodes[s.id].links.push(p); nodes[pid].links.push(p);
+    nodes[pid].kin.add(s.id);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The camera.
+// ---------------------------------------------------------------------------
+const cam = { x: 0, y: 0, z: 1 };
+let focusId = null, atHome = true;
+const here = document.getElementById('here');
+
+function reveal() {
+  const vw = innerWidth, vh = innerHeight;
+  let open = null;
+  for (const id in nodes) {
+    const n = nodes[id];
+    if (!n.drill) continue;
+    const f = n.focus, cx = (f.x + f.w / 2) * cam.z + cam.x, cy = (f.y + f.h / 2) * cam.z + cam.y;
+    const isOpen = f.w * cam.z > vw * 0.5 && cx > 0 && cx < vw && cy > 0 && cy < vh;
+    n.el.classList.toggle('open', isOpen);
+    if (isOpen) open = n;
+  }
+  world.classList.toggle('deep', !!open);
+  document.body.classList.toggle('deep', !!open || cam.z > home().z * 1.5);
+  here.textContent = open ? '/  ' + open.title : (focusId && nodes[focusId] ? '/  ' + nodes[focusId].title : '');
+  if (open) world.classList.remove('hl');
+}
+
+function apply(animate) {
+  world.classList.toggle('fly', !!animate);
+  world.style.transform = 'translate(' + cam.x + 'px,' + cam.y + 'px) scale(' + cam.z + ')';
+  reveal();
+}
+
+function target(r) {
+  const vw = innerWidth, vh = innerHeight, top = 66, pad = 26;
+  const z = Math.min((vw - 2 * pad) / r.w, (vh - top - pad) / r.h);
+  return { z, x: vw / 2 - (r.x + r.w / 2) * z, y: top + (vh - top - pad) / 2 - (r.y + r.h / 2) * z };
+}
+const home = () => target(BOUNDS);
+function fly(r, animate) { Object.assign(cam, target(r)); apply(animate !== false); }
+function goHome(animate) { focusId = null; fly(BOUNDS, animate); atHome = true; }
+function open(id) { focusId = id; atHome = false; fly(nodes[id].focus); }
+
+function zoomAt(px, py, factor) {
+  const z = Math.min(8, Math.max(home().z * 0.6, cam.z * factor));
+  const k = z / cam.z;
+  cam.x = px - (px - cam.x) * k; cam.y = py - (py - cam.y) * k; cam.z = z;
+  focusId = null; atHome = false;
+  apply(false);
+}
+
+stage.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+
+const pointers = new Map();
+let down = null, pinch = null;
+stage.addEventListener('pointerdown', e => {
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 1) down = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y, target: e.target, moved: false };
+  if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) }; down = null; }
+  stage.setPointerCapture(e.pointerId);
+});
+stage.addEventListener('pointermove', e => {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && pointers.size === 2) {
+    const [a, b] = [...pointers.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+    zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, d / pinch.d); pinch.d = d; return;
+  }
+  if (!down) return;
+  const dx = e.clientX - down.x, dy = e.clientY - down.y;
+  if (!down.moved && Math.hypot(dx, dy) < 5) return;
+  down.moved = true; stage.classList.add('dragging');
+  cam.x = down.cx + dx; cam.y = down.cy + dy; focusId = null; atHome = false; apply(false);
+});
+function up(e) {
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinch = null;
+  stage.classList.remove('dragging');
+  if (down && !down.moved && e.type === 'pointerup') {
+    const b = down.target.closest && down.target.closest('[data-id]');
+    if (b && !b.classList.contains('open')) open(b.dataset.id);
+  }
+  if (pointers.size === 0) down = null;
+}
+stage.addEventListener('pointerup', up);
+stage.addEventListener('pointercancel', up);
+
+// Hovering a stage or a part lights the lines between them.
+for (const id in nodes) {
+  const n = nodes[id];
+  n.el.addEventListener('pointerenter', () => {
+    if (world.classList.contains('deep') || !n.links.length) return;
+    world.classList.add('hl');
+    n.el.classList.add('on'); n.links.forEach(l => l.classList.add('on'));
+    n.kin.forEach(k => nodes[k].el.classList.add('on'));
+  });
+  n.el.addEventListener('pointerleave', () => {
+    world.classList.remove('hl');
+    world.querySelectorAll('.on').forEach(x => x.classList.remove('on'));
+  });
+}
+
+document.getElementById('home').addEventListener('click', () => goHome());
+document.getElementById('zfit').addEventListener('click', () => goHome());
+document.getElementById('zin').addEventListener('click', () => { zoomAt(innerWidth / 2, innerHeight / 2, 1.5); });
+document.getElementById('zout').addEventListener('click', () => { zoomAt(innerWidth / 2, innerHeight / 2, 1 / 1.5); });
+addEventListener('keydown', e => { if (e.key === 'Escape') goHome(); });
+addEventListener('resize', () => { if (focusId) fly(nodes[focusId].focus, false); else if (atHome) goHome(false); else apply(false); });
+
+goHome(false);
+</script>
+</body>
+</html>
