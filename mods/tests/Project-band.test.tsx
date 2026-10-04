@@ -1480,7 +1480,7 @@ describe('the shortcut buttons', () => {
 
     await ui.press({ key: 'fast-mode' })
     await kit.clock.settle()
-    expect(await buttonsOn(ui)).toEqual(['Fast on', '\u22ee'])
+    expect(await buttonsOn(ui)).toEqual(['Fast Off', '\u22ee'])
 
     // A later press is a new one, and sends the words that end the mode.
     await kit.clock.advance(5_000)
@@ -1506,12 +1506,12 @@ describe('the shortcut buttons', () => {
 
     // The mode's name in a sentence is talk about it, and switches nothing.
     expect(await after('is fast mode worth it here?')).toBe('Fast mode')
-    expect(await after('fast on')).toBe('Fast on')
-    expect(await after('make the title bigger')).toBe('Fast on')
+    expect(await after('fast on')).toBe('Fast Off')
+    expect(await after('make the title bigger')).toBe('Fast Off')
     expect(await after('FAST OFF')).toBe('Fast mode')
-    expect(await after('Fast mode')).toBe('Fast on')
+    expect(await after('Fast mode')).toBe('Fast Off')
     expect(await after('ok, exit fast mode please')).toBe('Fast mode')
-    expect(await after('FAST ON')).toBe('Fast on')
+    expect(await after('FAST ON')).toBe('Fast Off')
 
     // Go commit ends the mode by itself.
     expect(await after('Go commit')).toBe('Fast mode')
@@ -1543,7 +1543,7 @@ describe('the shortcut buttons', () => {
     await kit.clock.settle()
     await $.classic.SessionStart({ source: 'compact', cwd: kit.world.folder })
     await kit.clock.settle()
-    expect(await buttonsOn(ui)).toEqual(['Fast on', '\u22ee'])
+    expect(await buttonsOn(ui)).toEqual(['Fast Off', '\u22ee'])
 
     await $.classic.SessionStart({ source: 'clear', cwd: kit.world.folder })
     await kit.clock.settle()

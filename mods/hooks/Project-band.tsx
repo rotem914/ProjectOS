@@ -93,9 +93,9 @@ const RESEARCH_LABEL = 'Deep Research'
 const FAST_SHORTCUT = 'FAST MODE'
 const FAST_LABEL = 'Fast mode'
 const FAST_SENT = 'FAST ON'
-// While the mode is on the button says so, and a press switches it off
-// (owner, 2026-10-04).
-const FAST_ON_LABEL = 'Fast on'
+// While the mode is on the button names what a press does: it switches the
+// mode off (owner, 2026-10-04; it first read "Fast on").
+const FAST_ON_LABEL = 'Fast Off'
 const FAST_OFF_SENT = 'FAST OFF'
 // The backup's age is read from the newest ZIP in the project's backups
 // folder, where the kit's backup puts it. It is quiet words until the backup
