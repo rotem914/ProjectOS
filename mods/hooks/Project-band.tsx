@@ -72,6 +72,11 @@ const SHORTCUTS = [
   'GO visual qa',
 ] as const
 const MAIN_SHORTCUT = 'Go commit'
+// The button that opens the list of the other shortcuts reads as a menu of
+// three dots, one above the other (owner, 2026-10-04). A button's label is
+// text, so the dots are the character for them; the app colors and sizes it
+// as it does every label.
+const MORE_LABEL = '\u22ee'
 // The visual pass keeps the kit's heading as the words it sends, and reads
 // "Go visual QA" on its button (owner, 2026-10-04).
 const VISUAL_SHORTCUT = 'GO visual qa'
@@ -86,7 +91,7 @@ const RESEARCH_LABEL = 'Deep Research'
 // heading for it is the mode's name, the button reads shorter, and the words
 // it sends are the ones that switch the mode on.
 const FAST_SHORTCUT = 'FAST MODE'
-const FAST_LABEL = 'Fast'
+const FAST_LABEL = 'Fast mode'
 const FAST_SENT = 'FAST ON'
 // While the mode is on the button says so, and a press switches it off
 // (owner, 2026-10-04).
@@ -1278,7 +1283,7 @@ function planOf(
       ...(canPush ? [pushLabelOf(state, known)] : []),
       ...(isBackupInRow ? [backupText] : []),
       ...(step.hasUpdate ? [updateLabelOf(state)] : []),
-      ...(more.length > 0 || moreHasUpdate ? ['More'] : []),
+      ...(more.length > 0 || moreHasUpdate ? [MORE_LABEL] : []),
     ]
 
     fixed = buttonsWidth(buttons) + fillCells + quietCells
@@ -1490,7 +1495,7 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
             {hasMore && (
               <Button
                 key="more"
-                label="More"
+                label={MORE_LABEL}
                 onPress={() => acts.askMore(plan.more, plan.moreHasUpdate)}
               />
             )}
