@@ -154,6 +154,12 @@ const CONFIRM_GUARD_MS = 600
 // A question nobody answers is taken back, so the row never stays stuck on it.
 const ASK_KEEP_MS = 2 * 60_000
 
+// A press on Push turns the button into OK, in place, and a press on OK
+// pushes (owner, 2026-10-05: no second row to answer). OK stays this long,
+// then the button is Push again, so a press much later cannot push.
+const PUSH_ARM_MS = 5_000
+const PUSH_OK_LABEL = 'OK'
+
 // Claude Code refuses a stored value for as long as a row is being drawn. A
 // write waits for the row's own drawing to end, but not for longer than this,
 // and a write refused all the same is tried again after a short wait, a few
@@ -1440,7 +1446,8 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
   const { known, state } = look
   const plan = planOf(known, state, look.columns, look.isCheckDrawn)
   const files = known.repo?.files ?? null
-  const canPush = pushTarget(known.repo) !== null
+  const isPushArmed = look.open !== null && look.open.kind === 'push'
+  const canPush = isPushArmed || pushTarget(known.repo) !== null
   const hasMore = plan.more.length > 0 || plan.moreHasUpdate
   const isHeavy = known.repo !== null && (known.heavy ?? 0) > 0
   const server = known.repo !== null ? (known.server ?? null) : null
@@ -1541,7 +1548,15 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
               />
             )}
             {/* Push sits before Fast (owner, 2026-10-04). */}
-            {canPush && (
+            {canPush && isPushArmed && (
+              <Button
+                key="confirm-push"
+                label={PUSH_OK_LABEL}
+                variant="primary"
+                onPress={() => acts.confirmPush()}
+              />
+            )}
+            {canPush && !isPushArmed && (
               <Button key="push" label={pushLabelOf(state, known)} onPress={() => acts.askPush()} />
             )}
             {plan.hasFast && (
@@ -1694,18 +1709,9 @@ function drawMore(
 function drawBand(table: Table, look: Look, acts: Acts): RenderElement | null {
   const open = look.open
 
-  if (open === null) {
+  // A push waiting for its OK keeps the row: only the button changes.
+  if (open === null || open.kind === 'push') {
     return drawRow(table, look, acts)
-  }
-
-  if (open.kind === 'push') {
-    return drawQuestion(
-      table,
-      look,
-      `Push ${countOf(open.commits, 'commit')} from ${open.branch} to ${open.url}?`,
-      { key: 'confirm-push', label: 'Push', onPress: () => acts.confirmPush() },
-      acts,
-    )
   }
 
   if (open.kind === 'update') {
@@ -2321,7 +2327,10 @@ async function refresh($: Dollar): Promise<void> {
 
       const open = await read($, ask)
 
-      if (open !== null && (await $.clock.now()) - open.askedAt >= ASK_KEEP_MS) {
+      if (
+        open !== null &&
+        (await $.clock.now()) - open.askedAt >= (open.kind === 'push' ? PUSH_ARM_MS : ASK_KEEP_MS)
+      ) {
         await closeAsk($)
       }
 
@@ -2589,13 +2598,37 @@ async function askPush($: Dollar): Promise<void> {
     commits: target.ahead,
     askedAt,
   })
-  await moveRing($, 'cancel')
+
+  try {
+    $.clock.after(PUSH_ARM_MS, () => {
+      inBackground($, 'taking OK back failed', () => disarmPush($, askedAt))
+    })
+  } catch {
+    // No clock to wait on: the next pass takes OK back.
+  }
+}
+
+// OK that nobody pressed turns back into Push. A later press on Push asks
+// again, so only the question this timer belongs to is taken back.
+async function disarmPush($: Dollar, askedAt: number): Promise<void> {
+  const open = await read($, ask)
+
+  if (open !== null && open.kind === 'push' && open.askedAt === askedAt) {
+    await closeAsk($)
+  }
 }
 
 async function confirmPush($: Dollar, columns: number): Promise<void> {
   const open = await read($, ask)
 
   if (open === null || open.kind !== 'push' || (await isTooSoon($, open.askedAt))) {
+    return
+  }
+
+  // An OK older than its time is no longer an OK, whatever the screen shows.
+  if ((await $.clock.now()) - open.askedAt >= PUSH_ARM_MS) {
+    await closeAsk($)
+
     return
   }
 

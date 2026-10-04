@@ -739,7 +739,7 @@ describe('the label', () => {
     await ui.unmount()
   })
 
-  onEachSurface('the push question keeps the name in front', async ($, on, surface) => {
+  onEachSurface('a push waiting for its OK keeps the name in front', async ($, on, surface) => {
     const kit = install(on, { ahead: 2 })
 
     await start($, kit)
@@ -752,10 +752,8 @@ describe('the label', () => {
     const label = await ui.find({ type: 'Text', text: 'site-web' })
 
     expect(label?.props.backgroundColor).toBeUndefined()
-    expect(await wordsOn(ui)).toBe(
-      'site-web | Push 2 commits from main to https://github.com/example/site.git?',
-    )
-    expect(await buttonsOn(ui)).toEqual(['Cancel', 'Push'])
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
+    expect(await buttonsOn(ui)).toEqual(['OK', '\u22ee'])
     await ui.unmount()
   })
 })
@@ -1312,7 +1310,7 @@ describe('a count of files that runs out of time', () => {
     const counts = gitRuns(kit.world, 'status').length
 
     await ui.press({ key: 'push' })
-    expect(await buttonsOn(ui)).toEqual(['Cancel', 'Push'])
+    expect(await buttonsOn(ui)).toContain('OK')
     await answerYes(kit, ui, 'confirm-push')
     expect(kit.world.toasts).toEqual(['Pushed 2 commits'])
 
@@ -2181,7 +2179,7 @@ describe('the Push button', () => {
     await ui.unmount()
   })
 
-  onEachSurface('asks first, in the row, naming the branch, the address and the count', async ($, on, surface) => {
+  onEachSurface('turns into OK in the row, and pushes nothing at the first press', async ($, on, surface) => {
     const kit = install(on, {
       ahead: 2,
       branch: 'feature/new-header',
@@ -2198,17 +2196,12 @@ describe('the Push button', () => {
     await ui.press({ key: 'push' })
     expect(gitRuns(kit.world, 'push')).toHaveLength(0)
 
-    const words = await wordsOn(ui)
+    expect(await wordsOn(ui)).not.toContain('ghp_secret123')
 
-    expect(words).toBe(
-      'site-web | Push 2 commits from feature/new-header to https://github.com/example/site.git?',
-    )
-    expect(words).not.toContain('ghp_secret123')
-
-    // Cancel comes first and asks for the keyboard, so a stray Enter never
-    // pushes.
-    expect(await buttonsOn(ui)).toEqual(['Cancel', 'Push'])
-    expect((await ui.find({ key: 'cancel' }))?.props.autoFocus).toBe(true)
+    // The button itself turns into OK, with no second row to answer, and it
+    // never asks for the keyboard, so a stray Enter never pushes.
+    expect(await buttonsOn(ui)).toContain('OK')
+    expect(await buttonsOn(ui)).not.toContain('Cancel')
     expect((await ui.find({ key: 'confirm-push' }))?.props.autoFocus).toBeUndefined()
     expect((await ui.find({ key: 'confirm-push' }))?.props.variant).toBe('primary')
 
@@ -2217,7 +2210,7 @@ describe('the Push button', () => {
     await ui.unmount()
   })
 
-  onEachSurface('asks at every width, where a pane would have stayed hidden', async ($, on, surface) => {
+  onEachSurface('turns into OK at every width', async ($, on, surface) => {
     const kit = install(on, { ahead: 2 })
 
     await start($, kit)
@@ -2226,15 +2219,11 @@ describe('the Push button', () => {
       const ui = await bandOn($, surface, columns)
 
       await ui.press({ key: 'push' })
-      expect(await buttonsOn(ui), `${columns} columns`).toEqual(['Cancel', 'Push'])
+      expect(await buttonsOn(ui), `${columns} columns`).toContain('OK')
 
-      // The address is read whole at every width: the words wrap where they
-      // do not fit beside the buttons, and are never cut.
-      const said = await ui.find({ type: 'Text', text: 'Push 2 commits' })
-
-      expect(said?.text).toBe('Push 2 commits from main to https://github.com/example/site.git?')
-      expect(String(said?.props.wrap ?? 'wrap')).toBe('wrap')
-      await ui.press({ key: 'cancel' })
+      // Left alone, OK is Push again before the next width is tried.
+      await kit.clock.advance(5_000)
+      expect(await buttonsOn(ui), `${columns} columns`).not.toContain('OK')
       await ui.unmount()
     }
 
@@ -2243,40 +2232,7 @@ describe('the Push button', () => {
     expect(gitRuns(kit.world, 'push')).toHaveLength(0)
   })
 
-  onEachSurface('puts the question on one row when it fits and on two when it does not', async ($, on, surface) => {
-    const kit = install(on, { ahead: 2 })
-
-    await start($, kit)
-
-    // The label, the question and the two buttons need 93 cells.
-    const wide = await bandOn($, surface, width(surface, 93))
-
-    await wide.press({ key: 'push' })
-    expect(await wide.drawn()).toMatchObject({ type: 'Box', props: { flexDirection: 'row' } })
-    await wide.unmount()
-
-    // The same question, still open, in a window one cell narrower.
-    const narrow = await bandOn($, surface, width(surface, 92))
-
-    expect(await narrow.drawn()).toMatchObject({ type: 'Box', props: { flexDirection: 'column' } })
-    expect(await buttonsOn(narrow)).toEqual(['Cancel', 'Push'])
-    await narrow.press({ key: 'cancel' })
-    await narrow.unmount()
-  })
-
-  onEachSurface('shows an address without a password as it is', async ($, on, surface) => {
-    const kit = install(on, { ahead: 1, pushUrl: 'git@github.com:example/site.git' })
-
-    await start($, kit)
-
-    const ui = await bandOn($, surface)
-
-    await ui.press({ key: 'push' })
-    expect(await wordsOn(ui)).toContain('Push 1 commit from main to git@github.com:example/site.git?')
-    await ui.unmount()
-  })
-
-  onEachSurface('Cancel takes the question back and pushes nothing', async ($, on, surface) => {
+  onEachSurface('an OK nobody presses is Push again after five seconds', async ($, on, surface) => {
     const kit = install(on, { ahead: 2 })
 
     await start($, kit)
@@ -2284,7 +2240,9 @@ describe('the Push button', () => {
     const ui = await bandOn($, surface)
 
     await ui.press({ key: 'push' })
-    await ui.press({ key: 'cancel' })
+    await kit.clock.advance(4_000)
+    expect(await buttonsOn(ui)).toEqual(['OK', '\u22ee'])
+    await kit.clock.advance(1_000)
     expect(gitRuns(kit.world, 'push')).toHaveLength(0)
     expect(kit.world.toasts).toEqual([])
     expect(await wordsOn(ui)).toBe('site-web | All committed')
@@ -2306,7 +2264,7 @@ describe('the Push button', () => {
     await kit.clock.advance(500)
     await ui.press({ key: 'confirm-push' })
     expect(gitRuns(kit.world, 'push')).toHaveLength(0)
-    expect(await buttonsOn(ui)).toEqual(['Cancel', 'Push'])
+    expect(await buttonsOn(ui)).toEqual(['OK', '\u22ee'])
 
     // A moment later the same press is an answer.
     await kit.clock.advance(100)
@@ -2369,7 +2327,6 @@ describe('the Push button', () => {
     const ui = await bandOn($, surface)
 
     await ui.press({ key: 'push' })
-    expect(await wordsOn(ui)).toContain('Push 1 commit from main to')
     await answerYes(kit, ui, 'confirm-push')
     expect(kit.world.toasts).toEqual(['Pushed 1 commit'])
     await ui.unmount()
@@ -2517,7 +2474,6 @@ describe('the Push button', () => {
     const ui = await bandOn($, surface)
 
     await ui.press({ key: 'push' })
-    expect(await wordsOn(ui)).toContain('to https://github.com/example/site.git?')
     kit.world.pushUrl = 'https://github.com/someone-else/site.git'
     await answerYes(kit, ui, 'confirm-push')
     expect(gitRuns(kit.world, 'push')).toHaveLength(0)
@@ -2544,10 +2500,11 @@ describe('the Push button', () => {
       'Push did not go through: the branch changed since you asked. Nothing was pushed.',
     ])
 
-    // The row now shows three, and a new press asks about three.
+    // The row now shows three, and a new press is about three.
     expect(await buttonsOn(ui)).toContain('Push \u00b7 3')
     await ui.press({ key: 'push' })
-    expect(await wordsOn(ui)).toContain('Push 3 commits from main to')
+    await answerYes(kit, ui, 'confirm-push')
+    expect(gitRuns(kit.world, 'push')).toHaveLength(1)
     await ui.unmount()
   })
 
@@ -2601,18 +2558,18 @@ describe('the Push button', () => {
     await ui.unmount()
   })
 
-  onEachSurface('asks and answers in a window that cannot move the keyboard for it', async ($, on, surface) => {
+  onEachSurface('turns into OK and pushes without moving the keyboard', async ($, on, surface) => {
     const kit = install(on, { ahead: 2 })
 
     await start($, kit)
 
     const ui = await bandOn($, surface)
 
-    // The test kit has nothing that moves the keyboard's ring, so every move
-    // the band asks for fails here. The question must not depend on it.
+    // OK takes the place of Push and the keyboard's ring is left where it
+    // is: nothing is asked of it between the two presses.
     await ui.press({ key: 'push' })
-    expect(kit.world.logs.some(line => line.includes('moving the keyboard to a button failed'))).toBe(true)
-    expect(await buttonsOn(ui)).toEqual(['Cancel', 'Push'])
+    expect(kit.world.logs.some(line => line.includes('moving the keyboard to a button failed'))).toBe(false)
+    expect(await buttonsOn(ui)).toEqual(['OK', '\u22ee'])
     await answerYes(kit, ui, 'confirm-push')
     expect(kit.world.toasts).toEqual(['Pushed 2 commits'])
     await ui.unmount()
@@ -3165,12 +3122,12 @@ describe('a narrow row', () => {
     expect(await wordsOn(desktop)).toBe('site-web')
     await desktop.unmount()
 
-    // A question and More keep clear of the mark too.
+    // A push waiting for its OK and More keep clear of the mark too.
     const asking = await bandOn($, 'terminal', 84)
 
     await asking.press({ key: 'push' })
     expect(await asking.drawn()).toMatchObject({ type: 'Box', props: { paddingRight: 4 } })
-    await asking.press({ key: 'cancel' })
+    await kit.clock.advance(5_000)
     await asking.press({ key: 'more' })
     expect(await asking.drawn()).toMatchObject({ type: 'Box', props: { paddingRight: 4 } })
     await asking.unmount()
@@ -3364,7 +3321,7 @@ describe('a new conversation in the same window', () => {
     expect(kit.world.git).toEqual([])
   })
 
-  test('a question left open is not taken away by a compaction', async ($, on) => {
+  test('a push waiting for its OK is not taken away by a compaction', async ($, on) => {
     const kit = install(on, { ahead: 2 })
 
     await start($, kit)
@@ -3374,7 +3331,7 @@ describe('a new conversation in the same window', () => {
     await ui.press({ key: 'push' })
     await $.classic.SessionStart({ source: 'compact', cwd: kit.world.folder })
     await kit.clock.settle()
-    expect(await buttonsOn(ui)).toEqual(['Cancel', 'Push'])
+    expect(await buttonsOn(ui)).toEqual(['OK', '\u22ee'])
     await ui.unmount()
   })
 })
