@@ -100,6 +100,13 @@ export type ProjectBandFacts = {
    */
   hasResearch?: boolean
   /**
+   * True where the project carries the kit (its marker file) while its
+   * CLAUDE.md has no `Go update kit` heading yet: an install older than that
+   * shortcut. The update button is then shown anyway, and sends the whole
+   * instruction in place of the phrase. No such key reads the same as false.
+   */
+  isUpdateByLink?: boolean
+  /**
    * The age, in days, at which the owner pressed the backup's quiet words
    * away. They stay out of the row until the backup is older than this.
    * Null, or no such key, when they were never pressed away.

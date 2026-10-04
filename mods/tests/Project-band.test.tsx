@@ -1587,7 +1587,7 @@ describe('the shortcut buttons', () => {
     expect(await buttonsOn(ui)).toEqual([
       'Go commit and backup',
       'Go audit',
-      'Go update kit',
+      'Update Kit',
       'Go code review',
       'Back',
     ])
@@ -1768,6 +1768,55 @@ describe('the shortcut buttons', () => {
   })
 })
 
+describe('Update Kit', () => {
+  onEachSurface('with the phrase in CLAUDE.md the button sends the phrase', async ($, on, surface) => {
+    const kit = install(on)
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    await ui.press({ key: 'more' })
+    expect(await buttonsOn(ui)).toContain('Update Kit')
+    await ui.press({ key: 'go-update-kit' })
+    await kit.clock.settle()
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go update kit'])
+    await ui.unmount()
+  })
+
+  onEachSurface('an older install, kit but no phrase, still gets the button, and it sends the whole instruction', async ($, on, surface) => {
+    const kit = install(on, {
+      files: { 'D:/Work/Site/CLAUDE.md': '### `Go commit`\n' },
+      present: ['D:/Work/Site/project-os/Hooks-settings.json'],
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    await ui.press({ key: 'more' })
+    expect(await buttonsOn(ui)).toContain('Update Kit')
+    await ui.press({ key: 'go-update-kit' })
+    await kit.clock.settle()
+    expect(kit.world.prompts).toHaveLength(1)
+    expect(kit.world.prompts[0]?.text).toContain('https://github.com/rotem914/ProjectOS')
+    expect(kit.world.prompts[0]?.text).toContain('Go update kit')
+    await ui.unmount()
+  })
+
+  onEachSurface('a project without the kit and without the phrase gets no such button', async ($, on, surface) => {
+    const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': '### `Go commit`\n### `Go backup`\n' } })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    await ui.press({ key: 'more' })
+    expect(await buttonsOn(ui)).not.toContain('Update Kit')
+    await ui.unmount()
+  })
+})
+
 describe('Deep Research', () => {
   onEachSurface('sits last in More where the command is offered, and a press runs it', async ($, on, surface) => {
     const kit = install(on, { offered: ['compact', 'deep-research'] })
@@ -1907,7 +1956,7 @@ describe('More', () => {
       'Go backup',
       'Go commit and backup',
       'Go audit',
-      'Go update kit',
+      'Update Kit',
       'Go code review',
       'Back',
     ])
@@ -2947,7 +2996,7 @@ describe('a narrow row', () => {
       'Go backup',
       'Go commit and backup',
       'Go audit',
-      'Go update kit',
+      'Update Kit',
       'Go code review',
       'Back',
     ])

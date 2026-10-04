@@ -84,6 +84,16 @@ const VISUAL_LABEL = 'Go visual QA'
 // Deep research is not a kit phrase but a command of Claude Code itself. Its
 // button sits in the More list wherever this Claude Code offers the command,
 // and a press runs it as /deep-research typed by the owner (2026-10-04).
+// The kit's update reads "Update Kit" on its button (owner, 2026-10-04). A
+// project installed from a kit older than the shortcut carries the kit but
+// not the phrase, and could never ask for the update that would bring it. So
+// the button shows wherever the project carries the kit's marker file, and
+// where the phrase is missing a press sends the whole instruction instead.
+const UPDATE_SHORTCUT = 'Go update kit'
+const UPDATE_LABEL = 'Update Kit'
+const UPDATE_BY_LINK =
+  'Update this project to the newest ProjectOS kit: fetch https://github.com/rotem914/ProjectOS and follow the "Go update kit" steps in its CLAUDE.md.'
+const KIT_MARKERS = ['project-os/Hooks-settings.json', 'project-os/hooks-settings.json']
 const RESEARCH_SHORTCUT = '/deep-research'
 const RESEARCH_COMMAND = 'deep-research'
 const RESEARCH_LABEL = 'Deep Research'
@@ -1165,6 +1175,10 @@ function buttonTextOf(phrase: string, isFast: boolean): string {
     return VISUAL_LABEL
   }
 
+  if (phrase === UPDATE_SHORTCUT) {
+    return UPDATE_LABEL
+  }
+
   return phrase === RESEARCH_SHORTCUT ? RESEARCH_LABEL : phrase
 }
 
@@ -1177,7 +1191,11 @@ function commitLabelOf(known: ProjectBandFacts): string {
   return files > 0 ? `${MAIN_SHORTCUT} · ${files}` : MAIN_SHORTCUT
 }
 
-function sentOf(phrase: string, isFast: boolean): string {
+function sentOf(phrase: string, isFast: boolean, isUpdateByLink = false): string {
+  if (phrase === UPDATE_SHORTCUT && isUpdateByLink) {
+    return UPDATE_BY_LINK
+  }
+
   if (phrase !== FAST_SHORTCUT) {
     return phrase
   }
@@ -2116,15 +2134,24 @@ async function passRepo($: Dollar): Promise<void> {
   startServerPass($, [where.top, folder])
 
   const counting = countFiles($, where.top)
-  const [part, shortcuts, hasResearch] = await Promise.all([
+  const [part, listed, hasKit, hasResearch] = await Promise.all([
     branchPartOf($, where, home),
     shortcutsOf($, [where.top, folder]),
+    // The kit's marker file, in either spelling.
+    Promise.all(
+      KIT_MARKERS.map(marker => $.fs.exists(joinPath(where.top, marker)).catch(() => false)),
+    ).then(found => found.some(Boolean)),
     // A Claude Code that cannot list its commands offers no such button.
     $.command.list().then(
       listed => listed.some(one => one.name === RESEARCH_COMMAND),
       () => false,
     ),
   ])
+  // A project that carries the kit gets the update button, phrase or not.
+  const isUpdateByLink = hasKit && !listed.includes(UPDATE_SHORTCUT)
+  const shortcuts = isUpdateByLink
+    ? SHORTCUTS.filter(phrase => phrase === UPDATE_SHORTCUT || listed.includes(phrase))
+    : listed
   const [counted, backup] = await Promise.all([
     countWithin($, counting, FILES_GRACE_MS),
     backupOf($, where.top, shortcuts),
@@ -2143,6 +2170,7 @@ async function passRepo($: Dollar): Promise<void> {
       ...now,
       repo: { ...part, files: counted.isDone ? counted.files : shown },
       shortcuts,
+      isUpdateByLink,
       hasResearch,
       backup,
     }
@@ -2372,8 +2400,9 @@ async function submitShortcut($: Dollar, phrase: string, columns: number): Promi
   // The exact phrase, as the owner's own words: the project's CLAUDE.md
   // answers to the phrase itself. A prompt waits its turn behind a running
   // turn, so nothing here waits for it to enter.
-  const isFastNow = (await read($, facts))?.isFast === true
-  const sent = sentOf(phrase, isFastNow)
+  const knownNow = await read($, facts)
+  const isFastNow = knownNow?.isFast === true
+  const sent = sentOf(phrase, isFastNow, knownNow?.isUpdateByLink === true)
 
   inBackground($, `submitting ${sent} failed`, async () => {
     try {
