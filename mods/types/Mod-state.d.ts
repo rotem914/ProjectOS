@@ -107,6 +107,17 @@ export type ProjectBandFacts = {
    */
   isUpdateByLink?: boolean
   /**
+   * The kit's newest commit online, as the plugin copy's last check heard it.
+   * Null, or no such key, when this computer has no plugin copy or the check
+   * could not be made.
+   */
+  kitHead?: string | null
+  /**
+   * The kit commit this project stands on, from project-os/Kit-version.json.
+   * Null, or no such key, when the project records none.
+   */
+  kitCommit?: string | null
+  /**
    * The age, in days, at which the owner pressed the backup's quiet words
    * away. They stay out of the row until the backup is older than this.
    * Null, or no such key, when they were never pressed away.

@@ -1795,12 +1795,72 @@ describe('Update Kit', () => {
     const ui = await bandOn($, surface)
 
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toContain('Update Kit')
+    expect(await buttonsOn(ui)).toContain('Update Kit \u00b7 1')
     await ui.press({ key: 'go-update-kit' })
     await kit.clock.settle()
     expect(kit.world.prompts).toHaveLength(1)
     expect(kit.world.prompts[0]?.text).toContain('https://github.com/rotem914/ProjectOS')
     expect(kit.world.prompts[0]?.text).toContain('Go update kit')
+    await ui.unmount()
+  })
+
+  onEachSurface('the button carries a 1 while the kit online is newer than the project', async ($, on, surface) => {
+    const kit = install(on, {
+      files: {
+        'D:/Work/Site/CLAUDE.md': KIT_HEADINGS,
+        'D:/Work/Site/project-os/Kit-version.json': JSON.stringify({ commit: LOCAL_HEAD.slice(0, 7), date: '2026-10-02' }),
+      },
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    // The project stands on the kit's newest commit: no mark.
+    await ui.press({ key: 'more' })
+    expect(await buttonsOn(ui)).toContain('Update Kit')
+    await ui.press({ key: 'cancel' })
+
+    // The kit moves on online, and the next check hears of it.
+    kit.world.plugin.onlineHead = ONLINE_HEAD
+    await kit.clock.advance(6 * 60_000)
+    await endTurn($, kit)
+    await ui.press({ key: 'more' })
+    expect(await buttonsOn(ui)).toContain('Update Kit \u00b7 1')
+    expect(await buttonsOn(ui)).not.toContain('Update Kit')
+
+    // The mark is on the label only: a press still sends the phrase.
+    await ui.press({ key: 'go-update-kit' })
+    await kit.clock.settle()
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go update kit'])
+    await ui.unmount()
+  })
+
+  onEachSurface('an older install is behind by definition, and a project that records no version shows no mark', async ($, on, surface) => {
+    const old = install(on, {
+      files: { 'D:/Work/Site/CLAUDE.md': '### `Go commit`\n' },
+      present: ['D:/Work/Site/project-os/Hooks-settings.json'],
+    })
+
+    await start($, old)
+
+    const ui = await bandOn($, surface)
+
+    await ui.press({ key: 'more' })
+    expect(await buttonsOn(ui)).toContain('Update Kit \u00b7 1')
+    await ui.unmount()
+  })
+
+  onEachSurface('with the phrase and no recorded version, no mark is shown', async ($, on, surface) => {
+    const kit = install(on)
+
+    kit.world.plugin.onlineHead = ONLINE_HEAD
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    await ui.press({ key: 'more' })
+    expect(await buttonsOn(ui)).toContain('Update Kit')
     await ui.unmount()
   })
 

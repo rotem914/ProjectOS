@@ -93,6 +93,7 @@ const UPDATE_SHORTCUT = 'Go update kit'
 const UPDATE_LABEL = 'Update Kit'
 const UPDATE_BY_LINK =
   'Update this project to the newest ProjectOS kit: fetch https://github.com/rotem914/ProjectOS and follow the "Go update kit" steps in its CLAUDE.md.'
+const KIT_VERSION_FILE = 'project-os/Kit-version.json'
 const KIT_MARKERS = ['project-os/Hooks-settings.json', 'project-os/hooks-settings.json']
 const RESEARCH_SHORTCUT = '/deep-research'
 const RESEARCH_COMMAND = 'deep-research'
@@ -1026,12 +1027,14 @@ async function pluginUpdateOf(
   $: Dollar,
   configDir: string | undefined,
   home: string | undefined,
-): Promise<{ dir: string } | null> {
+): Promise<{ update: { dir: string } | null; kitHead: string | null }> {
+  const none = { update: null, kitHead: null }
+
   try {
     const base = configDir ?? (home === undefined ? undefined : joinPath(home, '.claude'))
 
     if (base === undefined) {
-      return null
+      return none
     }
 
     const dir = joinPath(base, 'skills', 'projectos')
@@ -1040,20 +1043,20 @@ async function pluginUpdateOf(
     // plain folder inside some other repository would answer with that
     // repository's commit.
     if (!(await $.fs.exists(joinPath(dir, '.git')))) {
-      return null
+      return none
     }
 
     const local = await git($, ['rev-parse', 'HEAD'], dir, LOCAL_GIT_MS)
     const head = firstLine(local.out)
 
     if (local.code !== 0 || !SHA.test(head)) {
-      return null
+      return none
     }
 
     const remoteHead = await remoteHeadOf($, dir)
 
     if (remoteHead === null || remoteHead === head) {
-      return null
+      return { update: null, kitHead: remoteHead }
     }
 
     // The two differ. That is an update only when this copy lacks the online
@@ -1067,11 +1070,11 @@ async function pluginUpdateOf(
       LOCAL_GIT_MS,
     )
 
-    return held.code === null || held.code === 0 ? null : { dir }
+    return { update: held.code === null || held.code === 0 ? null : { dir }, kitHead: remoteHead }
   } catch (error) {
     note($, 'checking the plugin copy failed', error)
 
-    return null
+    return none
   }
 }
 
@@ -1166,7 +1169,27 @@ function fastLabelOf(isFast: boolean): string {
 }
 
 // What a shortcut's button reads, and the words a press of it sends.
-function buttonTextOf(phrase: string, isFast: boolean): string {
+// True while the kit online is newer than what this project stands on. An
+// install older than the update shortcut is behind by definition. Otherwise
+// the commit the project records is compared with the kit's newest one; a
+// project that records none, or a computer that could not ask, shows nothing.
+function isKitUpdateWaiting(known: ProjectBandFacts): boolean {
+  const head = known.kitHead ?? null
+
+  if (head === null) {
+    return false
+  }
+
+  if (known.isUpdateByLink === true) {
+    return true
+  }
+
+  const commit = known.kitCommit ?? null
+
+  return commit !== null && commit !== '' && !head.startsWith(commit)
+}
+
+function buttonTextOf(phrase: string, isFast: boolean, isUpdateWaiting = false): string {
   if (phrase === FAST_SHORTCUT) {
     return fastLabelOf(isFast)
   }
@@ -1175,8 +1198,9 @@ function buttonTextOf(phrase: string, isFast: boolean): string {
     return VISUAL_LABEL
   }
 
+  // The 1 says an update waits; it is not a count (owner, 2026-10-04).
   if (phrase === UPDATE_SHORTCUT) {
-    return UPDATE_LABEL
+    return isUpdateWaiting ? `${UPDATE_LABEL} \u00b7 1` : UPDATE_LABEL
   }
 
   return phrase === RESEARCH_SHORTCUT ? RESEARCH_LABEL : phrase
@@ -1613,7 +1637,11 @@ function drawMore(
         {open.phrases.map(phrase => (
           <Button
             key={keyOf(phrase)}
-            label={buttonTextOf(phrase, look.known.isFast === true)}
+            label={buttonTextOf(
+              phrase,
+              look.known.isFast === true,
+              isKitUpdateWaiting(look.known),
+            )}
             onPress={() => acts.shortcut(phrase)}
           />
         ))}
@@ -1910,9 +1938,13 @@ function startPluginPass($: Dollar): void {
   inBackground($, 'checking the plugin copy failed', async () => {
     try {
       const configDir = nonEmpty(await $.env.get('CLAUDE_CONFIG_DIR'))
-      const pluginUpdate = await pluginUpdateOf($, configDir, await homeOf($))
+      const { update: pluginUpdate, kitHead } = await pluginUpdateOf(
+        $,
+        configDir,
+        await homeOf($),
+      )
 
-      await writeFacts($, now => (now === null ? now : { ...now, pluginUpdate }))
+      await writeFacts($, now => (now === null ? now : { ...now, pluginUpdate, kitHead }))
     } finally {
       work.isCheckingPlugin = false
     }
@@ -2134,13 +2166,24 @@ async function passRepo($: Dollar): Promise<void> {
   startServerPass($, [where.top, folder])
 
   const counting = countFiles($, where.top)
-  const [part, listed, hasKit, hasResearch] = await Promise.all([
+  const [part, listed, hasKit, kitCommit, hasResearch] = await Promise.all([
     branchPartOf($, where, home),
     shortcutsOf($, [where.top, folder]),
     // The kit's marker file, in either spelling.
     Promise.all(
       KIT_MARKERS.map(marker => $.fs.exists(joinPath(where.top, marker)).catch(() => false)),
     ).then(found => found.some(Boolean)),
+    // The kit commit the project stands on, when it records one.
+    $.fs.read(joinPath(where.top, KIT_VERSION_FILE)).then(
+      text => {
+        const kept: unknown = JSON.parse(text)
+        const commit =
+          typeof kept === 'object' && kept !== null ? (kept as { commit?: unknown }).commit : null
+
+        return typeof commit === 'string' && /^[0-9a-f]{7,64}$/.test(commit) ? commit : null
+      },
+      () => null,
+    ).catch(() => null),
     // A Claude Code that cannot list its commands offers no such button.
     $.command.list().then(
       listed => listed.some(one => one.name === RESEARCH_COMMAND),
@@ -2171,6 +2214,7 @@ async function passRepo($: Dollar): Promise<void> {
       repo: { ...part, files: counted.isDone ? counted.files : shown },
       shortcuts,
       isUpdateByLink,
+      kitCommit,
       hasResearch,
       backup,
     }
