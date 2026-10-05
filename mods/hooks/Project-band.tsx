@@ -297,6 +297,7 @@ type Acts = {
   askMore: (phrases: string[], hasUpdate: boolean) => Promise<void>
   compact: () => Promise<void>
   hideBackup: () => Promise<void>
+  recheckHeavy: () => Promise<void>
   confirmPush: () => void
   confirmUpdate: () => void
   cancel: () => Promise<void>
@@ -321,6 +322,8 @@ type RowPlan = {
   /** How full the conversation is, as the row reads it; empty when unknown. */
   fill: string
   words: string
+  /** The count of heavy things, as words a press lists again; empty when none. */
+  heavy: string
   hasCommit: boolean
   hasFast: boolean
   /** What the Fast button reads: the mode's state rides in it. */
@@ -1151,18 +1154,24 @@ function wordsOf(
     words.push(isShort ? 'Update ready' : 'Plugin update ready')
   }
 
-  const heavy = known.heavy ?? 0
-
-  if (heavy > 0) {
-    words.push(isShort ? `${heavy} heavy` : countOf(heavy, 'heavy file'))
-  }
-
   // The backup's age, while it is not riding in a button of its own.
   if (backupWords !== '') {
     words.push(backupWords)
   }
 
   return words
+}
+
+// The heavy things are words of their own, beside their mark: a press on
+// them lists again (owner, 2026-10-05). Empty when nothing heavy is known.
+function heavyWordsOf(known: ProjectBandFacts, isShort: boolean): string {
+  const heavy = known.repo === null ? 0 : (known.heavy ?? 0)
+
+  if (heavy <= 0) {
+    return ''
+  }
+
+  return isShort ? `${heavy} heavy` : countOf(heavy, 'heavy file')
 }
 
 // Push carries the count of commits waiting, after a middle dot, as Go commit
@@ -1326,6 +1335,7 @@ function planOf(
     name: fullName,
     fill: fillText,
     words: '',
+    heavy: '',
     hasCommit: false,
     hasFast: false,
     fastLabel,
@@ -1366,11 +1376,18 @@ function planOf(
       ...(more.length > 0 || moreHasUpdate ? [MORE_LABEL] : []),
     ]
 
-    fixed = buttonsWidth(buttons) + fillCells + quietCells
+    const heavyWords = heavyWordsOf(known, step.isShort)
+
+    fixed =
+      buttonsWidth(buttons) +
+      fillCells +
+      quietCells +
+      (heavyWords === '' ? 0 : heavyWords.length + 1)
     plan = {
       name: fullName,
       fill: fillText,
       words,
+      heavy: heavyWords,
       hasCommit: step.hasCommit,
       hasFast: isFastInRow,
       fastLabel,
@@ -1409,6 +1426,7 @@ function keysOf(known: ProjectBandFacts, state: ProjectBandBusy, columns: number
 
   return [
     ...(plan.fill !== '' ? ['fill'] : []),
+    ...(plan.heavy !== '' ? ['heavy'] : []),
     ...(plan.backupQuiet !== '' ? ['backup-age'] : []),
     ...(plan.hasCommit ? ['go-commit'] : []),
     ...(pushTarget(known.repo) !== null ? ['push'] : []),
@@ -1468,6 +1486,7 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
     plan.name === '' &&
     plan.fill === '' &&
     plan.words === '' &&
+    plan.heavy === '' &&
     plan.backupQuiet === '' &&
     !hasButtons
   ) {
@@ -1504,13 +1523,18 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
             <Button key="fill" plain label={plan.fill} onPress={() => acts.compact()} />
           </Box>
         )}
-        {isHeavy && plan.words !== '' && table.Svg !== undefined && (
+        {isHeavy && plan.heavy !== '' && table.Svg !== undefined && (
           <table.Svg
             source={HEAVY_SVG}
             alt={HEAVY_ALT}
             width={HEAVY_PIXELS}
             height={HEAVY_PIXELS}
           />
+        )}
+        {plan.heavy !== '' && (
+          <Box flexShrink={0}>
+            <Button key="heavy" plain label={plan.heavy} onPress={() => acts.recheckHeavy()} />
+          </Box>
         )}
         {plan.words !== '' && (
           <Box flexShrink={1}>
@@ -2068,8 +2092,9 @@ function startServerPass($: Dollar, folders: readonly string[]): void {
 // The heavy things in the project, in a pass of its own: the kit's listing
 // walks every folder, which can take a while, and nothing waits for it. It
 // runs where the project carries the listing, once per half hour. A run that
-// failed keeps what the row shows.
-function startHeavyPass($: Dollar, top: string): void {
+// failed keeps what the row shows. A pass the owner asked for by a press says
+// what it found, since the row may look the same before and after.
+function startHeavyPass($: Dollar, top: string, isAsked = false): void {
   if (work.isCheckingHeavy) {
     return
   }
@@ -2108,11 +2133,40 @@ function startHeavyPass($: Dollar, top: string): void {
         await writeFacts($, now =>
           now === null ? now : { ...now, heavy: heavy > 0 ? heavy : null },
         )
+
+        if (isAsked) {
+          $.ui.toast(
+            heavy > 0 ? `Still ${countOf(heavy, 'heavy file')}.` : 'No heavy files any more.',
+          )
+        }
+      } else if (isAsked) {
+        $.ui.toast('Could not check for heavy files. Try again in a moment.')
       }
     } finally {
       work.isCheckingHeavy = false
     }
   })
+}
+
+// A press on the heavy words lists again, at once. The listing runs once per
+// half hour on its own, so without this the row goes on naming a heavy file
+// for up to half an hour after it is gone.
+async function recheckHeavy($: Dollar): Promise<void> {
+  const top = (await read($, facts))?.repo?.top ?? null
+
+  if (top === null) {
+    return
+  }
+
+  if (work.isCheckingHeavy) {
+    $.ui.toast('Still checking for heavy files.')
+
+    return
+  }
+
+  work.heavyNotBefore = 0
+  $.ui.toast('Checking for heavy files...')
+  startHeavyPass($, top, true)
 }
 
 // How old the newest backup is, in whole days. Asked only where the project
@@ -3004,6 +3058,10 @@ export function registerProjectBand(on: On): void {
               submitCompact($).catch(error => note($, 'a press on the fill failed', error)),
             hideBackup: () =>
               hideBackup($).catch(error => note($, 'hiding the backup words failed', error)),
+            recheckHeavy: () =>
+              recheckHeavy($).catch(error =>
+                note($, 'listing the heavy files again failed', error),
+              ),
             confirmPush: () =>
               inBackground($, 'the push failed', () => confirmPush($, columns)),
             confirmUpdate: () =>

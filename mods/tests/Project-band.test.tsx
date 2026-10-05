@@ -1777,8 +1777,42 @@ describe('the shortcut buttons', () => {
     ].join('\n')
     await kit.clock.advance(31 * 60_000)
     await kit.clock.settle()
-    expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 2 heavy files')
+
+    // The count is words of its own, beside the kettlebell, and can be pressed.
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
+    expect(await buttonsOn(ui)).toContain('2 heavy files')
     expect(await ui.findAll({ type: 'Svg' })).toHaveLength(surface === 'terminal' ? 0 : 3)
+    await ui.unmount()
+  })
+
+  onEachSurface('a press on the heavy words lists again at once', async ($, on, surface) => {
+    const kit = install(on, {
+      files: {
+        'D:/Work/Site/CLAUDE.md': KIT_HEADINGS,
+        'D:/Work/Site/project-os/Find-heavy-files.mjs': '',
+      },
+      heavyOut: '   12.00 GB  leftover    old-render.mov',
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await buttonsOn(ui)).toContain('1 heavy file')
+
+    // Still there: the press says so, and the row keeps its words.
+    await ui.press({ key: 'heavy' })
+    await kit.clock.settle()
+    expect(kit.world.toasts).toEqual(['Checking for heavy files...', 'Still 1 heavy file.'])
+    expect(await buttonsOn(ui)).toContain('1 heavy file')
+
+    // The file is gone, minutes after the last listing: a press finds out now.
+    kit.world.heavyOut = ''
+    await kit.clock.advance(60_000)
+    await ui.press({ key: 'heavy' })
+    await kit.clock.settle()
+    expect(kit.world.toasts.slice(2)).toEqual(['Checking for heavy files...', 'No heavy files any more.'])
+    expect(await buttonsOn(ui)).not.toContain('1 heavy file')
     await ui.unmount()
   })
 
