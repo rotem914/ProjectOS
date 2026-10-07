@@ -215,16 +215,6 @@ const MARK_ALT = 'Rotem E'
 const MARK_PIXELS = 25
 const MARK_CELLS = 4
 
-// A kettlebell, in red: drawn before the words only while something heavy
-// waits for the owner (2026-10-03). The terminal has the words alone.
-const HEAVY_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">' +
-  '<path fill="#E5484D" fill-rule="evenodd" ' +
-  'd="M8 3h8a2 2 0 0 1 2 2c0 1.2-.5 2.3-1.2 3.2A7.5 7.5 0 1 1 7.2 8.2 5.3 5.3 0 0 1 6 5a2 2 0 0 1 2-2Zm.2 2.2c.1.7.4 1.3.8 1.8a7.5 7.5 0 0 1 6 0c.4-.5.7-1.1.8-1.8Z"/>' +
-  '</svg>'
-const HEAVY_ALT = 'Heavy files'
-const HEAVY_PIXELS = 16
-
 // All committed: a check mark in a dark disc, drawn just before Go commit in
 // place of the words (owner, 2026-10-04; the drawing is his). The terminal
 // has no drawing and keeps the words.
@@ -1162,8 +1152,8 @@ function wordsOf(
   return words
 }
 
-// The heavy things are words of their own, beside their mark: a press on
-// them lists again (owner, 2026-10-05). Empty when nothing heavy is known.
+// The heavy things are words of their own, with no mark beside them (owner,
+// 2026-10-06): a press on them lists again. Empty when nothing heavy is known.
 function heavyWordsOf(known: ProjectBandFacts, isShort: boolean): string {
   const heavy = known.repo === null ? 0 : (known.heavy ?? 0)
 
@@ -1522,14 +1512,6 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
           <Box flexShrink={0}>
             <Button key="fill" plain label={plan.fill} onPress={() => acts.compact()} />
           </Box>
-        )}
-        {isHeavy && plan.heavy !== '' && table.Svg !== undefined && (
-          <table.Svg
-            source={HEAVY_SVG}
-            alt={HEAVY_ALT}
-            width={HEAVY_PIXELS}
-            height={HEAVY_PIXELS}
-          />
         )}
         {plan.heavy !== '' && (
           <Box flexShrink={0}>

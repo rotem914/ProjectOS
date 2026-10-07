@@ -1766,7 +1766,7 @@ describe('the shortcut buttons', () => {
 
     const ui = await bandOn($, surface)
 
-    // The desktop draws the name's mark and the check mark, and no kettlebell.
+    // The desktop draws the name's mark and the check mark.
     expect(await wordsOn(ui)).toBe('site-web | All committed')
     expect(await ui.findAll({ type: 'Svg' })).toHaveLength(surface === 'terminal' ? 0 : 2)
 
@@ -1778,10 +1778,10 @@ describe('the shortcut buttons', () => {
     await kit.clock.advance(31 * 60_000)
     await kit.clock.settle()
 
-    // The count is words of its own, beside the kettlebell, and can be pressed.
+    // The count is words of its own, with no mark beside it, and can be pressed.
     expect(await wordsOn(ui)).toBe('site-web | All committed')
     expect(await buttonsOn(ui)).toContain('2 heavy files')
-    expect(await ui.findAll({ type: 'Svg' })).toHaveLength(surface === 'terminal' ? 0 : 3)
+    expect(await ui.findAll({ type: 'Svg' })).toHaveLength(surface === 'terminal' ? 0 : 2)
     await ui.unmount()
   })
 
