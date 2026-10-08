@@ -1043,7 +1043,7 @@ async function pluginUpdateOf(
   $: Dollar,
   configDir: string | undefined,
   home: string | undefined,
-): Promise<{ update: { dir: string } | null; kitHead: string | null }> {
+): Promise<{ update: { dir: string; behind: number } | null; kitHead: string | null }> {
   const none = { update: null, kitHead: null }
 
   try {
@@ -1086,12 +1086,38 @@ async function pluginUpdateOf(
       LOCAL_GIT_MS,
     )
 
-    return { update: held.code === null || held.code === 0 ? null : { dir }, kitHead: remoteHead }
+    if (held.code === null || held.code === 0) {
+      return { update: null, kitHead: remoteHead }
+    }
+
+    return { update: { dir, behind: await commitsBehind($, dir, remoteHead) }, kitHead: remoteHead }
   } catch (error) {
     note($, 'checking the plugin copy failed', error)
 
     return none
   }
+}
+
+// How many commits the plugin copy is missing, for the button's count
+// (owner, 2026-10-08). The online commit has to be in this copy's history
+// before git can count up to it, so it is fetched once, the first time it is
+// seen; nothing in the working copy moves. Zero when git cannot say, and the
+// button then carries no count.
+async function commitsBehind($: Dollar, dir: string, remoteHead: string): Promise<number> {
+  const seen = await git($, ['cat-file', '-e', `${remoteHead}^{commit}`], dir, LOCAL_GIT_MS)
+
+  if (seen.code !== 0) {
+    const fetched = await git($, ['fetch', 'origin', 'main'], dir, NETWORK_GIT_MS)
+
+    if (fetched.code !== 0) {
+      return 0
+    }
+  }
+
+  const counted = await git($, ['rev-list', '--count', `HEAD..${remoteHead}`], dir, LOCAL_GIT_MS)
+  const behind = Number.parseInt(firstLine(counted.out), 10)
+
+  return counted.code === 0 && Number.isInteger(behind) && behind > 0 ? behind : 0
 }
 
 // DRAWING. Values in, a tree out: no git, no files, no waiting.
@@ -1140,10 +1166,6 @@ function wordsOf(
     )
   }
 
-  if (known.pluginUpdate !== null) {
-    words.push(isShort ? 'Update ready' : 'Plugin update ready')
-  }
-
   // The backup's age, while it is not riding in a button of its own.
   if (backupWords !== '') {
     words.push(backupWords)
@@ -1176,8 +1198,17 @@ function pushLabelOf(state: ProjectBandBusy, known: ProjectBandFacts): string {
   return ahead > 0 ? `Push \u00b7 ${ahead}` : 'Push'
 }
 
-function updateLabelOf(state: ProjectBandBusy): string {
-  return state.isUpdating ? 'Updating...' : 'Update plugin'
+// Update plugin carries the count of commits the plugin copy is missing,
+// after a middle dot, as Push does (owner, 2026-10-08; the row said "Plugin
+// update ready" in words before).
+function updateLabelOf(state: ProjectBandBusy, known: ProjectBandFacts): string {
+  if (state.isUpdating) {
+    return 'Updating...'
+  }
+
+  const behind = known.pluginUpdate?.behind ?? 0
+
+  return behind > 0 ? `Update plugin \u00b7 ${behind}` : 'Update plugin'
 }
 
 // The cells a run of buttons takes as the terminal draws them: a button is
@@ -1362,7 +1393,7 @@ function planOf(
       ...(isFastInRow ? [fastLabel] : []),
       ...(canPush ? [pushLabelOf(state, known)] : []),
       ...(isBackupInRow ? [backupText] : []),
-      ...(step.hasUpdate ? [updateLabelOf(state)] : []),
+      ...(step.hasUpdate ? [updateLabelOf(state, known)] : []),
       ...(more.length > 0 || moreHasUpdate ? [MORE_LABEL] : []),
     ]
 
@@ -1583,7 +1614,7 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
             {plan.hasUpdate && (
               <Button
                 key="update-plugin"
-                label={updateLabelOf(state)}
+                label={updateLabelOf(state, known)}
                 onPress={() => acts.askUpdate()}
               />
             )}
@@ -1698,7 +1729,11 @@ function drawMore(
             />
           ))}
         {open.hasUpdate && (
-          <Button key="update-plugin" label="Update plugin" onPress={() => acts.askUpdate()} />
+          <Button
+            key="update-plugin"
+            label={updateLabelOf(look.state, look.known)}
+            onPress={() => acts.askUpdate()}
+          />
         )}
         {/* The kit's update comes last, beside the button that closes the list. */}
         {open.phrases.includes(UPDATE_SHORTCUT) && (

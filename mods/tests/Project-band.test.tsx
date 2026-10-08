@@ -99,6 +99,10 @@ type World = {
     onlineHead: string
     /** Whether this copy already holds the online commit. */
     isHeld: boolean
+    /** Whether the online commit has been fetched into this copy's history. */
+    isFetched: boolean
+    /** The commits this copy is missing, as git counts them after a fetch. */
+    behind: number
     origin: string
   }
   push: { code: number; err: string; delayMs: number }
@@ -202,6 +206,8 @@ function worldOf(changes: Partial<World> = {}): World {
       head: LOCAL_HEAD,
       onlineHead: LOCAL_HEAD,
       isHeld: false,
+      isFetched: false,
+      behind: 1,
       origin: 'https://github.com/example/kit',
     },
     push: { code: 0, err: '', delayMs: 0 },
@@ -354,6 +360,14 @@ async function gitOf(
       return answer(0, `${world.plugin.onlineHead}\trefs/heads/main\n`)
     case 'merge-base':
       return answer(world.plugin.isHeld ? 0 : 1, '')
+    case 'cat-file':
+      return answer(world.plugin.isFetched ? 0 : 1, '')
+    case 'fetch':
+      world.plugin.isFetched = true
+
+      return answer(0, '')
+    case 'rev-list':
+      return answer(0, `${world.plugin.behind}\n`)
     case 'push':
       if (world.push.delayMs > 0) {
         await clock.sleep(world.push.delayMs)
@@ -1123,9 +1137,8 @@ describe('a session nobody looks at', () => {
     const ui = await bandOn($, 'desktop')
 
     await kit.clock.settle()
-    expect(await wordsOn(ui)).toBe(
-      'site-web | Plugin update ready',
-    )
+    expect(await wordsOn(ui)).toBe('site-web')
+    expect(await buttonsOn(ui)).toContain('Update plugin \u00b7 1')
     expect(gitRuns(kit.world, 'status')).toHaveLength(1)
 
     // From here on the timer and the turns keep it fresh.
@@ -1199,9 +1212,7 @@ describe('each part as soon as it is known', () => {
     expect(gitRuns(kit.world, 'ls-remote')).toHaveLength(1)
 
     await kit.clock.advance(15_000)
-    expect(await wordsOn(ui)).toBe(
-      'site-web | Plugin update ready',
-    )
+    expect(await buttonsOn(ui)).toContain('Update plugin \u00b7 1')
     await ui.unmount()
   })
 
@@ -2819,16 +2830,41 @@ describe('the plugin copy of the kit', () => {
     await ui.unmount()
   })
 
-  onEachSurface('says Plugin update ready when the online copy moved on', async ($, on, surface) => {
+  onEachSurface('offers Update plugin, with its count, when the online copy moved on', async ($, on, surface) => {
     const kit = install(on)
+
+    kit.world.plugin.onlineHead = ONLINE_HEAD
+    kit.world.plugin.behind = 3
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    // The button alone says an update waits: no words beside it (owner,
+    // 2026-10-08), and the count is what git counts once the online commit
+    // was fetched into this copy's history.
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
+    expect(await buttonsOn(ui)).toEqual(['Update plugin \u00b7 3', '\u22ee'])
+    expect(gitRuns(kit.world, 'fetch')).toHaveLength(1)
+    expect(gitRuns(kit.world, 'fetch')[0]?.args).toEqual(['fetch', 'origin', 'main'])
+    expect(gitRuns(kit.world, 'rev-list')[0]?.args).toEqual(['rev-list', '--count', `HEAD..${ONLINE_HEAD}`])
+
+    // The next look counts again without fetching again.
+    await endTurn($, kit)
+    expect(gitRuns(kit.world, 'fetch')).toHaveLength(1)
+    expect(gitRuns(kit.world, 'rev-list').length).toBeGreaterThan(1)
+    await ui.unmount()
+  })
+
+  onEachSurface('Update plugin carries no count when git cannot count', async ($, on, surface) => {
+    const kit = install(on, { broken: ['fetch'] })
 
     kit.world.plugin.onlineHead = ONLINE_HEAD
     await start($, kit)
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 Plugin update ready')
     expect(await buttonsOn(ui)).toEqual(['Update plugin', '\u22ee'])
+    expect(gitRuns(kit.world, 'rev-list')).toHaveLength(0)
     await ui.unmount()
   })
 
@@ -2841,7 +2877,7 @@ describe('the plugin copy of the kit', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 Plugin update ready')
+    expect(await buttonsOn(ui)).toContain('Update plugin \u00b7 1')
     expect(gitRuns(kit.world, 'ls-remote')[0]?.cwd).toBe('C:\\Users\\Dana\\.claude\\skills\\projectos')
     await ui.unmount()
   })
@@ -2862,17 +2898,15 @@ describe('the plugin copy of the kit', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toBe(
-      'site-web | Plugin update ready',
-    )
-    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', 'Push \u00b7 1', 'Update plugin', '\u22ee'])
+    expect(await wordsOn(ui)).toBe('site-web')
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', 'Push \u00b7 1', 'Update plugin \u00b7 1', '\u22ee'])
     expect(gitRuns(kit.world, 'ls-remote')[0]?.cwd).toBe('/Users/dana/claude-configs/Darrow/skills/projectos')
     expect(kit.world.listed).toEqual([])
 
     // A push hook is found there too.
     kit.world.present = ['/Users/dana/work/site/.git/hooks/pre-push']
     await endTurn($, kit)
-    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', 'Update plugin', '\u22ee'])
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', 'Update plugin \u00b7 1', '\u22ee'])
     await ui.unmount()
   })
 
@@ -2946,7 +2980,7 @@ describe('the plugin copy of the kit', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await wordsOn(ui)).toContain('Plugin update ready')
+    expect(await buttonsOn(ui)).toContain('Update plugin \u00b7 1')
     expect(gitRuns(kit.world, 'ls-remote')).toHaveLength(0)
     await ui.unmount()
   })
@@ -2976,7 +3010,7 @@ describe('the plugin copy of the kit', () => {
     // Cancel first: nothing is pulled.
     await ui.press({ key: 'cancel' })
     expect(gitRuns(kit.world, 'pull')).toHaveLength(0)
-    expect(await buttonsOn(ui)).toEqual(['Update plugin', '\u22ee'])
+    expect(await buttonsOn(ui)).toEqual(['Update plugin \u00b7 1', '\u22ee'])
 
     await ui.press({ key: 'update-plugin' })
 
@@ -3054,7 +3088,7 @@ describe('the plugin copy of the kit', () => {
       'Update did not go through: it took too long. Try again in a moment.',
     ])
     expect(gitRuns(kit.world, 'pull')[0]?.timeoutMs).toBe(120_000)
-    expect(await buttonsOn(ui)).toContain('Update plugin')
+    expect(await buttonsOn(ui)).toContain('Update plugin \u00b7 1')
     await ui.unmount()
   })
 
@@ -3073,7 +3107,7 @@ describe('the plugin copy of the kit', () => {
     expect(kit.world.toasts).toEqual([
       'Update did not go through: this copy has changes of its own. Nothing changed.',
     ])
-    expect(await wordsOn(ui)).toContain('Plugin update ready')
+    expect(await buttonsOn(ui)).toContain('Update plugin \u00b7 1')
     await ui.unmount()
   })
 })
@@ -3250,30 +3284,30 @@ describe('a narrow row', () => {
     await tight.unmount()
   })
 
-  // With an update ready the row has Go commit in it at 76 cells. It needs
-  // 72 once Go commit is behind More, and 54 with Update plugin there too.
+  // With an update ready the row has Go commit in it at 67 cells. It needs
+  // 61 once Go commit is behind More, and less with Update plugin there too.
   onEachSurface('folds Update plugin into More last, and it still asks first', async ($, on, surface) => {
     const kit = install(on, { changed: 3, ahead: 2 })
 
     kit.world.plugin.onlineHead = ONLINE_HEAD
     await start($, kit)
 
-    const roomy = await bandOn($, surface, width(surface, 76))
+    const roomy = await bandOn($, surface, width(surface, 67))
 
-    expect(await buttonsOn(roomy)).toEqual(['Go commit \u00b7 3', 'Push \u00b7 2', 'Update plugin', '\u22ee'])
+    expect(await buttonsOn(roomy)).toEqual(['Go commit \u00b7 3', 'Push \u00b7 2', 'Update plugin \u00b7 1', '\u22ee'])
     await roomy.unmount()
 
-    const tighter = await bandOn($, surface, width(surface, 72))
+    const tighter = await bandOn($, surface, width(surface, 61))
 
-    expect(await buttonsOn(tighter)).toEqual(['Push \u00b7 2', 'Update plugin', '\u22ee'])
+    expect(await buttonsOn(tighter)).toEqual(['Push \u00b7 2', 'Update plugin \u00b7 1', '\u22ee'])
     await tighter.unmount()
 
-    const ui = await bandOn($, surface, width(surface, 71))
+    const ui = await bandOn($, surface, width(surface, 60))
 
-    expect(await wordsOn(ui)).toBe('site-web | 3 to commit \u00b7 Update ready')
+    expect(await wordsOn(ui)).toBe('site-web | 3 to commit')
     expect(await buttonsOn(ui)).toEqual(['Push \u00b7 2', '\u22ee'])
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toContain('Update plugin')
+    expect(await buttonsOn(ui)).toContain('Update plugin \u00b7 1')
     await ui.press({ key: 'update-plugin' })
     expect(gitRuns(kit.world, 'pull')).toHaveLength(0)
     expect(await buttonsOn(ui)).toEqual(['Cancel', 'Update'])

@@ -126,7 +126,8 @@ own window, in the desktop app and in the terminal, in every folder you open.
   `Go commit` in the row, only while files wait, with their count inside it
   (`Go commit · 1`), the rest behind the three dots. A press sends the phrase as
   your own message. `Push` and `Update plugin` show only while there is
-  something to push or to update, and neither acts on one press. `Push`
+  something to push or to update, each with its count of commits
+  (`Push · 1`, `Update plugin · 1`), and neither acts on one press. `Push`
   turns into `Approve` for five seconds, and a press on `Approve` pushes;
   left alone, it is `Push` again. `Update plugin` asks in the row first.
 - No `Push` in a project with a push step of its own, such as push checks or

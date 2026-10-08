@@ -61,8 +61,11 @@ export type ProjectBandFacts = {
   repo: ProjectBandRepo | null
   /** The shortcut phrases the project's CLAUDE.md carries as headings. */
   shortcuts: string[]
-  /** Set only while the plugin copy of the kit is behind its online copy. */
-  pluginUpdate: { dir: string } | null
+  /**
+   * Set only while the plugin copy of the kit is behind its online copy, with
+   * the count of commits it is missing; 0 when git could not count them.
+   */
+  pluginUpdate: { dir: string; behind: number } | null
   /**
    * How full the conversation is, as a whole percentage. Null before the
    * conversation's first answer and right after a compaction. A value kept by
