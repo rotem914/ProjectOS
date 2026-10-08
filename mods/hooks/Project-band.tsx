@@ -311,6 +311,8 @@ type RowPlan = {
   name: string
   /** How full the conversation is, as the row reads it; empty when unknown. */
   fill: string
+  /** True from 80% full: the number is orange words and Compact follows it. */
+  isFillHigh: boolean
   words: string
   /** The count of heavy things, as words a press lists again; empty when none. */
   heavy: string
@@ -1345,7 +1347,9 @@ function planOf(
   // without a frame, so it takes its own cells and the one that separates it.
   const fill = known.fill ?? null
   const fillText = fill === null ? '' : `${Math.round(fill)}%`
-  const fillCells = fillText === '' ? 0 : fillText.length + 1
+  const isFillHigh = fill !== null && Math.round(fill) >= FILL_HIGH
+  const fillCells =
+    (fillText === '' ? 0 : fillText.length + 1) + (isFillHigh ? buttonsWidth([COMPACT_LABEL]) : 0)
   const steps = [
     { isShort: false, isInRow: true, hasCommit: hasMain, hasUpdate: canUpdate },
     { isShort: true, isInRow: true, hasCommit: hasMain, hasUpdate: canUpdate },
@@ -1355,6 +1359,7 @@ function planOf(
   let plan: RowPlan = {
     name: fullName,
     fill: fillText,
+    isFillHigh,
     words: '',
     heavy: '',
     hasCommit: false,
@@ -1407,6 +1412,7 @@ function planOf(
     plan = {
       name: fullName,
       fill: fillText,
+      isFillHigh,
       words,
       heavy: heavyWords,
       hasCommit: step.hasCommit,
@@ -1446,7 +1452,7 @@ function keysOf(known: ProjectBandFacts, state: ProjectBandBusy, columns: number
   const plan = planOf(known, state, columns)
 
   return [
-    ...(plan.fill !== '' ? ['fill'] : []),
+    ...(plan.fill !== '' ? [plan.isFillHigh ? 'compact' : 'fill'] : []),
     ...(plan.heavy !== '' ? ['heavy'] : []),
     ...(plan.backupQuiet !== '' ? ['backup-age'] : []),
     ...(plan.hasCommit ? ['go-commit'] : []),
@@ -1464,6 +1470,14 @@ function keyOf(phrase: string): string {
 
 // The name's color is the owner's choice (2026-10-04), a quiet grey.
 const NAME_COLOR = '#B3B4BC'
+
+// From 80% full the percentage turns a pastel orange, not a loud one, and a
+// plain grey Compact button stands to its right (owner, 2026-10-08). A
+// button cannot be colored, so the number is words then, and the press moves
+// to Compact.
+const FILL_HIGH = 80
+const FILL_HIGH_COLOR = '#F5BE8C'
+const COMPACT_LABEL = 'Compact'
 
 function drawLabel({ Box, Text, Svg }: Table, name: string): RenderElement {
   return (
@@ -1539,10 +1553,18 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
             />
           </Box>
         )}
-        {plan.fill !== '' && (
+        {plan.fill !== '' && !plan.isFillHigh && (
           <Box flexShrink={0}>
             <Button key="fill" plain label={plan.fill} onPress={() => acts.compact()} />
           </Box>
+        )}
+        {plan.fill !== '' && plan.isFillHigh && (
+          <Box flexShrink={0}>
+            <Text color={FILL_HIGH_COLOR}>{plan.fill}</Text>
+          </Box>
+        )}
+        {plan.fill !== '' && plan.isFillHigh && (
+          <Button key="compact" label={COMPACT_LABEL} onPress={() => acts.compact()} />
         )}
         {plan.heavy !== '' && (
           <Box flexShrink={0}>

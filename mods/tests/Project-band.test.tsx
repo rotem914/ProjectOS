@@ -1758,6 +1758,34 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
+  onEachSurface('from 80% the number is pastel orange and Compact stands beside it', async ($, on, surface) => {
+    const kit = install(on, { changed: 2, fill: 79 })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    // Below 80 nothing changes: the number is the plain button.
+    expect(await buttonsOn(ui)).toEqual(['79%', 'Go commit \u00b7 2', '\u22ee'])
+
+    kit.world.fill = 80
+    await endTurn($, kit)
+
+    // From 80 the number is orange words, and a grey Compact follows it.
+    expect(await buttonsOn(ui)).toEqual(['Compact', 'Go commit \u00b7 2', '\u22ee'])
+    expect(await ui.find({ key: 'fill' })).toBeFalsy()
+
+    const number = await ui.find({ type: 'Text', text: '80%' })
+
+    expect(number?.props.color).toBe('#F5BE8C')
+    expect((await ui.find({ key: 'compact' }))?.props.plain).toBeUndefined()
+    await ui.press({ key: 'compact' })
+    await kit.clock.settle()
+    expect(kit.world.commands).toEqual(['compact'])
+    expect(kit.world.prompts).toEqual([])
+    await ui.unmount()
+  })
+
   onEachSurface('heavy files show only while a leftover or a backup is that big', async ($, on, surface) => {
     const kit = install(on, {
       files: {
