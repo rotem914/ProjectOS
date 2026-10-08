@@ -24,7 +24,7 @@ import type { Engine } from 'claude-code/testing'
 
 import { register } from '../hooks/Register-mods'
 
-const PLUGIN = 'time'
+const PLUGIN = 'project-os'
 const SURFACES = ['terminal', 'desktop'] as const
 const EM = '\u{2014}'
 

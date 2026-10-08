@@ -161,7 +161,7 @@ export type ProjectBandBusy = {
 // reads a plugin before it loads looks each key up in this block.
 declare module 'claude-code' {
   interface PluginState {
-    time: {
+    'project-os': {
       bandFacts: ProjectBandFacts | null
       bandAsk: ProjectBandAsk | null
       bandBusy: ProjectBandBusy

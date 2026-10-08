@@ -16,7 +16,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On, RenderElement } from 'claude-code'
 import type { Engine, MockClock } from 'claude-code/testing'
 
-const PLUGIN = 'time'
+const PLUGIN = 'project-os'
 const SURFACES = ['terminal', 'desktop'] as const
 
 // The cells the terminal keeps at the end of the band for its collapse mark.
