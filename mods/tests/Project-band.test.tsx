@@ -1644,6 +1644,43 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
+  onEachSurface('Go kit shows only while the last reply asks for it', async ($, on, surface) => {
+    const kit = install(on, { changed: 2 })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+    const reply = (answer: string) =>
+      $.turn.complete({ answer, durationMs: 1200, isAborted: false, turnId: 'turn-1', reason: 'answer' })
+
+    expect(await buttonsOn(ui)).not.toContain('Go kit')
+
+    // A reply that asks for it: the button comes first in the row.
+    await reply('This is kit work.\n\nSay `Go kit` and I change it.')
+    await kit.clock.settle()
+    expect((await buttonsOn(ui))[0]).toBe('Go kit')
+
+    // A press sends the phrase, and the button goes with the prompt.
+    await ui.press({ key: 'go-kit' })
+    await kit.clock.settle()
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go kit'])
+    expect(await buttonsOn(ui)).not.toContain('Go kit')
+
+    // Asked again, then answered by typing something else: gone too.
+    await reply('Say Go kit to commit it.')
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toContain('Go kit')
+    await $.prompt.submit(typed('not now'))
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).not.toContain('Go kit')
+
+    // A reply that only mentions the kit offers nothing.
+    await reply('The kit commit is in.')
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).not.toContain('Go kit')
+    await ui.unmount()
+  })
+
   test('the mode is kept through a compaction, and a cleared conversation starts without it', async ($, on) => {
     const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': FAST_HEADINGS } })
 

@@ -130,6 +130,8 @@ own window, in the desktop app and in the terminal, in every folder you open.
   (`Push · 1`, `Update plugin · 1`), and neither acts on one press. `Push`
   turns into `Approve` for five seconds, and a press on `Approve` pushes;
   left alone, it is `Push` again. `Update plugin` asks in the row first.
+  `Go kit` shows only while the assistant's last reply asks you to say it,
+  and goes with your next message.
 - No `Push` in a project with a push step of its own, such as push checks or
   large files kept in Git LFS. Claude Code runs a mod's git without that
   step, so a push from the row would skip it. The row says

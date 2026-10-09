@@ -595,6 +595,14 @@ function fastAfter(text: string, isOn: boolean): boolean {
   return isOn
 }
 
+// A Go kit button shows only while the last reply asks the owner to say
+// Go kit, and goes as soon as the next prompt enters (owner, 2026-10-09).
+const KIT_SHORTCUT = 'Go kit'
+
+function asksGoKitIn(answer: string): boolean {
+  return /\bsay\s+`?go kit`?(?![\w])/i.test(answer)
+}
+
 // A reply in fast mode ends on the line "Fast mode on" (the kit's FAST MODE
 // shortcut). When a reply ends on it, the mode is on, whatever the button
 // last heard: after a resume or a new copy of the code the button may have
@@ -1407,6 +1415,7 @@ function planOf(
     ]
     const moreHasUpdate = canUpdate && !step.hasUpdate
     const buttons = [
+      ...(known.isKitAsked === true ? [KIT_SHORTCUT] : []),
       ...(step.hasCommit ? [commitLabelOf(known)] : []),
       ...(isFastInRow ? [fastLabel] : []),
       ...(canPush ? [pushLabelOf(state, known)] : []),
@@ -1468,6 +1477,7 @@ function keysOf(known: ProjectBandFacts, state: ProjectBandBusy, columns: number
     ...(plan.fill !== '' ? [plan.isFillHigh ? 'compact' : 'fill'] : []),
     ...(plan.heavy !== '' ? ['heavy'] : []),
     ...(plan.backupQuiet !== '' ? ['backup-age'] : []),
+    ...(known.isKitAsked === true ? ['go-kit'] : []),
     ...(plan.hasCommit ? ['go-commit'] : []),
     ...(pushTarget(known.repo) !== null ? ['push'] : []),
     ...(plan.hasFast ? [keyOf(FAST_SHORTCUT)] : []),
@@ -1525,8 +1535,15 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
     known.pluginUpdate === null &&
     !isHeavy &&
     !plan.isBackupDue
+  const isKitAsked = known.isKitAsked === true
   const hasButtons =
-    plan.hasCommit || plan.hasFast || canPush || plan.backup !== '' || plan.hasUpdate || hasMore
+    isKitAsked ||
+    plan.hasCommit ||
+    plan.hasFast ||
+    canPush ||
+    plan.backup !== '' ||
+    plan.hasUpdate ||
+    hasMore
 
   // The row has nothing to say before git has named the project: no name, no
   // counts, no buttons. Nothing is drawn then, not an empty row.
@@ -1613,6 +1630,13 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
         )}
         {hasButtons && (
           <Box flexDirection="row" gap={1} flexShrink={0}>
+            {isKitAsked && (
+              <Button
+                key="go-kit"
+                label={KIT_SHORTCUT}
+                onPress={() => acts.shortcut(KIT_SHORTCUT)}
+              />
+            )}
             {plan.hasCommit && (
               <Button
                 key="go-commit"
@@ -2262,6 +2286,12 @@ async function backupOf(
 }
 
 // Writes whether fast mode is on, here and in the session's values.
+async function setKitAsked($: Dollar, isKitAsked: boolean): Promise<void> {
+  await writeFacts($, now =>
+    now === null || (now.isKitAsked === true) === isKitAsked ? now : { ...now, isKitAsked },
+  )
+}
+
 async function setFast($: Dollar, isFast: boolean): Promise<void> {
   work.isFast = isFast
   await writeFacts($, now => (now === null ? now : { ...now, isFast }))
@@ -2619,8 +2649,11 @@ async function submitShortcut($: Dollar, phrase: string, columns: number): Promi
     try {
       await $.prompt.submit({ text: sent, asUser: true })
 
-      // The row's own words do not pass its hook on prompts, so the mode is
-      // followed here: Fast switches it, and Go commit ends it.
+      // The row's own words do not pass its hook on prompts, so what a prompt
+      // answers is followed here: the Go kit ask is answered, Fast switches
+      // the mode, and Go commit ends it.
+      await setKitAsked($, false)
+
       const isFast = fastAfter(sent, isFastNow)
 
       if (isFast !== isFastNow) {
@@ -3011,6 +3044,11 @@ export function registerProjectBand(on: On): void {
     const entered = await next(e)
 
     try {
+      // Whatever was typed or pressed, the Go kit ask has had its answer.
+      if (!('drop' in entered)) {
+        inBackground($, 'clearing the Go kit ask failed', () => setKitAsked($, false))
+      }
+
       const isFast = fastAfter(e.text, work.isFast)
 
       if (!('drop' in entered) && isFast !== work.isFast) {
@@ -3037,6 +3075,18 @@ export function registerProjectBand(on: On): void {
         $.ui.status(replyTimeOf(e.durationMs))
       } catch (error) {
         note($, 'showing the reply time failed', error)
+      }
+    }
+
+    // A reply that asks for Go kit offers its button; any other reply takes
+    // it away.
+    if (e.agentId === undefined && !e.isAborted) {
+      try {
+        const isKitAsked = asksGoKitIn(e.answer)
+
+        inBackground($, 'writing the Go kit ask failed', () => setKitAsked($, isKitAsked))
+      } catch (error) {
+        note($, 'following the Go kit ask failed', error)
       }
     }
 
