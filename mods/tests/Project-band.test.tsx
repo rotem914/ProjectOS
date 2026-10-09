@@ -1600,6 +1600,50 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
+  test('a reply that ends on "Fast mode on" puts the button on the mode', async ($, on) => {
+    const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': FAST_HEADINGS } })
+
+    await start($, kit)
+
+    const ui = await bandOn($, 'desktop')
+    const reply = (answer: string, extra: Partial<{ isAborted: boolean; agentId: string }> = {}) =>
+      $.turn.complete({
+        answer,
+        durationMs: 1200,
+        isAborted: false,
+        turnId: 'turn-1',
+        reason: 'answer',
+        ...extra,
+      })
+
+    // A resume left the button at off while the conversation stayed in the mode.
+    await $.classic.SessionStart({ source: 'resume', cwd: kit.world.folder })
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Fast mode', '\u22ee'])
+
+    // The line inside a reply, a subagent's answer, or an interrupted turn: no change.
+    await reply('I would say Fast mode on later.\n\nDone.')
+    await reply('Done.\n\n----\n\nFast mode on', { agentId: 'helper-1' })
+    await reply('Done.\n\n----\n\nFast mode on', { isAborted: true })
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Fast mode', '\u22ee'])
+
+    // A reply that ends on it: the button follows, and Fast Off then switches it off.
+    await reply('The title is bigger.\n\n----\n\nFast mode on\n')
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Fast Off', '\u22ee'])
+
+    // A later reply without the line does not turn it off.
+    await reply('Which one?')
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Fast Off', '\u22ee'])
+    await ui.press({ key: 'fast-mode' })
+    await kit.clock.settle()
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['FAST OFF'])
+    expect(await buttonsOn(ui)).toEqual(['Fast mode', '\u22ee'])
+    await ui.unmount()
+  })
+
   test('the mode is kept through a compaction, and a cleared conversation starts without it', async ($, on) => {
     const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': FAST_HEADINGS } })
 

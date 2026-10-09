@@ -595,6 +595,19 @@ function fastAfter(text: string, isOn: boolean): boolean {
   return isOn
 }
 
+// A reply in fast mode ends on the line "Fast mode on" (the kit's FAST MODE
+// shortcut). When a reply ends on it, the mode is on, whatever the button
+// last heard: after a resume or a new copy of the code the button may have
+// started at off while the conversation never left the mode (owner,
+// 2026-10-09). A reply without the line changes nothing, since not every
+// reply in the mode carries it.
+function isFastFooterIn(answer: string): boolean {
+  const lines = answer.split(/\r?\n/).map(line => line.trim()).filter(line => line !== '')
+  const last = lines.at(-1) ?? ''
+
+  return last.replace(/[.!]+$/, '').toLowerCase() === 'fast mode on'
+}
+
 // How the row reads a backup's age: today, or its count of days.
 function backupTextOf(days: number): string {
   return days === 0 ? 'Backup today' : `Backup ${days}d`
@@ -3024,6 +3037,18 @@ export function registerProjectBand(on: On): void {
         $.ui.status(replyTimeOf(e.durationMs))
       } catch (error) {
         note($, 'showing the reply time failed', error)
+      }
+    }
+
+    // A reply that ends on "Fast mode on" puts the button on the mode.
+    if (e.agentId === undefined && !e.isAborted && !work.isFast) {
+      try {
+        if (isFastFooterIn(e.answer)) {
+          work.isFast = true
+          inBackground($, 'writing the fast mode failed', () => setFast($, true))
+        }
+      } catch (error) {
+        note($, 'following the fast mode failed', error)
       }
     }
 
