@@ -125,7 +125,9 @@ own window, in the desktop app and in the terminal, in every folder you open.
 - Buttons. One for each kit shortcut the project's `CLAUDE.md` carries:
   `Go commit` in the row, only while files wait, with their count inside it
   (`Go commit · 1`), the rest behind the three dots. A press sends the phrase as
-  your own message. `Push` and `Update plugin` show only while there is
+  your own message. While a reply is still running the words wait for it to
+  end: the button reads with three dots meanwhile, a toast says so, and a
+  second press does not queue them again. `Push` and `Update plugin` show only while there is
   something to push or to update, each with its count of commits
   (`Push · 1`, `Update plugin · 1`), and neither acts on one press. `Push`
   turns into `Approve` for five seconds, and a press on `Approve` pushes;

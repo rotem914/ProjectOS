@@ -110,6 +110,8 @@ type World = {
   /** What the store holds before the session starts. */
   stored: Record<string, unknown>
   isPromptRefused: boolean
+  /** How long the engine holds a prompt before it enters: a reply running. */
+  promptHoldMs: number
   /** How full the conversation is, in percent; null before its first answer. */
   fill: number | null
   /** What the project's listing of heavy files prints. */
@@ -214,6 +216,7 @@ function worldOf(changes: Partial<World> = {}): World {
     pull: { code: 0, out: 'Updating aaaaaaa..bbbbbbb\nFast-forward\n', err: '', delayMs: 0 },
     stored: {},
     isPromptRefused: false,
+    promptHoldMs: 0,
     fill: null,
     heavyOut: '',
     isServerUp: false,
@@ -454,11 +457,17 @@ function install(on: On, changes: Partial<World> = {}): Kit {
 
     return { deny: `ENOENT: no such directory, scandir '${e.path ?? ''}'` }
   })
-  on('prompt.submit', (_, e) => {
+  on('prompt.submit', async (_, e) => {
     // A hook that throws is skipped, and nothing beneath it answers: that is
     // how a prompt the engine cannot take reaches the mod, as a rejection.
     if (world.isPromptRefused) {
       throw new Error('the session takes no prompts')
+    }
+
+    // The engine holds a plugin's prompt while a reply runs: it enters once
+    // the reply ends.
+    if (world.promptHoldMs > 0) {
+      await clock.sleep(world.promptHoldMs)
     }
 
     world.prompts.push({ text: e.text, origin: e.origin })
@@ -1681,6 +1690,67 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
+  onEachSurface('words that wait for the reply to end hold their button and say so', async ($, on, surface) => {
+    const kit = install(on, {
+      files: { 'D:/Work/Site/CLAUDE.md': FAST_HEADINGS },
+      promptHoldMs: 20_000,
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    // A reply is running: the words are held, and the button shows it.
+    await ui.press({ key: 'fast-mode' })
+    expect(kit.world.prompts).toEqual([])
+    expect(await buttonsOn(ui)).toEqual(['Fast mode...', '\u22ee'])
+    expect(kit.world.toasts).toEqual([])
+    await kit.clock.advance(400)
+    expect(kit.world.toasts).toEqual(['FAST ON is waiting for the current reply to end.'])
+
+    // A second press, past the double-click guard, queues nothing more.
+    await kit.clock.advance(1_600)
+    await ui.press({ key: 'fast-mode' })
+    expect(kit.world.prompts).toEqual([])
+    expect(kit.world.toasts).toEqual([
+      'FAST ON is waiting for the current reply to end.',
+      'FAST ON is waiting for the current reply to end.',
+    ])
+
+    // The reply ends: the words enter once, and the button follows them.
+    await kit.clock.advance(18_000)
+    await kit.clock.settle()
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['FAST ON'])
+    expect(await buttonsOn(ui)).toEqual(['Fast Off', '\u22ee'])
+    await ui.unmount()
+  })
+
+  onEachSurface('words that enter at once say nothing, and Go commit drops its count while it waits', async ($, on, surface) => {
+    const kit = install(on, { changed: 2 })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    // Idle: the words enter at once, with no toast and no dots left behind.
+    await ui.press({ key: 'go-commit' })
+    await kit.clock.advance(400)
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go commit'])
+    expect(kit.world.toasts).toEqual([])
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
+
+    // Held: the count goes behind the dots until the words enter.
+    kit.world.promptHoldMs = 20_000
+    await kit.clock.advance(2_000)
+    await ui.press({ key: 'go-commit' })
+    expect(await buttonsOn(ui)).toEqual(['Go commit...', '\u22ee'])
+    await kit.clock.advance(20_000)
+    await kit.clock.settle()
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go commit', 'Go commit'])
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
+    await ui.unmount()
+  })
+
   test('the mode is kept through a compaction, and a cleared conversation starts without it', async ($, on) => {
     const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': FAST_HEADINGS } })
 
@@ -2425,6 +2495,31 @@ describe('the Push button', () => {
     await ui.press({ key: 'confirm-push' })
     expect(gitRuns(kit.world, 'push')).toHaveLength(1)
     expect(kit.world.toasts).toEqual(['Pushed 2 commits'])
+    await ui.unmount()
+  })
+
+  onEachSurface('a click on Approve the moment it appears counts, after a slow git read', async ($, on, surface) => {
+    const kit = install(on, { ahead: 2 })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    // The read that names what waits takes 700 ms. The guard against a double
+    // click counts from the press on Push, not from the moment Approve
+    // appears, so the first click on Approve is an answer (owner, 2026-10-10).
+    kit.world.slow = { 'for-each-ref': 700 }
+
+    const pressed = ui.press({ key: 'push' })
+
+    await kit.clock.advance(700)
+    await pressed
+    expect(await buttonsOn(ui)).toEqual(['Approve', '\u22ee'])
+
+    // The push itself reads again; only the guard is on trial here.
+    kit.world.slow = {}
+    await ui.press({ key: 'confirm-push' })
+    expect(gitRuns(kit.world, 'push')).toHaveLength(1)
     await ui.unmount()
   })
 

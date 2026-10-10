@@ -44,6 +44,7 @@ const ask = atom({ plugin: 'project-os', key: 'bandAsk' } as const, null)
 const busy = atom({ plugin: 'project-os', key: 'bandBusy' } as const, {
   isPushing: false,
   isUpdating: false,
+  sending: [],
 })
 
 // The engine lets one module put a single hook without a matcher on an event,
@@ -136,6 +137,9 @@ const LOCAL_GIT_MS = 10_000
 const NETWORK_GIT_MS = 15_000
 const PUSH_MS = 120_000
 const REPEAT_PRESS_MS = 1_500
+// Words a press sent that have not entered this long after are waiting on a
+// running reply, and the row says so once.
+const SENDING_SAY_MS = 400
 const LONG_TOAST_MS = 8_000
 
 // Counting the files is the one question that can take long, in a very large
@@ -1244,6 +1248,22 @@ function fastLabelOf(isFast: boolean): string {
   return isFast ? FAST_ON_LABEL : FAST_LABEL
 }
 
+// The phrases whose words a press sent and the engine still holds: a reply is
+// running, and a plugin's prompt enters once it ends.
+function sendingOf(state: ProjectBandBusy): readonly string[] {
+  return state.sending ?? []
+}
+
+// A button whose words are still on their way reads with three dots, its
+// count dropped (owner, 2026-10-10): "Fast mode...", "Go commit...".
+function sendingOr(state: ProjectBandBusy, phrase: string, label: string): string {
+  return sendingOf(state).includes(phrase) ? `${label.replace(/ \u00b7 \d+$/, '')}...` : label
+}
+
+function waitingWordsOf(sent: string): string {
+  return `${sent} is waiting for the current reply to end.`
+}
+
 // What a shortcut's button reads, and the words a press of it sends.
 // True while the kit online is newer than what this project stands on, or
 // may be. An install older than the update shortcut is behind by definition.
@@ -1350,12 +1370,13 @@ function planOf(
     : []
   const canPush = pushTarget(known.repo) !== null
   const canUpdate = isInRepo && known.pluginUpdate !== null
-  const fastLabel = fastLabelOf(known.isFast === true)
+  const fastLabel = sendingOr(state, FAST_SHORTCUT, fastLabelOf(known.isFast === true))
   // The backup's age shows only where the project carries the shortcut that
   // makes one, and only once a backup was found.
   const backupDays =
     isInRepo && known.shortcuts.includes(BACKUP_SHORTCUT) ? (known.backup?.days ?? null) : null
-  const backupText = backupDays === null ? '' : backupTextOf(backupDays)
+  const backupText =
+    backupDays === null ? '' : sendingOr(state, BACKUP_SHORTCUT, backupTextOf(backupDays))
   const isBackupDue = backupDays !== null && backupDays >= BACKUP_BUTTON_DAYS
   // Before it is due the row says nothing about the backup: the owner wanted
   // a reminder once a month, not a count of days (2026-10-04). The quiet
@@ -1415,8 +1436,8 @@ function planOf(
     ]
     const moreHasUpdate = canUpdate && !step.hasUpdate
     const buttons = [
-      ...(known.isKitAsked === true ? [KIT_SHORTCUT] : []),
-      ...(step.hasCommit ? [commitLabelOf(known)] : []),
+      ...(known.isKitAsked === true ? [sendingOr(state, KIT_SHORTCUT, KIT_SHORTCUT)] : []),
+      ...(step.hasCommit ? [sendingOr(state, MAIN_SHORTCUT, commitLabelOf(known))] : []),
       ...(isFastInRow ? [fastLabel] : []),
       ...(canPush ? [pushLabelOf(state, known)] : []),
       ...(isBackupInRow ? [backupText] : []),
@@ -1633,14 +1654,14 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
             {isKitAsked && (
               <Button
                 key="go-kit"
-                label={KIT_SHORTCUT}
+                label={sendingOr(state, KIT_SHORTCUT, KIT_SHORTCUT)}
                 onPress={() => acts.shortcut(KIT_SHORTCUT)}
               />
             )}
             {plan.hasCommit && (
               <Button
                 key="go-commit"
-                label={commitLabelOf(known)}
+                label={sendingOr(state, MAIN_SHORTCUT, commitLabelOf(known))}
                 onPress={() => acts.shortcut(MAIN_SHORTCUT)}
               />
             )}
@@ -1783,7 +1804,11 @@ function drawMore(
           .map(phrase => (
             <Button
               key={keyOf(phrase)}
-              label={buttonTextOf(phrase, look.known.isFast === true)}
+              label={sendingOr(
+                look.state,
+                phrase,
+                buttonTextOf(phrase, look.known.isFast === true),
+              )}
               onPress={() => acts.shortcut(phrase)}
             />
           ))}
@@ -1798,7 +1823,11 @@ function drawMore(
         {open.phrases.includes(UPDATE_SHORTCUT) && (
           <Button
             key={keyOf(UPDATE_SHORTCUT)}
-            label={buttonTextOf(UPDATE_SHORTCUT, false, isKitUpdateWaiting(look.known))}
+            label={sendingOr(
+              look.state,
+              UPDATE_SHORTCUT,
+              buttonTextOf(UPDATE_SHORTCUT, false, isKitUpdateWaiting(look.known)),
+            )}
             onPress={() => acts.shortcut(UPDATE_SHORTCUT)}
           />
         )}
@@ -1893,7 +1922,7 @@ const work: {
   heavyNotBefore: 0,
   timer: null,
   lastShortcut: null,
-  running: { isPushing: false, isUpdating: false },
+  running: { isPushing: false, isUpdating: false, sending: [] },
   counting: null,
   countingTop: '',
   filesTop: '',
@@ -2545,7 +2574,7 @@ async function ringBack($: Dollar, wanted: readonly string[], columns: number): 
 // Takes the busy mark, and says whether this call was the one that took it.
 // This copy of the code knows best what it has running: a cleared
 // conversation starts with empty values while a push may still be on its way.
-async function claim($: Dollar, what: keyof ProjectBandBusy): Promise<boolean> {
+async function claim($: Dollar, what: 'isPushing' | 'isUpdating'): Promise<boolean> {
   if (work.running[what]) {
     return false
   }
@@ -2566,7 +2595,7 @@ async function claim($: Dollar, what: keyof ProjectBandBusy): Promise<boolean> {
 
 // A mark that cannot be cleared here is put right by the next pass, which
 // writes what this copy of the code has running.
-async function release($: Dollar, what: keyof ProjectBandBusy): Promise<void> {
+async function release($: Dollar, what: 'isPushing' | 'isUpdating'): Promise<void> {
   work.running[what] = false
 
   try {
@@ -2578,6 +2607,26 @@ async function release($: Dollar, what: keyof ProjectBandBusy): Promise<void> {
   }
 }
 
+// The words of a press still on their way, marked in the busy state so the
+// row draws their button with its dots. A mark the write refused is still
+// kept here, and the next pass puts the screen right.
+async function markSending($: Dollar, phrase: string, isSending: boolean): Promise<void> {
+  const without = (list: readonly string[]) => list.filter(other => other !== phrase)
+
+  work.running.sending = isSending
+    ? [...without(sendingOf(work.running)), phrase]
+    : without(sendingOf(work.running))
+
+  try {
+    await writeBusy($, now => ({
+      ...now,
+      sending: isSending ? [...without(sendingOf(now)), phrase] : without(sendingOf(now)),
+    }))
+  } catch (error) {
+    note($, 'marking the words on their way failed', error)
+  }
+}
+
 // The busy mark on screen is the one this copy of the code has running. A
 // reload of the code leaves the mark of a push that went with the old copy,
 // and a new conversation starts without the mark of one still on its way.
@@ -2585,7 +2634,8 @@ async function syncBusy($: Dollar): Promise<void> {
   const state = await read($, busy)
   const isStale =
     state.isPushing !== work.running.isPushing ||
-    state.isUpdating !== work.running.isUpdating
+    state.isUpdating !== work.running.isUpdating ||
+    sendingOf(state).join('\n') !== sendingOf(work.running).join('\n')
 
   if (isStale) {
     await writeBusy($, () => ({ ...work.running }))
@@ -2645,7 +2695,32 @@ async function submitShortcut($: Dollar, phrase: string, columns: number): Promi
   const isFastNow = knownNow?.isFast === true
   const sent = sentOf(phrase, isFastNow, knownNow?.isUpdateByLink === true)
 
+  // The words of an earlier press are still on their way: a reply is running,
+  // and the engine holds a plugin's prompt until it ends. A second press
+  // would queue the words again, so it says so instead (owner, 2026-10-10:
+  // five presses on Fast mode gave five FAST ON at once).
+  if (sendingOf(work.running).includes(phrase)) {
+    $.ui.toast(waitingWordsOf(sent))
+
+    return
+  }
+
+  await markSending($, phrase, true)
+
   inBackground($, `submitting ${sent} failed`, async () => {
+    let isEntered = false
+
+    // Words not in within a moment are waiting on the reply: said once, here.
+    try {
+      $.clock.after(SENDING_SAY_MS, () => {
+        if (!isEntered) {
+          $.ui.toast(waitingWordsOf(sent))
+        }
+      })
+    } catch {
+      // No clock to wait on: the words enter without a word about it.
+    }
+
     try {
       await $.prompt.submit({ text: sent, asUser: true })
 
@@ -2666,6 +2741,9 @@ async function submitShortcut($: Dollar, phrase: string, columns: number): Promi
       $.ui.toast(`Could not send "${sent}". Type it in the message box instead.`, {
         timeoutMs: LONG_TOAST_MS,
       })
+    } finally {
+      isEntered = true
+      await markSending($, phrase, false)
     }
   })
 }
@@ -2707,6 +2785,11 @@ async function askPush($: Dollar): Promise<void> {
     return
   }
 
+  // The clock starts at the press, before the read below: the guard against
+  // a double click counts from the click on Push, not from the moment Approve
+  // appears (owner, 2026-10-10: the first click on Approve never counted).
+  const askedAt = await $.clock.now()
+
   // Read again at the press, so the question names what is true now.
   const repo = await branchNow($)
   const target = pushTarget(repo)
@@ -2728,8 +2811,6 @@ async function askPush($: Dollar): Promise<void> {
 
     return
   }
-
-  const askedAt = await $.clock.now()
 
   await writeAsk($, {
     kind: 'push',

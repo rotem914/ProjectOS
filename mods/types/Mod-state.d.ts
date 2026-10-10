@@ -161,6 +161,12 @@ export type ProjectBandAsk =
 export type ProjectBandBusy = {
   isPushing: boolean
   isUpdating: boolean
+  /**
+   * The phrases whose words a press sent and the engine still holds, a reply
+   * being on its way; each button reads with three dots meanwhile. A value
+   * kept by an earlier version of the mod has no such key, and reads as none.
+   */
+  sending?: string[]
 }
 
 // The keys are spelled out here, under the plugin's own name: the check that
