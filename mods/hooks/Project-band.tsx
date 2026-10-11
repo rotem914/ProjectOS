@@ -615,9 +615,14 @@ const ASKED_LABEL_MAX = 24
 // of it make 64 at the desktop's text size; the terminal takes eight cells.
 const ASKED_GAP_PIXELS = 48
 const ASKED_GAP_CELLS = 8
+// An empty drawing is drawn with no width (seen 2026-10-11), so the spacer
+// holds one transparent rectangle, and says what it stands before.
 const ASKED_GAP_SVG =
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${ASKED_GAP_PIXELS}" height="1" ` +
-  `viewBox="0 0 ${ASKED_GAP_PIXELS} 1"></svg>`
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${ASKED_GAP_PIXELS}" height="8" ` +
+  `viewBox="0 0 ${ASKED_GAP_PIXELS} 8">` +
+  `<rect width="${ASKED_GAP_PIXELS}" height="8" fill="#000000" fill-opacity="0"/>` +
+  '</svg>'
+const ASKED_GAP_ALT = 'Answers'
 const APPROVE_WORDS = ['Approve', 'Approve all'] as const
 const VERDICT_WORDS = ['Fix all', 'Drop all', 'Backlog all'] as const
 const SAY_GO_KIT = /\bsay\s+`?go kit`?(?![\w])/gi
@@ -1667,7 +1672,12 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
           marginLeft={table.Svg === undefined ? ASKED_GAP_CELLS - 1 : 0}
         >
           {table.Svg !== undefined && (
-            <table.Svg source={ASKED_GAP_SVG} alt="" width={ASKED_GAP_PIXELS} height={1} />
+            <table.Svg
+              source={ASKED_GAP_SVG}
+              alt={ASKED_GAP_ALT}
+              width={ASKED_GAP_PIXELS}
+              height={8}
+            />
           )}
           {asked.map((word, at) => (
             <Button
