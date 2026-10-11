@@ -1664,10 +1664,14 @@ describe('the shortcut buttons', () => {
 
     expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
 
-    // A reply that asks for Go kit: the button comes first in the row.
+    // A reply that asks for Go kit: the button comes first in the row, right
+    // after the name, with its own gap on the desktop (owner, 2026-10-11).
     await reply('This is kit work.\n\nSay `Go kit` and I change it.')
     await kit.clock.settle()
     expect((await buttonsOn(ui))[0]).toBe('Go kit')
+    expect((await ui.findAll({ type: 'Svg' })).some(svg => svg.props.width === 48)).toBe(
+      surface === 'desktop',
+    )
 
     // A press sends the word, and the button goes with the prompt.
     await ui.press({ key: 'asked-0' })

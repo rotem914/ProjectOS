@@ -609,6 +609,15 @@ function fastAfter(text: string, isOn: boolean): boolean {
 const KIT_SHORTCUT = 'Go kit'
 const ASKED_MAX = 3
 const ASKED_LABEL_MAX = 24
+// The answer buttons sit right after the project's name, 64 pixels from it
+// on the desktop (owner, 2026-10-11), apart from the row's other buttons at
+// its far end. A cell of gap sits on each side of the spacer, so 48 pixels
+// of it make 64 at the desktop's text size; the terminal takes eight cells.
+const ASKED_GAP_PIXELS = 48
+const ASKED_GAP_CELLS = 8
+const ASKED_GAP_SVG =
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${ASKED_GAP_PIXELS}" height="1" ` +
+  `viewBox="0 0 ${ASKED_GAP_PIXELS} 1"></svg>`
 const APPROVE_WORDS = ['Approve', 'Approve all'] as const
 const VERDICT_WORDS = ['Fix all', 'Drop all', 'Backlog all'] as const
 const SAY_GO_KIT = /\bsay\s+`?go kit`?(?![\w])/gi
@@ -1512,7 +1521,8 @@ function planOf(
       buttonsWidth(buttons) +
       fillCells +
       quietCells +
-      (heavyWords === '' ? 0 : heavyWords.length + 1)
+      (heavyWords === '' ? 0 : heavyWords.length + 1) +
+      (askedOf(known).length > 0 ? ASKED_GAP_CELLS : 0)
     plan = {
       name: fullName,
       fill: fillText,
@@ -1556,10 +1566,10 @@ function keysOf(known: ProjectBandFacts, state: ProjectBandBusy, columns: number
   const plan = planOf(known, state, columns)
 
   return [
+    ...askedOf(known).map((_word, at) => `asked-${at}`),
     ...(plan.fill !== '' ? [plan.isFillHigh ? 'compact' : 'fill'] : []),
     ...(plan.heavy !== '' ? ['heavy'] : []),
     ...(plan.backupQuiet !== '' ? ['backup-age'] : []),
-    ...askedOf(known).map((_word, at) => `asked-${at}`),
     ...(plan.hasCommit ? ['go-commit'] : []),
     ...(pushTarget(known.repo) !== null ? ['push'] : []),
     ...(plan.hasFast ? [keyOf(FAST_SHORTCUT)] : []),
@@ -1619,7 +1629,6 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
     !plan.isBackupDue
   const asked = askedOf(known)
   const hasButtons =
-    asked.length > 0 ||
     plan.hasCommit ||
     plan.hasFast ||
     canPush ||
@@ -1635,7 +1644,8 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
     plan.words === '' &&
     plan.heavy === '' &&
     plan.backupQuiet === '' &&
-    !hasButtons
+    !hasButtons &&
+    asked.length === 0
   ) {
     return null
   }
@@ -1647,6 +1657,27 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
   return (
     <Box flexDirection="row" alignItems="center" gap={1} paddingRight={look.reserve}>
       {plan.name !== '' && drawLabel(table, plan.name)}
+      {/* The answers to the reply's question, right after the name. */}
+      {asked.length > 0 && (
+        <Box
+          flexDirection="row"
+          alignItems="center"
+          gap={1}
+          flexShrink={0}
+          marginLeft={table.Svg === undefined ? ASKED_GAP_CELLS - 1 : 0}
+        >
+          {table.Svg !== undefined && (
+            <table.Svg source={ASKED_GAP_SVG} alt="" width={ASKED_GAP_PIXELS} height={1} />
+          )}
+          {asked.map((word, at) => (
+            <Button
+              key={`asked-${at}`}
+              label={sendingOr(state, word, word)}
+              onPress={() => acts.shortcut(word)}
+            />
+          ))}
+        </Box>
+      )}
       <Box
         flexDirection="row"
         alignItems="center"
@@ -1712,13 +1743,6 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
         )}
         {hasButtons && (
           <Box flexDirection="row" gap={1} flexShrink={0}>
-            {asked.map((word, at) => (
-              <Button
-                key={`asked-${at}`}
-                label={sendingOr(state, word, word)}
-                onPress={() => acts.shortcut(word)}
-              />
-            ))}
             {plan.hasCommit && (
               <Button
                 key="go-commit"

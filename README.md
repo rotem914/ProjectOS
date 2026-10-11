@@ -136,7 +136,8 @@ own window, in the desktop app and in the terminal, in every folder you open.
   all, Say Go kit) is a button until your next message, three at most; a
   list of verdicts offers `Fix all`, `Drop all` and `Backlog all`, and a
   reply that ends on a question with no word named offers `Approve` and
-  `Approve all`.
+  `Approve all`. These answers sit right after the project's name, 64
+  pixels from it, apart from the row's other buttons at its far end.
 - No `Push` in a project with a push step of its own, such as push checks or
   large files kept in Git LFS. Claude Code runs a mod's git without that
   step, so a push from the row would skip it. The row says
