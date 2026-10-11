@@ -72,7 +72,10 @@ const SCRIPT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 // named literally, one per line, forward slashes. Empty by default. A write may
 // land in one of them only when the session is inside the project or inside one
 // of them, and agent config and env files stay refused even there, so a session
-// can never widen another folder's permissions or touch its secrets. Set
+// can never widen another folder's permissions or touch its secrets. A folder
+// the owner lists INSIDE the profile's config tree, this computer's copy of the
+// kit under ~/.claude/skills for one, is the exception (2026-10-11): a write may
+// land in it, never in a config folder nested inside it. Set
 // ALLOW_EXTRA_ROOTS to false and the list is ignored.
 const ALLOW_EXTRA_ROOTS = true;
 const EXTRA_ROOTS = [
@@ -1094,8 +1097,15 @@ const inside = (full, root) => full === root || full.startsWith(root + '/');
  */
 function isExtraRoot(full, rootKey) {
   if (!ALLOW_EXTRA_ROOTS || EXTRA_ROOTS.length === 0) return false;
-  if (!EXTRA_ROOTS.some((r) => inside(full, r))) return false;
-  if (full.includes('/.claude/') || full.includes('/.codex/')) return false;
+  const approved = EXTRA_ROOTS.find((r) => inside(full, r));
+  if (!approved) return false;
+  // Agent config stays refused even in an approved folder. The one exception
+  // is a folder the owner listed INSIDE the profile's config tree, such as
+  // this computer's copy of the kit under ~/.claude/skills (2026-10-11): a
+  // write may land in it, but never in a config folder nested inside it.
+  const isConfig = (p) => p.includes('/.claude/') || p.includes('/.codex/');
+  if (isConfig(full) && !isConfig(approved + '/')) return false;
+  if (isConfig(full.slice(approved.length) + '/') && full !== approved) return false;
   if (/(^|\/)\.env(\.|$)/.test(full)) return false;
   return true;
 }

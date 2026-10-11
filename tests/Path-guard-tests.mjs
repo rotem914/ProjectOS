@@ -932,6 +932,9 @@ t('[R6] everyday: git -c setting before status', bash('git -c core.quotepath=off
 t('[R6] everyday: git -C the project folder', bash('git -C "J:/Projects/Rotem E" status'), false);
 // [R14] git changing another folder's repository is refused (T18); the
 // install already names this pull as the owner's to run.
+// With the kit's empty EXTRA_ROOTS the plugin pull is the owner's to run. A
+// project that lists the plugin folder as an approved folder lets its own
+// assistant run it (Rotem E, 2026-10-11, whose suite proves the exception).
 t('[R6] [R14] git -C the kit folder, pull, is the owner\'s to run', bash('git -C "C:/Users/User/.claude/skills/projectos" pull'), true);
 t('[R6] everyday: checkout -b and switch -c', bash('git checkout -b feat && git switch -c feat2'), false);
 t('[R6] everyday: push -u with 2>&1', ps('git push -u origin main 2>&1'), false);
