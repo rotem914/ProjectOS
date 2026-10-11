@@ -1669,7 +1669,7 @@ describe('the shortcut buttons', () => {
     await reply('This is kit work.\n\nSay `Go kit` and I change it.')
     await kit.clock.settle()
     expect((await buttonsOn(ui))[0]).toBe('Go kit')
-    expect((await ui.findAll({ type: 'Svg' })).some(svg => svg.props.width === 48)).toBe(
+    expect((await ui.findAll({ type: 'Svg' })).some(svg => svg.props.width === 32)).toBe(
       surface === 'desktop',
     )
 

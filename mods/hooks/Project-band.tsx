@@ -609,12 +609,13 @@ function fastAfter(text: string, isOn: boolean): boolean {
 const KIT_SHORTCUT = 'Go kit'
 const ASKED_MAX = 3
 const ASKED_LABEL_MAX = 24
-// The answer buttons sit right after the project's name, 64 pixels from it
-// on the desktop (owner, 2026-10-11), apart from the row's other buttons at
-// its far end. A cell of gap sits on each side of the spacer, so 48 pixels
-// of it make 64 at the desktop's text size; the terminal takes eight cells.
-const ASKED_GAP_PIXELS = 48
-const ASKED_GAP_CELLS = 8
+// The answer buttons sit right after the project's name, 48 pixels from it
+// on the desktop (owner, 2026-10-11; 64 at first, then 48 on sight), apart
+// from the row's other buttons at its far end. A cell of gap sits on each
+// side of the spacer, so 32 pixels of it make 48 at the desktop's text size;
+// the terminal takes six cells.
+const ASKED_GAP_PIXELS = 32
+const ASKED_GAP_CELLS = 6
 // An empty drawing is drawn with no width (seen 2026-10-11), so the spacer
 // holds one transparent rectangle, and says what it stands before.
 const ASKED_GAP_SVG =
