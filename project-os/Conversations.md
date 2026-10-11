@@ -365,6 +365,7 @@ Nothing on the existing pages changed.
 
 A question for the owner is the LAST thing in the reply, never buried mid-reply.
 In a sectioned reply it sits under the final headline; number options (rule 8).
+A word you need from the owner is asked as Say `X`, so the strip offers X as a button.
 When the client has a built-in question panel, a question with options goes
 through it, always, with one line per option; the feed then carries only what
 the answer is waiting on.

@@ -86,11 +86,11 @@ export type ProjectBandFacts = {
    */
   isFast?: boolean
   /**
-   * True from a reply that asks the owner to say Go kit until the next
-   * prompt enters; the row then offers a Go kit button. A value kept by an
-   * earlier version of the mod has no such key, and reads the same as false.
+   * The words the last reply asked the owner to say, three at most, until
+   * the next prompt enters; the row offers each as a button. A value kept by
+   * an earlier version of the mod has no such key, and reads as none.
    */
-  isKitAsked?: boolean
+  asked?: string[]
   /**
    * How old the newest backup ZIP in the project's backups folder is, in
    * whole days. Null when the project has no backup shortcut, when no ZIP is

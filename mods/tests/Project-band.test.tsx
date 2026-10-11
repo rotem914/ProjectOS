@@ -1643,7 +1643,7 @@ describe('the shortcut buttons', () => {
     expect(await buttonsOn(ui)).toEqual(['Fast Off', '\u22ee'])
 
     // A later reply without the line does not turn it off.
-    await reply('Which one?')
+    await reply('One more is done.')
     await kit.clock.settle()
     expect(await buttonsOn(ui)).toEqual(['Fast Off', '\u22ee'])
     await ui.press({ key: 'fast-mode' })
@@ -1653,7 +1653,7 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
-  onEachSurface('Go kit shows only while the last reply asks for it', async ($, on, surface) => {
+  onEachSurface('the words a reply asks for are buttons until the next prompt', async ($, on, surface) => {
     const kit = install(on, { changed: 2 })
 
     await start($, kit)
@@ -1662,31 +1662,54 @@ describe('the shortcut buttons', () => {
     const reply = (answer: string) =>
       $.turn.complete({ answer, durationMs: 1200, isAborted: false, turnId: 'turn-1', reason: 'answer' })
 
-    expect(await buttonsOn(ui)).not.toContain('Go kit')
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
 
-    // A reply that asks for it: the button comes first in the row.
+    // A reply that asks for Go kit: the button comes first in the row.
     await reply('This is kit work.\n\nSay `Go kit` and I change it.')
     await kit.clock.settle()
     expect((await buttonsOn(ui))[0]).toBe('Go kit')
 
-    // A press sends the phrase, and the button goes with the prompt.
-    await ui.press({ key: 'go-kit' })
+    // A press sends the word, and the button goes with the prompt.
+    await ui.press({ key: 'asked-0' })
     await kit.clock.settle()
     expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go kit'])
     expect(await buttonsOn(ui)).not.toContain('Go kit')
 
-    // Asked again, then answered by typing something else: gone too.
-    await reply('Say Go kit to commit it.')
+    // Any word, bare in capitals or in backticks, in the reply's order, three
+    // at most; typing something else takes them away.
+    await reply('Say GO and I start, or say `Approve all`, or say `Later`, or say `Never`, or say Go kit.')
     await kit.clock.settle()
-    expect(await buttonsOn(ui)).toContain('Go kit')
+    expect((await buttonsOn(ui)).slice(0, 4)).toEqual(['GO', 'Approve all', 'Later', 'Go commit \u00b7 2'])
     await $.prompt.submit(typed('not now'))
     await kit.clock.settle()
-    expect(await buttonsOn(ui)).not.toContain('Go kit')
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
 
-    // A reply that only mentions the kit offers nothing.
-    await reply('The kit commit is in.')
+    // A list of verdicts offers each verdict for every item.
+    await reply('Two findings wait for your verdict, fix / drop / backlog each.')
     await kit.clock.settle()
-    expect(await buttonsOn(ui)).not.toContain('Go kit')
+    expect((await buttonsOn(ui)).slice(0, 3)).toEqual(['Fix all', 'Drop all', 'Backlog all'])
+    await $.prompt.submit(typed('1 fix, 2 drop'))
+    await kit.clock.settle()
+
+    // A question that names no word offers Approve and Approve all, the fast
+    // mode footer set aside.
+    await reply('The title is bigger.\n\nShall I do the same on the phone?\n\n----\n\nFast mode on')
+    await kit.clock.settle()
+    expect((await buttonsOn(ui)).slice(0, 2)).toEqual(['Approve', 'Approve all'])
+    await ui.press({ key: 'asked-1' })
+    await kit.clock.settle()
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual([
+      'Go kit',
+      'not now',
+      '1 fix, 2 drop',
+      'Approve all',
+    ])
+
+    // A reply that asks nothing offers nothing, and a word with a button of
+    // its own in the row is not offered twice.
+    await reply('The kit commit is in. Say Go commit when you want it.')
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
     await ui.unmount()
   })
 

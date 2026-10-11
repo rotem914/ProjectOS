@@ -599,12 +599,73 @@ function fastAfter(text: string, isOn: boolean): boolean {
   return isOn
 }
 
-// A Go kit button shows only while the last reply asks the owner to say
-// Go kit, and goes as soon as the next prompt enters (owner, 2026-10-09).
+// The words a reply asks the owner to say are buttons, first in the row,
+// until the next prompt enters (owner, 2026-10-09 for Go kit, 2026-10-11 for
+// every word): "Say `Approve all`", "Say GO", "Say `Go kit`". A list of
+// verdicts, "fix / drop / backlog", offers each verdict for every item. A
+// reply that ends on a question and names no word offers Approve and Approve
+// all. Three at most, in the order the reply names them; a word that has a
+// button of its own in the row (Go commit) is left out.
 const KIT_SHORTCUT = 'Go kit'
+const ASKED_MAX = 3
+const ASKED_LABEL_MAX = 24
+const APPROVE_WORDS = ['Approve', 'Approve all'] as const
+const VERDICT_WORDS = ['Fix all', 'Drop all', 'Backlog all'] as const
+const SAY_GO_KIT = /\bsay\s+`?go kit`?(?![\w])/gi
+const SAY_QUOTED = /\bsay\s+`([^`\n]{1,24})`/gi
+// The bare form is capitals only, as in "Say GO": a word in prose after "say"
+// ("I would say Fast mode") is no ask. Any other word is asked in backticks.
+const SAY_BARE = /\b[Ss]ay\s+([A-Z]{2,}(?:\s+[A-Z]{2,})?)(?=[\s,.!?;:]|$)/g
+const VERDICTS = /\bfix\s*(?:\/|,)\s*drop\s*(?:\/|,|\s+or)\s*backlog\b/i
+const FAST_FOOTER = /^fast mode on\.?$/i
 
-function asksGoKitIn(answer: string): boolean {
-  return /\bsay\s+`?go kit`?(?![\w])/i.test(answer)
+export function askedWordsIn(answer: string): string[] {
+  const found: Array<{ at: number; word: string }> = []
+  const collect = (pattern: RegExp, text: string, wordOf: (match: RegExpMatchArray) => string) => {
+    for (const match of text.matchAll(pattern)) {
+      found.push({ at: match.index ?? 0, word: wordOf(match) })
+    }
+  }
+
+  collect(SAY_GO_KIT, answer, () => KIT_SHORTCUT)
+  collect(SAY_QUOTED, answer, match => match[1] ?? '')
+  // "Say Go kit" is read above, so the bare form never reads a lone "Go".
+  collect(SAY_BARE, answer.replace(SAY_GO_KIT, ' '), match => match[1] ?? '')
+  const verdicts = VERDICTS.exec(answer)
+  if (verdicts !== null) {
+    for (const word of VERDICT_WORDS) found.push({ at: verdicts.index, word })
+  }
+
+  const words: string[] = []
+  for (const { word } of found.sort((one, other) => one.at - other.at)) {
+    const clean = word.trim().replace(/\s+/g, ' ')
+    const isTaken = (other: string) => other.toLowerCase() === clean.toLowerCase()
+
+    if (clean !== '' && clean.length <= ASKED_LABEL_MAX && !words.some(isTaken) && !SHORTCUTS.some(isTaken)) {
+      words.push(clean)
+    }
+  }
+
+  if (words.length === 0 && endsOnQuestion(answer)) {
+    words.push(...APPROVE_WORDS)
+  }
+
+  return words.slice(0, ASKED_MAX)
+}
+
+// Whether the reply's last line is a question, the fast mode footer and the
+// divider above it set aside.
+function endsOnQuestion(answer: string): boolean {
+  const lines = answer
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line !== '' && !/^-{3,}$/.test(line) && !FAST_FOOTER.test(line))
+
+  return /\?[`*_)]*$/.test(lines.at(-1) ?? '')
+}
+
+function askedOf(known: ProjectBandFacts): readonly string[] {
+  return known.asked ?? []
 }
 
 // A reply in fast mode ends on the line "Fast mode on" (the kit's FAST MODE
@@ -1436,7 +1497,7 @@ function planOf(
     ]
     const moreHasUpdate = canUpdate && !step.hasUpdate
     const buttons = [
-      ...(known.isKitAsked === true ? [sendingOr(state, KIT_SHORTCUT, KIT_SHORTCUT)] : []),
+      ...askedOf(known).map(word => sendingOr(state, word, word)),
       ...(step.hasCommit ? [sendingOr(state, MAIN_SHORTCUT, commitLabelOf(known))] : []),
       ...(isFastInRow ? [fastLabel] : []),
       ...(canPush ? [pushLabelOf(state, known)] : []),
@@ -1498,7 +1559,7 @@ function keysOf(known: ProjectBandFacts, state: ProjectBandBusy, columns: number
     ...(plan.fill !== '' ? [plan.isFillHigh ? 'compact' : 'fill'] : []),
     ...(plan.heavy !== '' ? ['heavy'] : []),
     ...(plan.backupQuiet !== '' ? ['backup-age'] : []),
-    ...(known.isKitAsked === true ? ['go-kit'] : []),
+    ...askedOf(known).map((_word, at) => `asked-${at}`),
     ...(plan.hasCommit ? ['go-commit'] : []),
     ...(pushTarget(known.repo) !== null ? ['push'] : []),
     ...(plan.hasFast ? [keyOf(FAST_SHORTCUT)] : []),
@@ -1556,9 +1617,9 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
     known.pluginUpdate === null &&
     !isHeavy &&
     !plan.isBackupDue
-  const isKitAsked = known.isKitAsked === true
+  const asked = askedOf(known)
   const hasButtons =
-    isKitAsked ||
+    asked.length > 0 ||
     plan.hasCommit ||
     plan.hasFast ||
     canPush ||
@@ -1651,13 +1712,13 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
         )}
         {hasButtons && (
           <Box flexDirection="row" gap={1} flexShrink={0}>
-            {isKitAsked && (
+            {asked.map((word, at) => (
               <Button
-                key="go-kit"
-                label={sendingOr(state, KIT_SHORTCUT, KIT_SHORTCUT)}
-                onPress={() => acts.shortcut(KIT_SHORTCUT)}
+                key={`asked-${at}`}
+                label={sendingOr(state, word, word)}
+                onPress={() => acts.shortcut(word)}
               />
-            )}
+            ))}
             {plan.hasCommit && (
               <Button
                 key="go-commit"
@@ -2315,9 +2376,9 @@ async function backupOf(
 }
 
 // Writes whether fast mode is on, here and in the session's values.
-async function setKitAsked($: Dollar, isKitAsked: boolean): Promise<void> {
+async function setAsked($: Dollar, asked: readonly string[]): Promise<void> {
   await writeFacts($, now =>
-    now === null || (now.isKitAsked === true) === isKitAsked ? now : { ...now, isKitAsked },
+    now === null || askedOf(now).join('\n') === asked.join('\n') ? now : { ...now, asked: [...asked] },
   )
 }
 
@@ -2727,7 +2788,7 @@ async function submitShortcut($: Dollar, phrase: string, columns: number): Promi
       // The row's own words do not pass its hook on prompts, so what a prompt
       // answers is followed here: the Go kit ask is answered, Fast switches
       // the mode, and Go commit ends it.
-      await setKitAsked($, false)
+      await setAsked($, [])
 
       const isFast = fastAfter(sent, isFastNow)
 
@@ -3127,7 +3188,7 @@ export function registerProjectBand(on: On): void {
     try {
       // Whatever was typed or pressed, the Go kit ask has had its answer.
       if (!('drop' in entered)) {
-        inBackground($, 'clearing the Go kit ask failed', () => setKitAsked($, false))
+        inBackground($, 'clearing the asked words failed', () => setAsked($, []))
       }
 
       const isFast = fastAfter(e.text, work.isFast)
@@ -3159,15 +3220,15 @@ export function registerProjectBand(on: On): void {
       }
     }
 
-    // A reply that asks for Go kit offers its button; any other reply takes
-    // it away.
+    // The words a reply asks for are its buttons; any other reply takes
+    // them away.
     if (e.agentId === undefined && !e.isAborted) {
       try {
-        const isKitAsked = asksGoKitIn(e.answer)
+        const asked = askedWordsIn(e.answer)
 
-        inBackground($, 'writing the Go kit ask failed', () => setKitAsked($, isKitAsked))
+        inBackground($, 'writing the asked words failed', () => setAsked($, asked))
       } catch (error) {
-        note($, 'following the Go kit ask failed', error)
+        note($, 'reading the asked words failed', error)
       }
     }
 
