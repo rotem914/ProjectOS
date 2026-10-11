@@ -147,6 +147,14 @@ minute, `2:36m` from there. It stays until the next reply ends.
 reply is saved. Nothing else about a reply is changed, and a reply is never
 held back.
 
+**A live fix for half links and half paths**, in a project whose
+`project-os/Conversations.md` says a link is the FULL address and a path the
+FULL path. As the reply is saved, a route such as `/dev/x` gets the local
+address the project's `CLAUDE.md` names, a host without `http` gets it, and
+a path relative to the project (`project-os/History.md`) gets the project
+folder in front of it, written as this computer writes paths. A first folder
+the project does not have is left as written: the fix never guesses.
+
 Claude Code puts the plugin's name on what a mod shows: the short notice
 after a push and the message a button sends both carry it.
 

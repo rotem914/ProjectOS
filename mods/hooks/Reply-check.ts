@@ -1,8 +1,13 @@
-// Reply-check.ts - the live fix for long dashes. In a project whose reply
-// rules say a dash is never "longer than a hyphen", each block of the reply is
-// rewritten as the conversation keeps it: a long dash between words becomes a
-// comma, and one set tight between two words or numbers, a range, becomes a
-// plain hyphen. It does nothing anywhere else.
+// Reply-check.ts - the live fixes for long dashes and for half links. In a
+// project whose reply rules say a dash is never "longer than a hyphen", each
+// block of the reply is rewritten as the conversation keeps it: a long dash
+// between words becomes a comma, and one set tight between two words or
+// numbers, a range, becomes a plain hyphen. Where the rules say a link is the
+// FULL address and a path the FULL path, the same pass writes a half one out
+// in full: a route gets the project's local address, a host gets its scheme,
+// and a path relative to the project gets the project folder in front of it
+// (owner, 2026-10-11, after half paths reached him twice with the rule
+// written). It does nothing anywhere else.
 //
 // WHY LIVE. A check that runs after the reply can only correct the next one,
 // because the owner has already read this one. A dash can be fixed before the
@@ -35,10 +40,14 @@
 // enforces.
 import type { EngineInterface, On, Timer } from 'claude-code'
 
+import { serverUrlIn } from './Project-band'
+
 /** What the project's Conversations.md asks of a reply, read once a session. */
 export type ReplyRules = {
   /** The file says a dash is never longer than a hyphen. */
   hasDashRule: boolean
+  /** The file says a link is the FULL address and a path the FULL path. */
+  hasFullLinkRule: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -47,6 +56,9 @@ export type ReplyRules = {
 
 const RULES_FILE = 'project-os/Conversations.md'
 const DASH_RULE = /longer\s+than\s+a\s+hyphen/i
+// Both spellings the kit has used: "the FULL absolute address" and "the FULL
+// path from the drive root". The capitals matter: "full report" is another rule.
+const FULL_LINK_RULE = /\bFULL\b[^\n]{0,40}\b(?:path|address|URL)\b/
 
 /**
  * Reads the reply rules out of a Conversations.md. Only what the file states
@@ -54,6 +66,7 @@ const DASH_RULE = /longer\s+than\s+a\s+hyphen/i
  */
 export const readReplyRules = (conversations: string): ReplyRules => ({
   hasDashRule: DASH_RULE.test(conversations),
+  hasFullLinkRule: FULL_LINK_RULE.test(conversations),
 })
 
 // Where a walk up ends: at the drive, or at the share of a network path. A
@@ -350,6 +363,123 @@ export const fixRowDashes = <Kept extends Row>(row: Kept): Kept => {
 }
 
 // ---------------------------------------------------------------------------
+// The links fix
+// ---------------------------------------------------------------------------
+
+/** Where the project sits, for writing a half link or a half path out in full. */
+export type Place = {
+  /** The project folder, as paths are written on this computer. */
+  root: string
+  /** The names at the top of the project folder, files and folders alike. */
+  roots: ReadonlySet<string>
+  /** The owner's home folder, or null where the computer names none. */
+  home: string | null
+  /** The project's local address, from its CLAUDE.md, or null. */
+  address: string | null
+}
+
+// A path from a drive letter is full already, and so is an address with its
+// scheme: both are kept out of the tokens, so a path with a space inside it
+// ("Rotem E") is never read as two halves.
+const DRIVE_PATH = /[A-Za-z]:[\\/][^`"'<>\n]*/g
+// One token: what sits between spaces and brackets. Backticks and quotes are
+// no part of it, so the inside of a code span or a link target is read.
+const TOKEN = /[^\s()[\]<>`"'{}]+/g
+const STOPS_BEHIND = /^(.*?)([.,;:!?]*)$/
+const WINDOWS_ROOT = /^[A-Za-z]:/
+// A host with a path: a last label of letters, so "v1.2/notes" is no host.
+const HOST_WITH_PATH = /^[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}\/\S/
+const LOCALHOST = /^localhost(?::\d+)?(?:\/|$)/
+
+const isWindows = (root: string): boolean => WINDOWS_ROOT.test(root)
+
+/** `rel` under `root`, with this computer's separators. */
+const under = (root: string, rel: string): string =>
+  isWindows(root)
+    ? `${root.replace(/[\\/]+$/, '')}\\${rel.replace(/\//g, '\\')}`
+    : `${root.replace(/\/+$/, '')}/${rel.replace(/\\/g, '/')}`
+
+// A Windows folder answers to its name in any case; a POSIX one does not.
+const hasRoot = (place: Place, name: string): boolean =>
+  place.roots.has(name) || (isWindows(place.root) && place.roots.has(name.toLowerCase()))
+
+/** The token written out in full, or as it came. Never a guess. */
+const fullToken = (token: string, place: Place): string => {
+  const parts = STOPS_BEHIND.exec(token)
+  const core = parts?.[1] ?? token
+  const stops = parts?.[2] ?? ''
+  if (core === '') return token
+
+  // A route: two segments or more, or one with a dot in it. A single plain
+  // segment is left alone, since "/compact" is a command and not a page.
+  if (/^\/[^/]/.test(core)) {
+    if (place.address === null) return token
+    const segments = core.slice(1).split('/')
+    const isRoute = segments.length > 1 || /\./.test(segments[0] ?? '')
+
+    return isRoute ? `${place.address.replace(/\/+$/, '')}${core}${stops}` : token
+  }
+  if (LOCALHOST.test(core)) return `http://${core}${stops}`
+  if (HOST_WITH_PATH.test(core)) return `https://${core}${stops}`
+  if (/^~[\\/]/.test(core)) {
+    return place.home === null ? token : `${under(place.home, core.slice(2))}${stops}`
+  }
+  if (/^\.[\\/]/.test(core)) return `${under(place.root, core.slice(2))}${stops}`
+
+  // A path relative to the project: only when its first folder is one the
+  // project has, so "and/or", "24/7" and a branch name stay as written.
+  const rel = /^([^\\/]+)[\\/]/.exec(core)
+  if (rel === null || rel[1] === '..' || !hasRoot(place, rel[1] ?? '')) return token
+
+  return `${under(place.root, core)}${stops}`
+}
+
+/** The ranges of a line that are full already, left as written. */
+const fullRanges = (line: string): Array<[number, number]> => {
+  const ranges: Array<[number, number]> = []
+  for (const pattern of [DRIVE_PATH, ADDRESS]) {
+    for (const found of line.matchAll(pattern)) {
+      const at = found.index ?? 0
+      ranges.push([at, at + found[0].length])
+    }
+  }
+
+  return ranges
+}
+
+const fixLineLinks = (line: string, place: Place): string => {
+  const kept = fullRanges(line)
+
+  return line.replace(TOKEN, (token: string, at: number) => {
+    const end = at + token.length
+
+    return kept.some(([from, to]) => at < to && end > from) ? token : fullToken(token, place)
+  })
+}
+
+/** Every half link and half path in a text, written out in full. */
+export const fullLinksIn = (text: string, place: Place): string =>
+  text.split('\n').map(line => fixLineLinks(line, place)).join('\n')
+
+/**
+ * Writes the half links and paths of a row's text blocks out in full, content
+ * only. A row with nothing to write comes back as the same object.
+ */
+export const fixRowLinks = <Kept extends Row>(row: Kept, place: Place): Kept => {
+  let isFixed = false
+  const content = row.content.map(block => {
+    if (block.type !== 'text' || typeof block.text !== 'string') return block
+    const text = fullLinksIn(block.text, place)
+    if (text === block.text) return block
+    isFixed = true
+
+    return { ...block, text }
+  })
+
+  return isFixed ? { ...row, content } : row
+}
+
+// ---------------------------------------------------------------------------
 // The hooks
 // ---------------------------------------------------------------------------
 
@@ -365,10 +495,43 @@ const EVERY_SESSION = { isInteractive: [true, false] } as const
 // The model name the engine puts on a row it wrote in the model's place.
 const ENGINE_STAND_IN = '<synthetic>'
 
-const findRules = async ($: EngineInterface, cwd: string): Promise<ReplyRules | undefined> => {
+/** The rules found at session start, and the place when the rules ask for it. */
+type Found = { rules: ReplyRules; place: Place | undefined }
+
+// The project's address from its CLAUDE.md, its top-level names and the home
+// folder, read once. What cannot be read is simply not there: no address
+// leaves routes as written, no listing leaves relative paths as written.
+const placeOf = async ($: EngineInterface, root: string): Promise<Place> => {
+  const address = await $.fs.read(`${root}/CLAUDE.md`).then(serverUrlIn, () => null)
+  const names = await $.fs.list(root).then(
+    entries => entries.map(entry => entry.name),
+    () => [] as string[],
+  )
+  const nonEmpty = (value: string | undefined): string | null =>
+    value === undefined || value === '' ? null : value
+  let home: string | null = null
+  try {
+    home = nonEmpty(await $.env.get('USERPROFILE')) ?? nonEmpty(await $.env.get('HOME'))
+  } catch {
+    home = null
+  }
+
+  return {
+    root,
+    roots: new Set(isWindows(root) ? names.map(name => name.toLowerCase()) : names),
+    home,
+    address,
+  }
+}
+
+const findRules = async ($: EngineInterface, cwd: string): Promise<Found | undefined> => {
   for (const folder of foldersUp(cwd)) {
     const path = `${folder}/${RULES_FILE}`
-    if (await $.fs.exists(path).catch(() => false)) return readReplyRules(await $.fs.read(path))
+    if (await $.fs.exists(path).catch(() => false)) {
+      const rules = readReplyRules(await $.fs.read(path))
+
+      return { rules, place: rules.hasFullLinkRule ? await placeOf($, folder) : undefined }
+    }
   }
 
   return undefined
@@ -406,16 +569,16 @@ const quietly = (work: () => void): void => {
 export const registerReplyCheck = (on: On): void => {
   // Undefined until session start has read the project's Conversations.md,
   // and for good in a folder that has none: the hook then hands on.
-  let rules: ReplyRules | undefined
+  let found: Found | undefined
 
   on('session.start', EVERY_SESSION, async ($, e, next) => {
     try {
       const reading = findRules($, e.cwd).then(
-        found => {
-          rules = found
+        read => {
+          found = read
         },
         () => {
-          rules = undefined
+          found = undefined
         },
       )
       await settledWithin($, reading, START_WAIT_MS)
@@ -432,12 +595,17 @@ export const registerReplyCheck = (on: On): void => {
   // A line the engine writes in the model's place (a sign-in notice, an API
   // error) is not the model's reply either, and is not fixed.
   on('session.append', { door: 'response' }, ($, e, next) => {
-    if (rules?.hasDashRule !== true || e.agentId !== undefined) return next(e)
+    const now = found
+    if (now === undefined || e.agentId !== undefined) return next(e)
+    if (!now.rules.hasDashRule && now.place === undefined) return next(e)
     if (e.origin.kind === 'model' && e.origin.model === ENGINE_STAND_IN) return next(e)
 
     let message = e.message
     quietly(() => {
-      message = fixRowDashes(e.message)
+      if (now.rules.hasDashRule) message = fixRowDashes(message)
+    })
+    quietly(() => {
+      if (now.place !== undefined) message = fixRowLinks(message, now.place)
     })
 
     return message === e.message ? next(e) : next({ ...e, message })
