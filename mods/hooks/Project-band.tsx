@@ -668,15 +668,34 @@ export function askedWordsIn(answer: string): string[] {
   return words.slice(0, ASKED_MAX)
 }
 
-// Whether the reply's last line is a question, the fast mode footer and the
-// divider above it set aside.
+// Whether the reply's last line is a yes-or-no question, the fast mode
+// footer and the divider above it set aside. Only such a question takes
+// Approve: "What should I change first?" cannot be answered with it (owner,
+// 2026-10-14). A yes-or-no question opens on a helping verb ("Shall I",
+// "Should I", "Do you", "Is it"), or on "OK" or "Ready"; any other opening,
+// "What", "Which", "How" among them, offers nothing.
+const YES_NO_OPENING =
+  /^(?:shall|should|do|does|did|can|could|will|would|is|are|was|were|may|might|want|ok|okay|ready)\b/i
+
 function endsOnQuestion(answer: string): boolean {
   const lines = answer
     .split(/\r?\n/)
     .map(line => line.trim())
     .filter(line => line !== '' && !/^-{3,}$/.test(line) && !FAST_FOOTER.test(line))
+  const last = lines.at(-1) ?? ''
 
-  return /\?[`*_)]*$/.test(lines.at(-1) ?? '')
+  if (!/\?[`*_)]*$/.test(last)) {
+    return false
+  }
+
+  // The question is the last sentence of the line, read without list marks.
+  const question = last
+    .replace(/^(?:[-*+]|\d{1,3}[.)])\s+/, '')
+    .split(/(?<=[.!:])\s+/)
+    .at(-1)
+    ?.replace(/^[`*_"'(]+/, '') ?? ''
+
+  return YES_NO_OPENING.test(question)
 }
 
 function askedOf(known: ProjectBandFacts): readonly string[] {

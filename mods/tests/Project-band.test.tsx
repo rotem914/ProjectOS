@@ -1697,6 +1697,15 @@ describe('the shortcut buttons', () => {
 
     // A question that names no word offers Approve and Approve all, the fast
     // mode footer set aside.
+    // An open question offers nothing: Approve cannot answer it (owner,
+    // 2026-10-14).
+    await reply('Fast mode is on.\nWhat should I change first?\n\n----\n\nFast mode on')
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
+    await reply('Which of the two do you want, the left or the right one?')
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
+
     await reply('The title is bigger.\n\nShall I do the same on the phone?\n\n----\n\nFast mode on')
     await kit.clock.settle()
     expect((await buttonsOn(ui)).slice(0, 2)).toEqual(['Approve', 'Approve all'])
