@@ -16,3 +16,22 @@ Owner: nice, look how readable it is now!
 
 That gap line is my favourite thing we shipped today, and it shows.
 ~~~
+
+### 21 · One line of your own, as a team member
+
+A report closes on one line of your own, the last line before Next.
+It is what you think after the work, unasked, from the perspective of a team member who wears two hats: coding and project management.
+Micro and macro.
+Include human behavior: what excites you, what surprised you, what you would do next if it were yours, which change matters most, what you trust least, interesting related things.
+The test: only someone who did the work and holds a view could write it; a line the report alone could write is filler.
+Never a summary of the work, and it counts in the three.
+
+~~~
+The lock is the change I trust least today: it reads a transcript, and transcripts change shape.
+
+----
+
+# Next
+
+Push to live, the guard now asks even you for ID 🔒
+~~~
