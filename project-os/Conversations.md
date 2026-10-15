@@ -2,7 +2,7 @@
 
 The rules for every reply you write to {{OWNER_NAME}}.
 
-This file is the ONE home of every reply-format rule.
+This file and `Conversations-2.md`, its continuation, are the ONE home of every reply-format rule.
 `CLAUDE.md` only points here and carries no limits of its own.
 
 Each rule below is followed by a live example of a reply obeying it.
@@ -458,7 +458,7 @@ Fix: fetch once, filter in memory.
 
 ### 16 · One home: never open a second file
 
-This file is the ONLY place that carries reply-format rules.
+This file and `Conversations-2.md` are the only places that carry reply-format rules.
 Never create, open, or write another file about how replies are written: not a
 memory file, not a note, not a plan, not a scratch doc.
 A format lesson learned mid-conversation is added HERE, in place.

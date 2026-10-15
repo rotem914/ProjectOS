@@ -156,7 +156,7 @@ not.
         "hooks": [
           {
             "type": "command",
-            "command": "node -e \"console.log('PROJECT RULES: before doing anything in this session, read the files CLAUDE.md lists under Read these before you work, as that list says. Conversations.md governs every reply you write. Workflow.md governs every task.')\"",
+            "command": "node -e \"console.log('PROJECT RULES: before doing anything in this session, read the files CLAUDE.md lists under Read these before you work, as that list says. Conversations.md and Conversations-2.md govern every reply you write. Workflow.md governs every task.')\"",
             "timeout": 10,
             "suppressOutput": true
           }
@@ -168,7 +168,7 @@ not.
         "hooks": [
           {
             "type": "command",
-            "command": "node -e \"console.log('STANDING RULES for this reply and this task: 1) Reply exactly as project-os/Conversations.md prescribes, layout and length included. 2) Change only what was asked, nothing else, however tempting. 3) Prefer the smallest safe change. 4) When something is unclear, or the decision belongs to the owner, ask instead of deciding. 5) After any completed change, add its History row; in FAST MODE, one row for the whole burst, when it ends. 6) Never write a file outside this project folder. 7) Never say a check passed unless it was actually run.')\"",
+            "command": "node -e \"console.log('STANDING RULES for this reply and this task: 1) Reply exactly as project-os/Conversations.md and Conversations-2.md prescribe, layout and length included. 2) Change only what was asked, nothing else, however tempting. 3) Prefer the smallest safe change. 4) When something is unclear, or the decision belongs to the owner, ask instead of deciding. 5) After any completed change, add its History row; in FAST MODE, one row for the whole burst, when it ends. 6) Never write a file outside this project folder. 7) Never say a check passed unless it was actually run.')\"",
             "timeout": 10,
             "suppressOutput": true
           }

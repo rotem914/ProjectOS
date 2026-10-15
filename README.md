@@ -17,7 +17,7 @@ A file is the only part of your working relationship that survives a new session
 
 Every file and folder in this repository, grouped by what it does. The install copies `CLAUDE.md`, `Installation.md` and the `project-os/` folder into your project; the last group stays here.
 
-**Six rule files.** These arrive with real content and work on day one.
+**Seven rule files.** These arrive with real content and work on day one.
 
 | File | What it does for you |
 |---|---|
@@ -25,6 +25,7 @@ Every file and folder in this repository, grouped by what it does. The install c
 | `project-os/Workflow.md` | The mandatory path from request to delivery. Stops the assistant from writing code before it understands the job. |
 | `project-os/QA.md` | What must be true before anything is called done. Kills "looks fine to me" as a verification standard. |
 | `project-os/Conversations.md` | How the assistant writes back to you. Short, structured, skimmable, instead of five paragraphs restating your own request. |
+| `project-os/Conversations-2.md` | The continuation of that file, numbered on from it. A project that reads its reply rules into every message gives this one its own hook line, so a full file never costs a rule. |
 | `project-os/Code_review.md` | How risky changes get reviewed, and what counts as risky enough to trigger one. |
 | `project-os/Visual_QA.md` | How the running app gets tested by actually using it, not by reading the diff and hoping. |
 

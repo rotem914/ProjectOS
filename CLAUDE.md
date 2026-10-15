@@ -38,7 +38,8 @@ Read this file first. Then the docs in `project-os/`, in this order:
    you go looking for a file.
 3. `project-os/QA.md`: what must be checked before anything is called done.
 4. `project-os/Conversations.md`: how you write replies. Every reply, not just
-   report-backs.
+   report-backs. `project-os/Conversations-2.md` continues it, rules 20 on,
+   and is read the same way.
 5. `project-os/History.md`: what changed recently, so you do not undo
    yesterday's fix. Read the Scan log only: find the `## Appendix` heading and
    read everything above it; the newest rows sit just above that heading. Open
@@ -904,9 +905,10 @@ word the same way.
 
 ## How to reply
 
-Every reply follows `project-os/Conversations.md`. Not only report-backs after
-work: every reply, in every conversation.
+Every reply follows `project-os/Conversations.md` and its continuation,
+`project-os/Conversations-2.md`. Not only report-backs after work: every reply,
+in every conversation.
 
-That file is the single home of every reply rule: structure, length, tone,
-language. This file sets none of its own, so the two can never disagree and you
-never have to guess which one wins.
+Those two files are the single home of every reply rule: structure, length,
+tone, language. This file sets none of its own, so they can never disagree and
+you never have to guess which one wins.

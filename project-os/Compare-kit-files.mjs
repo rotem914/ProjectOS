@@ -129,6 +129,7 @@ const KIT_FILES = [
   { path: 'project-os/Workflow.md', kind: 'calibrated' },
   { path: 'project-os/QA.md', kind: 'calibrated' },
   { path: 'project-os/Conversations.md', kind: 'calibrated' },
+  { path: 'project-os/Conversations-2.md', kind: 'calibrated' },
   { path: 'project-os/Code_review.md', kind: 'calibrated' },
   { path: 'project-os/Visual_QA.md', kind: 'calibrated' },
   { path: 'project-os/mcp/Figma/Figma_MCP_Rules.md', kind: 'calibrated' },
