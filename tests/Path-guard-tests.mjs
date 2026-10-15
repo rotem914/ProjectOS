@@ -1758,6 +1758,77 @@ hookIn('[R9] POSIX: from a subfolder, ../../x leaves the project', PROOT, { ...b
   fs.rmSync(proj, { recursive: true, force: true });
 }
 
+// Rule files change only on the owner's word (2026-10-15): a write to one is
+// refused unless the owner's last typed message in the transcript the payload
+// names says "Go rule". The transcripts here are made for the run and removed.
+console.log('path-guard: rule files change only on the owner\'s word');
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'projectos-word-'));
+  const line = (type, content, extra = {}) => JSON.stringify({ type, message: { role: type, content }, ...extra });
+  const said = (text) => line('user', [{ type: 'text', text }]);
+  const toolResult = line('user', [{ type: 'tool_result', tool_use_id: 'x', content: 'ok' }]);
+  const assistant = line('assistant', [{ type: 'text', text: 'Done.' }]);
+  const transcript = (name, ...lines) => {
+    const p = path.join(dir, name);
+    fs.writeFileSync(p, lines.join('\n') + '\n');
+    return p;
+  };
+  const without = transcript('without.jsonl', said('Go kit'), assistant, toolResult);
+  const withWord = transcript('with.jsonl', said('Go rule, the lock paragraph as proposed'), assistant, toolResult);
+  const stale = transcript('stale.jsonl', said('Go rule'), assistant, said('thanks'), toolResult);
+  const meta = transcript('meta.jsonl', said('Go rule'), line('user', [{ type: 'text', text: 'Go kit' }], { isMeta: true }), toolResult);
+  const summary = transcript('summary.jsonl', said('Go rule'), line('user', 'This session is being continued', { isCompactSummary: true }));
+  const plain = transcript('plain.jsonl', line('user', 'go RULE'), toolResult);
+  const w = (file, transcript_path) => ({ ...write(file), transcript_path });
+  const in_ = (payload, transcript_path) => ({ ...payload, transcript_path });
+  t('a Write to CLAUDE.md without the word is refused', w(`${ROOT}/CLAUDE.md`, without), true);
+  tWhy('and the reason names the rule file', w(`${ROOT}/CLAUDE.md`, without), 'a rule file');
+  t('the same Write with the word passes', w(`${ROOT}/CLAUDE.md`, withWord), false);
+  t('the word in any case, in a plain-string message', w(`${ROOT}/CLAUDE.md`, plain), false);
+  t('the word in an older message does not carry', w(`${ROOT}/CLAUDE.md`, stale), true);
+  t('a meta line the app wrote is not the owner', w(`${ROOT}/CLAUDE.md`, meta), false);
+  t('a compaction summary is not the owner either', w(`${ROOT}/CLAUDE.md`, summary), false);
+  t('no transcript in the payload: the lock stays open', write(`${ROOT}/CLAUDE.md`), false);
+  t('a transcript that is not there: the lock stays open', w(`${ROOT}/CLAUDE.md`, path.join(dir, 'missing.jsonl')), false);
+  t('an Edit to a rule doc under project-os', in_({ tool_name: 'Edit', tool_input: { file_path: `${ROOT}/project-os/Conversations.md` } }, without), true);
+  t('a rule doc written with backslashes', w('J:\\Projects\\Rotem E\\project-os\\Workflow.md', without), true);
+  t('a rule doc by a relative path', w('project-os/QA.md', without), true);
+  t('a guard under project-os/guards', w(`${ROOT}/project-os/guards/Path-guard.mjs`, without), true);
+  t('a feature Claude.md', w(`${ROOT}/features/contact-form/Claude.md`, without), true);
+  t('an MCP rules doc', w(`${ROOT}/mcp/Figma/Figma_MCP_Rules.md`, without), true);
+  t('a living record is not locked: History', w(`${ROOT}/project-os/History.md`, without), false);
+  t('Decisions', w(`${ROOT}/project-os/Decisions.md`, without), false);
+  t('Backlog', w(`${ROOT}/project-os/Backlog.md`, without), false);
+  t('Map', w(`${ROOT}/project-os/Map.md`, without), false);
+  t('Mistakes', w(`${ROOT}/project-os/Mistakes.md`, without), false);
+  t('BugAtlas', w(`${ROOT}/project-os/BugAtlas.md`, without), false);
+  t('History-archive', w(`${ROOT}/project-os/History-archive.md`, without), false);
+  t('History-scan-archive', w(`${ROOT}/project-os/History-scan-archive.md`, without), false);
+  t('Decisions-archive', w(`${ROOT}/project-os/Decisions-archive.md`, without), false);
+  t('a feature History', w(`${ROOT}/features/contact-form/History.md`, without), false);
+  t('a plan is not a rule file', w(`${ROOT}/plans/x.md`, without), false);
+  t('a script under project-os is not a rule file', w(`${ROOT}/project-os/Archive-old-rows.ps1`, without), false);
+  t('a doc in a folder under project-os is not', w(`${ROOT}/project-os/Design system/x.md`, without), false);
+  t('CLAUDE.md in a subfolder is not the root one', w(`${ROOT}/src/CLAUDE.md`, without), false);
+  t('the project root itself is no rule file', in_(bash('npm install'), without), false);
+  t('a redirection into a rule doc', in_(bash('echo x >> project-os/QA.md'), without), true);
+  t('a PowerShell Set-Content on CLAUDE.md', in_(ps('Set-Content CLAUDE.md -Value x'), without), true);
+  t('cp over a rule doc', in_(bash('cp .tmp/merged.md project-os/Workflow.md'), without), true);
+  t('rm of a rule doc', in_(bash('rm project-os/Hooks.md'), without), true);
+  t('the same cp with the word passes', in_(bash('cp .tmp/merged.md project-os/Workflow.md'), withWord), false);
+  t('reading a rule doc is never refused', in_(bash('cat CLAUDE.md project-os/Hooks.md'), without), false);
+  t('git add of a rule file is not a write to it', in_(bash('git add CLAUDE.md project-os/Conversations.md'), without), false);
+  t('an inline script that names a rule doc and writes', in_(bash(`python -c "open('project-os/QA.md','w').write('x')"`), without), true);
+  tWhy('and the reason names the script', in_(bash(`python -c "open('project-os/QA.md','w').write('x')"`), without), 'a rule file: the script');
+  t('an inline script that only reads a rule doc', in_(bash(`python -c "print(open('project-os/QA.md').read())"`), without), false);
+  t('an inline script that names a rule doc in a sentence', in_(bash(`node -e "console.log('see project-os/QA.md for the list')"`), without), false);
+  t('an inline script writing a record that names a rule doc', in_(bash(`node -e "require('fs').appendFileSync('project-os/History.md', 'edited QA.md')"`), without), false);
+  t('the same writing script with the word passes', in_(bash(`python -c "open('project-os/QA.md','w').write('x')"`), withWord), false);
+  hook('run as a process, a rule-file write without the word exits 2 and names the word', payload(w(`${ROOT}/CLAUDE.md`, without)), 2, 'Go rule');
+  hook('run as a process, the same write with the word exits 0', payload(w(`${ROOT}/CLAUDE.md`, withWord)), 0);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 // The root really does come from the session, not from where this file happens
 // to live: the property that lets one copy of the guard serve every project.
 checks += 1;

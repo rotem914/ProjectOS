@@ -229,6 +229,18 @@ markdown only. An `EXTRA_ROOTS` list at the top of
 the file, empty by default, is where the owner names any other folder writes
 may reach.
 
+**Rule files are the owner's** (2026-10-15). The same guard refuses a write to
+a rule file, `CLAUDE.md`, a rule doc under `project-os/` (never a living
+record: History, Decisions, Backlog, Map, Mistakes, the bug atlas), a guard
+under `project-os/guards/`, a feature's `Claude.md` or an MCP server's rules
+doc, unless the owner's last typed message in the session's transcript says
+`Go rule` (`CLAUDE.md`, rule 18 and the `Go rule` shortcut). It reads the
+transcript Claude Code names in the hook's payload, only when a rule file is
+the target; a payload without one, a test or a run outside Claude Code, is not
+refused. It catches what the guard sees: the file tools, a redirection, a
+writing program, an inline script that names the file and can write. A script
+saved to a file first is not read, as it never was.
+
 What it reads, beyond a plain command:
 
 - **Loops and conditions.** The command after `if`, `then`, `else`, `do` and

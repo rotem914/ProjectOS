@@ -104,7 +104,8 @@ describe('the guards around each part', () => {
 
     expect(register(on, {})).toBeUndefined()
 
-    // Five hooks from the band, then two from the dash fix.
+    // Five hooks from the band, then three from the reply check: the rules
+    // read at session start, the fixes as a reply is kept, the wrap-up box.
     expect(eventsOf(registered)).toEqual([
       'session.start',
       'classic.SessionStart',
@@ -113,6 +114,7 @@ describe('the guards around each part', () => {
       'ui.render',
       'session.start',
       'session.append',
+      'tool.call',
     ])
   })
 
@@ -169,6 +171,7 @@ describe('the guards around each part', () => {
       'turn.complete',
       'session.start',
       'session.append',
+      'tool.call',
       'session.start',
     ])
 

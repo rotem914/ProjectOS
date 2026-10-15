@@ -52,7 +52,7 @@ Each one ships with its structure already in place and a worked example at the e
 | `project-os/Hooks.md` | What the hooks do, how they get wired, and how to check they work. |
 | `project-os/Hooks-settings.json` | The ready setup: the reminder text and the two guard lines. |
 | `project-os/Install-project-hooks.mjs` | Writes that setup into the project's own settings, on a computer without the plugin below, or one whose plugin carries older guards than the project. |
-| `project-os/guards/Path-guard.mjs` | The folder guard: refuses the writes it recognises outside the project. |
+| `project-os/guards/Path-guard.mjs` | The folder guard: refuses the writes it recognises outside the project, and a change to a rule file without the owner's `Go rule`. |
 | `project-os/guards/Destructive-guard.mjs` | The destructive-command guard: refuses the one-way commands it recognises. |
 | `project-os/guards/Check-on-stop.mjs` | The check when a turn ends: runs the project's quick check after a turn that changed code, and sends the assistant back when it fails. |
 | `project-os/Check-command.json` | The quick check that runs by itself, one command, set at install. |
@@ -158,6 +158,13 @@ address the project's `CLAUDE.md` names, a host without `http` gets it, and
 a path relative to the project (`project-os/History.md`) gets the project
 folder in front of it, written as this computer writes paths. A first folder
 the project does not have is left as written: the fix never guesses.
+
+**A wrap-up box that carries a question is refused**, in a project whose
+`project-os/Conversations.md` says the wrap-up box carries the recap only. The
+desktop app ends a turn with that box, filled by a tool call, and with a
+question or buttons in it the app shows a paragraph of its own in place of the
+reply. The plugin refuses such a call with the reason, and the assistant calls
+again with the recap alone and puts the question in the reply.
 
 Claude Code puts the plugin's name on what a mod shows: the short notice
 after a push and the message a button sends both carry it.

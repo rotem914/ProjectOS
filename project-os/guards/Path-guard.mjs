@@ -1111,6 +1111,143 @@ function isExtraRoot(full, rootKey) {
 }
 
 // ---------------------------------------------------------------------------
+// Rule files change only on the owner's word (2026-10-15)
+// ---------------------------------------------------------------------------
+//
+// A rule file tells the assistant how to work: CLAUDE.md, the rule docs under
+// project-os/ (the living records, History, Decisions, Backlog, Map, Mistakes
+// and a bug atlas, are not rules), the guards, a feature's Claude.md and the
+// MCP rules. One session rewrote the reply rules in the middle of a
+// discussion, unasked (2026-10-15), and a rule changed without the owner's
+// word is a rule the owner never set. So a write to a rule file passes only
+// while the owner's last typed message says "Go rule"; otherwise it is
+// refused, and the assistant proposes the change in the reply and asks for
+// that word. The transcript is read only when a rule file is the target. No
+// transcript (a test, a run outside Claude Code) means no refusal here: this
+// guard fails open, like every other check in it.
+const RULE_RECORDS = /^(?:history(?:-archive|-scan-archive)?|decisions(?:-archive)?|backlog|map|mistakes|bugatlas)\.md$/;
+const OWNER_WORD = /\bgo rule\b/i;
+
+/** Is `full` (lowercased, resolved) a rule file of the project at `rootKey`? */
+function isRuleFile(full, rootKey) {
+  const f = String(full).toLowerCase();
+  if (!inside(f, rootKey) || f === rootKey) return false;
+  const rel = f.slice(rootKey.length + 1);
+  const name = rel.slice(rel.lastIndexOf('/') + 1);
+  if (rel === 'claude.md') return true;
+  if (rel.startsWith('project-os/guards/')) return true;
+  if (rel.startsWith('project-os/') && rel.indexOf('/', 'project-os/'.length) < 0) {
+    return name.endsWith('.md') && !RULE_RECORDS.test(name);
+  }
+  if (name.endsWith('_rules.md')) return true;
+  return name === 'claude.md' && rel.startsWith('features/');
+}
+
+// The payload this run judges, and what its transcript said, read at most once.
+let CURRENT_PAYLOAD = null;
+let OWNER_WORD_SAID = undefined;
+
+/**
+ * Whether the owner's last typed message says "Go rule": true, false, or null
+ * when there is no transcript to read, which the lock treats as not refused.
+ * A `user` entry whose content is only tool results is the harness feeding a
+ * tool's output back, a meta entry is the app's own, and a compaction summary
+ * is the engine's; only a typed message counts, the newest one.
+ */
+function ownerSaidGoRule() {
+  if (OWNER_WORD_SAID !== undefined) return OWNER_WORD_SAID;
+  OWNER_WORD_SAID = readOwnerWord(CURRENT_PAYLOAD);
+  return OWNER_WORD_SAID;
+}
+
+function readOwnerWord(payload) {
+  const where = payload && payload.transcript_path;
+  if (typeof where !== 'string' || !where) return null;
+  let text;
+  try {
+    text = fs.readFileSync(where, 'utf8');
+  } catch {
+    return null;
+  }
+  const lines = text.split(/\r?\n/);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!entry || entry.type !== 'user' || entry.isMeta === true || entry.isCompactSummary === true || !entry.message) continue;
+    const content = entry.message.content;
+    const blocks = typeof content === 'string' ? [{ type: 'text', text: content }] : Array.isArray(content) ? content : [];
+    if (blocks.length === 0 || blocks.every((b) => b && b.type === 'tool_result')) continue;
+    const said = blocks
+      .filter((b) => b && b.type === 'text' && typeof b.text === 'string')
+      .map((b) => b.text)
+      .join('\n');
+    return OWNER_WORD.test(said);
+  }
+  return false;
+}
+
+/** Why a write to a rule file is refused now, or null. */
+function ruleFileReason(full, rootKey, what) {
+  if (ownerSaidGoRule() !== false) return null;
+  const rel = String(full).toLowerCase().slice(rootKey.length + 1);
+  return `a rule file: ${what} writes to "${rel}", and the owner's last message does not say Go rule`;
+}
+
+// The rule files an inline script names as whole string literals,
+// 'project-os/QA.md', not a sentence that mentions one: a History row that
+// names a rule file in its words is not a write to that file.
+function ruleFilesNamedIn(body, root, base) {
+  const rootKey = root.toLowerCase();
+  const found = [];
+  for (const m of String(body).matchAll(/(['"])([^'"\r\n]+)\1/g)) {
+    const lit = m[2];
+    if (!/\.(?:md|mjs|ps1)$/i.test(lit)) continue;
+    const r = resolveStatic(lit, base.toLowerCase());
+    if (!r.dynamic && r.full && isRuleFile(r.full, rootKey)) found.push(lit);
+  }
+  return found;
+}
+
+/** Can this inline script write, by the reading whyNotARead makes of a script? */
+function scriptMayWrite(body, prog, argv) {
+  const fam = scriptFamily(prog);
+  if (!READ_CALL_BEFORE[fam]) return true;
+  if (NOT_A_READ_PART.test(body) || NOT_A_READ_WORD.test(body)) return true;
+  const { text, unprovable } = prepareScript(body, fam);
+  const code = maskStrings(text);
+  if (NOT_A_READ_CODE.test(code) || NOT_A_READ_SHAPES[fam]?.test(code)) return true;
+  if (foreignModule(text, code, fam)) return true;
+  if (unprovable.length > 0 || scriptWrites(text, writeDestinations(text, fam), spawnCalls(text, code, prog), argv)) return true;
+  if (hiddenSpelling(text, code, fam)) return true;
+  return !opensOnlyToRead(text, code, fam);
+}
+
+/**
+ * Why an inline script that names a rule file and can write is refused now,
+ * or null. A script's own `$f` is never a loop variable of the shell around
+ * it (see loopValue), as in the other two readings of a script.
+ */
+function ruleFileScriptRisk(body, prog, root, base, argv) {
+  const saved = LOOP_VARS;
+  LOOP_VARS = null;
+  try {
+    const named = ruleFilesNamedIn(body, root, base);
+    if (named.length === 0) return null;
+    if (!scriptMayWrite(body, prog, argv)) return null;
+    if (ownerSaidGoRule() !== false) return null;
+    return `a rule file: the script passed to \`${prog}\` names "${named[0]}" and can write, and the owner's last message does not say Go rule`;
+  } finally {
+    LOOP_VARS = saved;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Rename loops over literal names (kit fix list, 2026-10-02, T8)
 // ---------------------------------------------------------------------------
 //
@@ -1226,7 +1363,7 @@ function checkTarget(target, root, what, base = root) {
   if (r.dynamic) {
     return `${what} writes to "${target.replace(/\u0000/g, '')}", a path built at runtime, so it cannot be proven to be inside the project folder. Use a literal path under the project, or the Write tool`;
   }
-  if (inside(r.full, rootKey)) return null;
+  if (inside(r.full, rootKey)) return isRuleFile(r.full, rootKey) ? ruleFileReason(r.full, rootKey, what) : null;
   if (isMemoryFile(r.full)) return null;
   if (isExtraRoot(r.full, rootKey)) return null;
   return `${what} writes to "${target}", which is outside the project folder (${root})`;
@@ -3143,7 +3280,11 @@ function scriptWriteRisk(body, prog, root, base, argv) {
  * piped one goes through here.
  */
 function scriptRisk(body, prog, root, base, argv = []) {
-  return inlineScriptRisk(body, prog, root, base, argv) ?? outsidePathRisk(body, prog, root, base, argv);
+  return (
+    inlineScriptRisk(body, prog, root, base, argv) ??
+    outsidePathRisk(body, prog, root, base, argv) ??
+    ruleFileScriptRisk(body, prog, root, base, argv)
+  );
 }
 
 /**
@@ -4900,6 +5041,8 @@ function startDir(payload, root) {
 
 export function verdict(payload) {
   if (!payload || typeof payload !== 'object') return null;
+  CURRENT_PAYLOAD = payload;
+  OWNER_WORD_SAID = undefined;
   const root = projectRoot(payload);
 
   if (FILE_TOOLS.has(payload.tool_name)) {
@@ -4923,6 +5066,14 @@ function main() {
     return ALLOW;
   }
   const reason = verdict(payload);
+  if (reason && reason.startsWith('a rule file:')) {
+    process.stderr.write(
+      `path-guard: blocked - ${reason}. A rule changes only on the owner's word: propose the change in the ` +
+        'reply, as before and after, and ask them to say Go rule (CLAUDE.md, the iron rule and the Go rule ' +
+        'shortcut). The living records, History, Decisions, Backlog, Map and Mistakes, are not rule files.\n'
+    );
+    return BLOCK;
+  }
   if (reason) {
     process.stderr.write(
       `path-guard: blocked - ${reason}. Every file this project writes stays inside the project folder ` +

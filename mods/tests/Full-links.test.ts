@@ -88,6 +88,8 @@ describe('the links fix, called directly', () => {
 
   test('the rule is read in both spellings the kit has used, and "full report" is not it', () => {
     expect(readReplyRules('A named route is the FULL absolute address, never a bare path.').hasFullLinkRule).toBe(true)
+    expect(readReplyRules('The app\'s wrap-up box carries the recap only, never a question.').hasWrapUpRule).toBe(true)
+    expect(readReplyRules('A wrap-up box is shown at the end.').hasWrapUpRule).toBe(false)
     expect(readReplyRules('EVERY path is the FULL path from the\ndrive root.').hasFullLinkRule).toBe(true)
     expect(readReplyRules('It lifts ONLY on his report phrases: `full report`.').hasFullLinkRule).toBe(false)
   })

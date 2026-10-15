@@ -401,18 +401,18 @@ const KIT_RULES = [
 
 describe('reading the rules', () => {
   test('the kit wording carries the dash rule', () => {
-    expect(readReplyRules(KIT_RULES)).toEqual({ hasDashRule: true, hasFullLinkRule: false })
+    expect(readReplyRules(KIT_RULES)).toEqual({ hasDashRule: true, hasFullLinkRule: false, hasWrapUpRule: false })
   })
 
   test('a file without the sentence asks for nothing', () => {
-    expect(readReplyRules('# Reply rules\n\nBe kind. Keep it short, 3 lines or so.')).toEqual({ hasDashRule: false, hasFullLinkRule: false })
-    expect(readReplyRules('')).toEqual({ hasDashRule: false, hasFullLinkRule: false })
+    expect(readReplyRules('# Reply rules\n\nBe kind. Keep it short, 3 lines or so.')).toEqual({ hasDashRule: false, hasFullLinkRule: false, hasWrapUpRule: false })
+    expect(readReplyRules('')).toEqual({ hasDashRule: false, hasFullLinkRule: false, hasWrapUpRule: false })
     // The limits a file states are no longer this part's business.
-    expect(readReplyRules('Short by default: 3 prose lines, each at most 14 WORDS.')).toEqual({ hasDashRule: false, hasFullLinkRule: false })
+    expect(readReplyRules('Short by default: 3 prose lines, each at most 14 WORDS.')).toEqual({ hasDashRule: false, hasFullLinkRule: false, hasWrapUpRule: false })
   })
 
   test('a sentence wrapped over two lines or in another case is still read', () => {
-    expect(readReplyRules('never LONGER than\na hyphen')).toEqual({ hasDashRule: true, hasFullLinkRule: false })
+    expect(readReplyRules('never LONGER than\na hyphen')).toEqual({ hasDashRule: true, hasFullLinkRule: false, hasWrapUpRule: false })
   })
 })
 

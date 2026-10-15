@@ -515,6 +515,19 @@ The redirect map is live.
 All 16 old links land correctly.
 ~~~
 
+### 19 · The wrap-up box carries the recap alone
+
+The app's wrap-up box carries the recap only, never a question or buttons.
+The question goes in the reply under its last headline (rule 13).
+
+The Claude desktop app ends a turn with a wrap-up box, filled by a tool call.
+With a question in it, the app folds the reply into the step above and shows a
+paragraph of its own in its place, first person, none of this layout. With the
+recap alone, the app asks for the closing message after the call, and that
+message renders as this file prescribes. The kit's mods plugin refuses a
+wrap-up call that carries a question, in a project whose Conversations.md
+carries this rule.
+
 ---
 
 Replies shaped by this file are for one reader's eye.

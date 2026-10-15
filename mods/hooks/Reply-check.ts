@@ -9,6 +9,15 @@
 // (owner, 2026-10-11, after half paths reached him twice with the rule
 // written). It does nothing anywhere else.
 //
+// THE WRAP-UP BOX. The desktop app ends a turn with a wrap-up box, filled by
+// a tool call: a recap, and optionally a question with buttons. With a
+// question in it, the app folds the reply into the step above and shows a
+// paragraph of its own in its place, none of the project's layout (owner,
+// 2026-10-15, twice). Where the project's rules say the box carries the recap
+// only, a wrap-up call that carries a question is refused, with the reason:
+// the assistant calls again with the recap alone and puts the question in the
+// reply, which then renders as the rules prescribe.
+//
 // WHY LIVE. A check that runs after the reply can only correct the next one,
 // because the owner has already read this one. A dash can be fixed before the
 // reply is kept, so it is.
@@ -48,6 +57,8 @@ export type ReplyRules = {
   hasDashRule: boolean
   /** The file says a link is the FULL address and a path the FULL path. */
   hasFullLinkRule: boolean
+  /** The file says the app's wrap-up box carries the recap only. */
+  hasWrapUpRule: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -59,6 +70,8 @@ const DASH_RULE = /longer\s+than\s+a\s+hyphen/i
 // Both spellings the kit has used: "the FULL absolute address" and "the FULL
 // path from the drive root". The capitals matter: "full report" is another rule.
 const FULL_LINK_RULE = /\bFULL\b[^\n]{0,40}\b(?:path|address|URL)\b/
+// "The app's wrap-up box carries the recap only, never a question or buttons."
+const WRAP_UP_RULE = /\bwrap-up box\b[^\n]{0,60}\brecap\b/i
 
 /**
  * Reads the reply rules out of a Conversations.md. Only what the file states
@@ -67,6 +80,7 @@ const FULL_LINK_RULE = /\bFULL\b[^\n]{0,40}\b(?:path|address|URL)\b/
 export const readReplyRules = (conversations: string): ReplyRules => ({
   hasDashRule: DASH_RULE.test(conversations),
   hasFullLinkRule: FULL_LINK_RULE.test(conversations),
+  hasWrapUpRule: WRAP_UP_RULE.test(conversations),
 })
 
 // Where a walk up ends: at the drive, or at the share of a network path. A
@@ -480,6 +494,57 @@ export const fixRowLinks = <Kept extends Row>(row: Kept, place: Place): Kept => 
 }
 
 // ---------------------------------------------------------------------------
+// The wrap-up box
+// ---------------------------------------------------------------------------
+
+// The app's wrap-up tool, by whichever name the app gives it: `wrap_up`, or
+// an MCP spelling ending in it.
+export const WRAP_UP_TOOL = /(?:^|__)wrap[_-]?up$/i
+// The keys a tool call carries beside the tool's own arguments.
+const CALL_KEYS = new Set(['tool', 'tool_use_id', 'agentId', 'consent'])
+// An argument that is a question or its answers, by its name.
+const ASKS_BY_NAME = /^(?:questions?|options?|buttons?|choices?|answers?|actions?)$/i
+// A line that ends on a question mark, closing marks allowed after it.
+const ENDS_ON_QUESTION = /\?[`*_)"'\u{201d}]*[ \t]*$/mu
+
+const isFilled = (value: unknown): boolean =>
+  typeof value === 'string'
+    ? value.trim() !== ''
+    : Array.isArray(value)
+      ? value.length > 0
+      : value !== null && typeof value === 'object' && Object.keys(value).length > 0
+
+/** Every string inside a value, however nested, one per line. */
+const textOf = (value: unknown, depth = 0): string => {
+  if (typeof value === 'string') return value
+  if (depth > 4 || value === null || typeof value !== 'object') return ''
+  const inside = Array.isArray(value) ? value : Object.values(value)
+
+  return inside.map(one => textOf(one, depth + 1)).join('\n')
+}
+
+/**
+ * What makes a wrap-up call carry a question, or null when it carries the
+ * recap alone: an argument named for a question or its answers that is not
+ * empty, or any text in it with a line that ends on a question mark.
+ */
+export const wrapUpAsks = (call: Readonly<Record<string, unknown>>): string | null => {
+  for (const [name, value] of Object.entries(call)) {
+    if (CALL_KEYS.has(name)) continue
+    if (ASKS_BY_NAME.test(name) && isFilled(value)) return `its ${name}`
+    if (ENDS_ON_QUESTION.test(textOf(value))) return `a question in its ${name}`
+  }
+
+  return null
+}
+
+const wrapUpRefused = (asks: string): string =>
+  'The wrap-up box carries the recap only, never a question or buttons ' +
+  `(project-os/Conversations.md, the wrap-up rule), and this call carries ${asks}. ` +
+  'Call it again with the recap alone, two sentences at most, and put the question ' +
+  'in the reply, under its last headline.'
+
+// ---------------------------------------------------------------------------
 // The hooks
 // ---------------------------------------------------------------------------
 
@@ -609,5 +674,21 @@ export const registerReplyCheck = (on: On): void => {
     })
 
     return message === e.message ? next(e) : next({ ...e, message })
+  })
+
+  // The app's wrap-up call, on the main loop, in a project whose rules keep
+  // the question out of the box. A call the check cannot read passes.
+  on('tool.call', { tool: WRAP_UP_TOOL }, (_$, e, next) => {
+    const now = found
+    if (now === undefined || !now.rules.hasWrapUpRule || e.agentId !== undefined) return next(e)
+
+    let asks: string | null = null
+    try {
+      asks = wrapUpAsks(e as unknown as Readonly<Record<string, unknown>>)
+    } catch {
+      asks = null
+    }
+
+    return asks === null ? next(e) : { deny: wrapUpRefused(asks) }
   })
 }
