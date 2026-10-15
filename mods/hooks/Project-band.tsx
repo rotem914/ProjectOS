@@ -69,6 +69,7 @@ const SHORTCUTS = [
   'Go commit and backup',
   'Go audit',
   'Go update kit',
+  'Go rule',
   'Go code review',
   'GO visual qa',
 ] as const

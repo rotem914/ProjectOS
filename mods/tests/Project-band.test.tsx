@@ -1461,6 +1461,25 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
+  // Go rule, the owner's word for a change to a rule file (2026-10-15), is a
+  // shortcut like the others: a button in More when CLAUDE.md carries it.
+  onEachSurface('Go rule is listed in More when the project carries it', async ($, on, surface) => {
+    const kit = install(on, {
+      folder: 'D:\\Work\\Site',
+      files: { 'D:/Work/Site/CLAUDE.md': '### `Go commit`\n### `Go rule`\n' },
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    await ui.press({ key: 'more' })
+    expect(await buttonsOn(ui)).toEqual(['Go rule', 'X'])
+    await ui.press({ key: 'go-rule' })
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go rule'])
+    await ui.unmount()
+  })
+
   onEachSurface('Go commit submits exactly Go commit, as the owner', async ($, on, surface) => {
     const kit = install(on, { changed: 2 })
 
