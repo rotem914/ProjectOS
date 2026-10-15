@@ -1,7 +1,7 @@
 # Reply format, part 2
 
 This file continues `Conversations.md`: every rule there holds here, and these number on from it.
-A project that reads its reply rules into every message gives this file its own hook line, so no rule is ever cut for room.
+A project that reads its reply rules into every session gives this file its own hook line, so no rule is ever cut for room.
 When this file fills, a third follows the same way: a file and a hook line.
 
 ### 20 · No task, no filing
