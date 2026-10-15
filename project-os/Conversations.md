@@ -367,8 +367,9 @@ A question for the owner is the LAST thing in the reply, never buried mid-reply.
 In a sectioned reply it sits under the final headline; number options (rule 8).
 A word you need from the owner is asked as Say `X`, so the strip offers X as a button.
 When the client has a built-in question panel, a question with options goes
-through it, always, with one line per option; the feed then carries only what
-the answer is waiting on.
+through it while the work runs, with one line per option; the feed then carries
+only what the answer is waiting on.
+A report never ends on the panel: it numbers the options, each a Say word (rule 19).
 
 ~~~
 ----
@@ -518,7 +519,6 @@ All 16 old links land correctly.
 ### 19 · The wrap-up box carries the recap alone
 
 The app's wrap-up box carries the recap only, never a question or buttons.
-The question goes in the reply under its last headline (rule 13).
 
 The Claude desktop app ends a turn with a wrap-up box, filled by a tool call.
 With a question in it, the app folds the reply into the step above and shows a
