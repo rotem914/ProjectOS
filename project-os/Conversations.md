@@ -331,6 +331,11 @@ In PowerShell the command form is
 `cd "C:\code\northwind"; if ($?) { npm run dev }`, in a POSIX shell
 `cd "/Users/alex/code/northwind" && npm run dev`.
 
+**Copy the owner reviews is shown as before and after, in plain text.**
+The whole block as it is now, then as proposed, its changed lines in italics.
+One block at a time, never in a fence or the question panel.
+It ends on Say `Approve` and the assistant writes it.
+
 ~~~
 Start it and look:
 
