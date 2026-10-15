@@ -141,8 +141,7 @@ Say the word and I will lock it in.
 ### 4 · Paragraph spacing
 
 Leave a blank line above every paragraph.
-A gap inside a section is a line holding only `&nbsp;`, never a divider.
-It sits under the headline and between the blocks: the app shows a blank line as nothing.
+A gap inside a section, under the headline and between blocks, is a `&nbsp;` line, never a divider.
 
 ~~~
 The rename tool is live.
