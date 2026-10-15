@@ -135,7 +135,8 @@ own window, in the desktop app and in the terminal, in every folder you open.
   left alone, it is `Push` again. `Update plugin` asks in the row first.
   A word the assistant's last reply asks you to say (Say GO, Say Approve
   all, Say Go kit) is a button until your next message, three at most; a
-  list of verdicts offers `Fix all`, `Drop all` and `Backlog all`, and a
+  list of verdicts offers `Fix all`, `Drop all` and `Backlog all`, two or
+  more fixes asked by name get `Fix all` before them, and a
   reply that ends on a yes-or-no question with no word named offers
   `Approve` and `Approve all`. These answers sit right after the project's name, 48
   pixels from it, apart from the row's other buttons at its far end.

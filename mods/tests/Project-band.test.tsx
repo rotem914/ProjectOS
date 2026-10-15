@@ -1707,6 +1707,21 @@ describe('the shortcut buttons', () => {
     await kit.clock.settle()
     expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
 
+    // Two or more fixes asked by name get Fix all first, and the row holds
+    // one more than usual so no fix is lost (owner, 2026-10-16); one fix
+    // alone gets no Fix all.
+    await reply('1) Say `fix map` and I correct the names.\n2) Say `fix rows` and I write the rows.\n3) Say `fix dashes` and I sweep.')
+    await kit.clock.settle()
+    expect((await buttonsOn(ui)).slice(0, 4)).toEqual(['Fix all', 'fix map', 'fix rows', 'fix dashes'])
+    await ui.press({ key: 'asked-0' })
+    await kit.clock.settle()
+    expect(kit.world.prompts.at(-1)?.text).toBe('Fix all')
+    await reply('Say `fix map` and I correct the names.')
+    await kit.clock.settle()
+    expect((await buttonsOn(ui)).slice(0, 2)).toEqual(['fix map', 'Go commit \u00b7 2'])
+    await $.prompt.submit(typed('later'))
+    await kit.clock.settle()
+
     // A list of verdicts offers each verdict for every item.
     await reply('Two findings wait for your verdict, fix / drop / backlog each.')
     await kit.clock.settle()
@@ -1733,6 +1748,8 @@ describe('the shortcut buttons', () => {
     expect(kit.world.prompts.map(prompt => prompt.text)).toEqual([
       'Go kit',
       'not now',
+      'Fix all',
+      'later',
       '1 fix, 2 drop',
       'Approve all',
     ])

@@ -606,7 +606,10 @@ function fastAfter(text: string, isOn: boolean): boolean {
 // verdicts, "fix / drop / backlog", offers each verdict for every item. A
 // reply that ends on a question and names no word offers Approve and Approve
 // all. Three at most, in the order the reply names them; a word that has a
-// button of its own in the row (Go commit) is left out.
+// button of its own in the row (Go commit) is left out. Two or more fixes
+// asked by name (Say `fix map`, Say `fix rows`) get Fix all before them, and
+// the row then holds one more than usual, so no fix is lost (owner,
+// 2026-10-16).
 const KIT_SHORTCUT = 'Go kit'
 const ASKED_MAX = 3
 const ASKED_LABEL_MAX = 24
@@ -627,6 +630,8 @@ const ASKED_GAP_SVG =
 const ASKED_GAP_ALT = 'Answers'
 const APPROVE_WORDS = ['Approve', 'Approve all'] as const
 const VERDICT_WORDS = ['Fix all', 'Drop all', 'Backlog all'] as const
+const FIX_ALL = VERDICT_WORDS[0]
+const FIX_WORD = /^fix\s/i
 const SAY_GO_KIT = /\bsay\s+`?go kit`?(?![\w])/gi
 const SAY_QUOTED = /\bsay\s+`([^`\n]{1,24})`/gi
 // The bare form is capitals only, as in "Say GO": a word in prose after "say"
@@ -666,7 +671,12 @@ export function askedWordsIn(answer: string): string[] {
     words.push(...APPROVE_WORDS)
   }
 
-  return words.slice(0, ASKED_MAX)
+  // Two or more fixes asked by name take Fix all first, and one more slot.
+  const hasFixAll = words.some(word => word.toLowerCase() === FIX_ALL.toLowerCase())
+  const fixAll = !hasFixAll && words.filter(word => FIX_WORD.test(word)).length >= 2
+  if (fixAll) words.unshift(FIX_ALL)
+
+  return words.slice(0, fixAll ? ASKED_MAX + 1 : ASKED_MAX)
 }
 
 // Whether the reply's last line is a yes-or-no question, the fast mode
