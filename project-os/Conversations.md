@@ -21,12 +21,12 @@ project's one.
 
 ## In-flight narration
 
-Nothing is written between tool calls.
+Between tool calls, a progress note of a few words: what is being done now.
+Never a plan of the next edit, never a summary of the last one.
 One line at pickup names the task, its type, the area it touches and its risk
 level, plus any invariant it touches; the next text is the report.
-No plan of the next edit, no summary of the last one, no "I'll do X now".
-That one line follows the tone rules, never the layout: no divider, no heading.
-The one exception is a question that blocks the work, and it ends the turn.
+Both follow the tone rules, never the layout: no divider, no heading.
+A question that blocks the work ends the turn.
 
 ## The one hierarchy
 
