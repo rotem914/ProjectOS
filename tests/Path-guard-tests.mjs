@@ -1824,6 +1824,28 @@ console.log('path-guard: rule files change only on the owner\'s word');
   t('an inline script that names a rule doc in a sentence', in_(bash(`node -e "console.log('see project-os/QA.md for the list')"`), without), false);
   t('an inline script writing a record that names a rule doc', in_(bash(`node -e "require('fs').appendFileSync('project-os/History.md', 'edited QA.md')"`), without), false);
   t('the same writing script with the word passes', in_(bash(`python -c "open('project-os/QA.md','w').write('x')"`), withWord), false);
+  // A rule file that still holds a setup placeholder is not yet a rule: the
+  // install fills it without the word, and the lock closes when the last
+  // placeholder goes (2026-10-16, after an install's fill step was refused).
+  {
+    const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'projectos-setup-'));
+    const root = proj.replace(/\\/g, '/');
+    fs.mkdirSync(path.join(proj, 'project-os'));
+    fs.writeFileSync(path.join(proj, 'CLAUDE.md'), '# {{PROJECT_NAME}}\n\nOwner: {{OWNER_NAME}}\n');
+    fs.writeFileSync(path.join(proj, 'project-os', 'Conversations.md'), '## Language\n\n> **Setup step: replace this block** with one line.\n');
+    fs.writeFileSync(path.join(proj, 'project-os', 'QA.md'), '# QA\n\nEvery change is checked.\n');
+    const here = (payload) => ({ ...payload, cwd: root, transcript_path: without });
+    t('a CLAUDE.md with placeholders is filled without the word', here(write(`${root}/CLAUDE.md`)), false);
+    t('a setup block still in Conversations.md opens it too', here(write(`${root}/project-os/Conversations.md`)), false);
+    t('a filled rule doc beside them stays locked', here(write(`${root}/project-os/QA.md`)), true);
+    t('a rule file not there yet is locked', here(write(`${root}/project-os/Hooks.md`)), true);
+    t('an inline script filling the placeholders passes', here(bash(`python -c "open('CLAUDE.md','w').write('x')"`)), false);
+    t('an inline script writing the filled doc is refused', here(bash(`python -c "open('project-os/QA.md','w').write('x')"`)), true);
+    t('a redirection into the placeholder file passes', here(bash('echo x >> CLAUDE.md')), false);
+    fs.writeFileSync(path.join(proj, 'CLAUDE.md'), '# Northwind\n\nOwner: Alex\n');
+    t('once the last placeholder is gone the lock closes', here(write(`${root}/CLAUDE.md`)), true);
+    fs.rmSync(proj, { recursive: true, force: true });
+  }
   hook('run as a process, a rule-file write without the word exits 2 and names the word', payload(w(`${ROOT}/CLAUDE.md`, without)), 2, 'Go rule');
   hook('run as a process, the same write with the word exits 0', payload(w(`${ROOT}/CLAUDE.md`, withWord)), 0);
   fs.rmSync(dir, { recursive: true, force: true });

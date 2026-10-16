@@ -1192,16 +1192,55 @@ function readOwnerWord(payload) {
   return false;
 }
 
-/** Why a write to a rule file is refused now, or null. */
-function ruleFileReason(full, rootKey, what) {
+// A rule file that still holds a setup placeholder is not yet a rule: the
+// install fills it, and the lock closes when the last placeholder goes
+// (2026-10-16, after an install's fill step was refused for want of the word).
+// The markers are the kit's own: a token in capitals between double braces,
+// and the quoted setup-step line of a setup block. Neither is spelled out
+// here, or this file would read as its own placeholder. The file is read as
+// spelled first, then as resolved (lower-cased), since a POSIX disk knows
+// only the spelling; one that cannot be read is locked.
+const SETUP_PLACEHOLDER = new RegExp('\\{\\{[A-Z][A-Z0-9_]*\\}\\}|Setup step: ' + 'replace this block');
+
+function stillBeingSetUp(spelled, full) {
+  for (const p of [spelled, full]) {
+    if (!p) continue;
+    try {
+      return SETUP_PLACEHOLDER.test(fs.readFileSync(p, 'utf8'));
+    } catch {
+      // Not there under this spelling: try the other.
+    }
+  }
+  return false;
+}
+
+/**
+ * Why a write to a rule file is refused now, or null. `spelled` is the path
+ * as the command wrote it, resolved, for reading the file on a POSIX disk.
+ */
+function ruleFileReason(full, rootKey, what, spelled = null) {
+  if (stillBeingSetUp(spelled, full)) return null;
   if (ownerSaidGoRule() !== false) return null;
   const rel = String(full).toLowerCase().slice(rootKey.length + 1);
   return `a rule file: ${what} writes to "${rel}", and the owner's last message does not say Go rule`;
 }
 
+// A path as the command spelled it, resolved against `base` with its case
+// kept, for reading the file; quote marks and a trailing slash dropped.
+function spelledPath(target, base) {
+  const bare = String(target).replace(/^["']|["']$/g, '').replace(/\u0000/g, '');
+  if (!bare || /[*?]/.test(bare)) return null;
+  try {
+    return path.resolve(base, bare);
+  } catch {
+    return null;
+  }
+}
+
 // The rule files an inline script names as whole string literals,
 // 'project-os/QA.md', not a sentence that mentions one: a History row that
-// names a rule file in its words is not a write to that file.
+// names a rule file in its words is not a write to that file. A file still
+// being set up (stillBeingSetUp) is not counted.
 function ruleFilesNamedIn(body, root, base) {
   const rootKey = root.toLowerCase();
   const found = [];
@@ -1209,7 +1248,9 @@ function ruleFilesNamedIn(body, root, base) {
     const lit = m[2];
     if (!/\.(?:md|mjs|ps1)$/i.test(lit)) continue;
     const r = resolveStatic(lit, base.toLowerCase());
-    if (!r.dynamic && r.full && isRuleFile(r.full, rootKey)) found.push(lit);
+    if (r.dynamic || !r.full || !isRuleFile(r.full, rootKey)) continue;
+    if (stillBeingSetUp(spelledPath(lit, base), r.full)) continue;
+    found.push(lit);
   }
   return found;
 }
@@ -1363,7 +1404,10 @@ function checkTarget(target, root, what, base = root) {
   if (r.dynamic) {
     return `${what} writes to "${target.replace(/\u0000/g, '')}", a path built at runtime, so it cannot be proven to be inside the project folder. Use a literal path under the project, or the Write tool`;
   }
-  if (inside(r.full, rootKey)) return isRuleFile(r.full, rootKey) ? ruleFileReason(r.full, rootKey, what) : null;
+  if (inside(r.full, rootKey)) {
+    if (!isRuleFile(r.full, rootKey)) return null;
+    return ruleFileReason(r.full, rootKey, what, spelledPath(loopValue(target) ?? target, base));
+  }
   if (isMemoryFile(r.full)) return null;
   if (isExtraRoot(r.full, rootKey)) return null;
   return `${what} writes to "${target}", which is outside the project folder (${root})`;

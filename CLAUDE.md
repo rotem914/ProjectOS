@@ -416,7 +416,9 @@ Backlog, Map, Mistakes and the bug atlas, are not rules), the guards under
 Propose the change in the reply, as before and after, and write it only when
 the owner's last message says `Go rule` (the shortcut below). The folder guard
 refuses the write otherwise (`project-os/Hooks.md`), so a slip stops at the
-guard and not at the report.
+guard and not at the report. A rule file that still holds a setup placeholder is not yet a rule: the
+install fills it without the word, and the lock closes when the last
+placeholder goes.
 
 ### 19. The same bug twice becomes an atlas row
 

@@ -239,7 +239,9 @@ transcript Claude Code names in the hook's payload, only when a rule file is
 the target; a payload without one, a test or a run outside Claude Code, is not
 refused. It catches what the guard sees: the file tools, a redirection, a
 writing program, an inline script that names the file and can write. A script
-saved to a file first is not read, as it never was.
+saved to a file first is not read, as it never was. A rule file that still
+holds a setup placeholder is not yet a rule: the install fills it without the
+word, and the lock closes when the last placeholder goes.
 
 What it reads, beyond a plain command:
 

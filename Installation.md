@@ -510,7 +510,9 @@ ever revisits it; a blank one gets answered in ten seconds.
 ## 5. Replace every placeholder
 
 Replace every value written in double curly braces with the real thing, in
-CLAUDE.md and every file under project-os/. None may survive there, and that
+CLAUDE.md and every file under project-os/. The folder guard's lock on rule
+files sleeps while a placeholder remains, so this step needs no `Go rule`
+from the owner; it closes on each file as its last placeholder goes. None may survive there, and that
 includes the ones sitting inside example fences (`~~~` blocks): an example
 reply in Conversations.md carries the dev address too, and a careful reader of
 the table below would not expect one there.
