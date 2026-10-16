@@ -16,6 +16,8 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On, RenderElement } from 'claude-code'
 import type { Engine, MockClock } from 'claude-code/testing'
 
+import { sessionRing } from '../hooks/Project-band'
+
 const PLUGIN = 'project-os'
 const SURFACES = ['terminal', 'desktop'] as const
 
@@ -1996,7 +1998,7 @@ describe('the shortcut buttons', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await buttonsOn(ui)).toEqual(['C: 42%', 'Go commit \u00b7 2', '\u22ee'])
+    expect(await buttonsOn(ui)).toEqual(['42%', 'Go commit \u00b7 2', '\u22ee'])
     expect((await ui.find({ key: 'fill' }))?.props.plain).toBe(true)
     await ui.press({ key: 'fill' })
     await kit.clock.settle()
@@ -2015,28 +2017,48 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
-  // The five-hour window, the app's "Session limit", sits before the fill as
-  // words, S then C (owner, 2026-10-16); off a subscription it is absent.
-  onEachSurface('the session limit stands before the fill, as words', async ($, on, surface) => {
+  // The five-hour window, the app's "Session limit", sits before the fill
+  // (owner, 2026-10-16): on the desktop behind a ring filled to its
+  // percentage, with a speech bubble before the fill (owner, 2026-10-17); the
+  // terminal writes S and C instead. Off a subscription the window is absent.
+  onEachSurface('the session limit stands before the fill, behind a ring', async ($, on, surface) => {
     const kit = install(on, { changed: 2, fill: 23, session: 73.4 })
 
     await start($, kit)
 
     const ui = await bandOn($, surface)
 
-    expect(await buttonsOn(ui)).toEqual(['C: 23%', 'Go commit \u00b7 2', '\u22ee'])
+    expect(await buttonsOn(ui)).toEqual(['23%', 'Go commit \u00b7 2', '\u22ee'])
     const drawn = await ui.findAll({})
-    const session = drawn.findIndex(one => one.type === 'Text' && JSON.stringify(one).includes('S: 73%'))
-    const fill = drawn.findIndex(one => one.type === 'Button' && one.props.label === 'C: 23%')
-    expect(await ui.find({ type: 'Text', text: 'S: 73%' })).toBeTruthy()
+    const session = drawn.findIndex(one => one.type === 'Text' && JSON.stringify(one).includes('73%'))
+    const fill = drawn.findIndex(one => one.type === 'Button' && one.props.label === '23%')
     expect(session).toBeGreaterThan(-1)
     expect(session).toBeLessThan(fill)
+    const pictures = (await ui.findAll({ type: 'Svg' })).map(one => one.props.alt)
+    if (surface === 'desktop') {
+      expect(pictures).toContain('Session limit')
+      expect(pictures).toContain('Conversation')
+      const ring = (await ui.findAll({ type: 'Svg' })).find(one => one.props.alt === 'Session limit')
+      expect(String(ring?.props.source)).toContain('<path d="M6 1.40A4.6 4.6 0 1 1')
+      expect(ring?.props).toMatchObject({ width: 14, height: 14 })
+    } else {
+      expect(await ui.find({ type: 'Text', text: 'S:' })).toBeTruthy()
+      expect(await ui.find({ type: 'Text', text: 'C:' })).toBeTruthy()
+    }
 
     kit.world.session = null
     await endTurn($, kit)
-    expect(await ui.find({ type: 'Text', text: 'S: 73%' })).toBeFalsy()
-    expect(await buttonsOn(ui)).toEqual(['C: 23%', 'Go commit \u00b7 2', '\u22ee'])
+    expect(await ui.find({ type: 'Text', text: '73%' })).toBeFalsy()
+    expect(await buttonsOn(ui)).toEqual(['23%', 'Go commit \u00b7 2', '\u22ee'])
     await ui.unmount()
+  })
+
+  test('the ring fills to the percentage: nothing, a short arc, a long arc, the whole ring', () => {
+    expect(sessionRing(0)).not.toContain('<path')
+    expect(sessionRing(25)).toContain('A4.6 4.6 0 0 1 10.60 6.00')
+    expect(sessionRing(73.4)).toContain('A4.6 4.6 0 1 1')
+    expect(sessionRing(100)).toContain('<circle cx="6" cy="6" r="4.6"/>')
+    expect(sessionRing(140)).toContain('<circle cx="6" cy="6" r="4.6"/>')
   })
 
   onEachSurface('from 80% the number is pastel orange and Compact stands beside it', async ($, on, surface) => {
@@ -2047,7 +2069,7 @@ describe('the shortcut buttons', () => {
     const ui = await bandOn($, surface)
 
     // Below 80 nothing changes: the number is the plain button.
-    expect(await buttonsOn(ui)).toEqual(['C: 79%', 'Go commit \u00b7 2', '\u22ee'])
+    expect(await buttonsOn(ui)).toEqual(['79%', 'Go commit \u00b7 2', '\u22ee'])
 
     kit.world.fill = 80
     await endTurn($, kit)
@@ -2056,7 +2078,7 @@ describe('the shortcut buttons', () => {
     expect(await buttonsOn(ui)).toEqual(['Compact', 'Go commit \u00b7 2', '\u22ee'])
     expect(await ui.find({ key: 'fill' })).toBeFalsy()
 
-    const number = await ui.find({ type: 'Text', text: 'C: 80%' })
+    const number = await ui.find({ type: 'Text', text: '80%' })
 
     expect(number?.props.color).toBe('#F5BE8C')
     expect((await ui.find({ key: 'compact' }))?.props.plain).toBeUndefined()
@@ -2403,7 +2425,7 @@ describe('the server light', () => {
     // The dot is 6 pixels and sits before the percentage.
     const drawn = await ui.findAll({})
     const dot = drawn.findIndex(one => one.type === 'Svg' && String(one.props.source).includes('r="4"'))
-    const fill = drawn.findIndex(one => one.type === 'Button' && one.props.label === 'C: 23%')
+    const fill = drawn.findIndex(one => one.type === 'Button' && one.props.label === '23%')
 
     expect(drawn[dot]?.props).toMatchObject({ width: 6, height: 6, alt: 'Local server is running' })
     expect(dot).toBeGreaterThan(-1)

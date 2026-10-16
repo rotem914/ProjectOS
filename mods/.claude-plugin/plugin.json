@@ -1,6 +1,6 @@
 {
   "name": "project-os",
-  "version": "0.1.58",
+  "version": "0.1.59",
   "description": "ProjectOS mods for every Claude Code window on this computer: a row above the message box that names the project, shows what is waiting to be committed or pushed, and carries buttons for the kit's shortcuts, plus live fixes for long dashes and half links in replies, and a refusal of a wrap-up box that carries a question. Early access and optional; see README.md, \"Mods\".",
   "author": { "name": "Rotem Elimelech" },
   "types": "./types/Mod-state.d.ts"

@@ -1515,16 +1515,20 @@ function planOf(
   const fullName = labelOf(known)
   // The percentage alone, before the words (owner, 2026-10-03). It is drawn
   // without a frame, so it takes its own cells and the one that separates it.
-  // The five-hour window first, then the conversation, each with its letter
-  // ("S: 73%   C: 23%", owner, 2026-10-16); the window is words, never a button.
+  // The five-hour window first, then the conversation (owner, 2026-10-16).
+  // Each is a number behind a small picture where the surface draws one, a
+  // ring filled to the window's percentage and a speech bubble (owner,
+  // 2026-10-17, picked on a board of four); the terminal writes a letter
+  // instead, S and C. The window is words, never a button. The cells count
+  // the letter form, the wider of the two.
   const fill = known.fill ?? null
-  const fillText = fill === null ? '' : `C: ${Math.round(fill)}%`
+  const fillText = fill === null ? '' : `${Math.round(fill)}%`
   const session = known.session ?? null
-  const sessionText = session === null ? '' : `S: ${Math.round(session)}%`
+  const sessionText = session === null ? '' : `${Math.round(session)}%`
   const isFillHigh = fill !== null && Math.round(fill) >= FILL_HIGH
   const fillCells =
-    (sessionText === '' ? 0 : sessionText.length + 1) +
-    (fillText === '' ? 0 : fillText.length + 1) +
+    (sessionText === '' ? 0 : sessionText.length + 4) +
+    (fillText === '' ? 0 : fillText.length + 4) +
     (isFillHigh ? buttonsWidth([COMPACT_LABEL]) : 0)
   const steps = [
     { isShort: false, isInRow: true, hasCommit: hasMain, hasUpdate: canUpdate },
@@ -1658,6 +1662,40 @@ const NAME_COLOR = '#B3B4BC'
 // to Compact.
 const FILL_HIGH = 80
 const FILL_HIGH_COLOR = '#F5BE8C'
+// The two small pictures before the percentages, in the row's own grey: a
+// ring whose arc fills to the five-hour window's percentage, and a speech
+// bubble for the conversation (owner, 2026-10-17).
+// Drawn at 14 pixels on a 12-unit grid: 12 read as tiny (owner, 2026-10-17).
+const FIGURE_PIXELS = 14
+const FIGURE_COLOR = NAME_COLOR
+const SESSION_ALT = 'Session limit'
+const FILL_ALT = 'Conversation'
+
+/** A ring, faint, with an arc from the top filled to `percent` of the way round. */
+export function sessionRing(percent: number): string {
+  const share = Math.min(100, Math.max(0, percent)) / 100
+  const r = 4.6
+  const cx = 6
+  const cy = 6
+  const head =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${FIGURE_PIXELS}" height="${FIGURE_PIXELS}" viewBox="0 0 12 12" ` +
+    `fill="none" stroke="${FIGURE_COLOR}" stroke-width="1.1" stroke-linecap="round">` +
+    `<circle cx="${cx}" cy="${cy}" r="${r}" stroke-opacity="0.35"/>`
+  if (share <= 0) return `${head}</svg>`
+  if (share >= 1) return `${head}<circle cx="${cx}" cy="${cy}" r="${r}"/></svg>`
+  const angle = share * Math.PI * 2
+  const x = (cx + r * Math.sin(angle)).toFixed(2)
+  const y = (cy - r * Math.cos(angle)).toFixed(2)
+  const large = share > 0.5 ? 1 : 0
+
+  return `${head}<path d="M${cx} ${(cy - r).toFixed(2)}A${r} ${r} 0 ${large} 1 ${x} ${y}"/></svg>`
+}
+
+const FILL_BUBBLE =
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${FIGURE_PIXELS}" height="${FIGURE_PIXELS}" viewBox="0 0 12 12" ` +
+  `fill="none" stroke="${FIGURE_COLOR}" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">` +
+  '<path d="M4.1 1.5h3.4a2.6 2.6 0 0 1 2.6 2.6v2.8a2.6 2.6 0 0 1-2.6 2.6H5.3L3.2 11.3V9.4A2.6 2.6 0 0 1 1.5 6.9V4.1a2.6 2.6 0 0 1 2.6-2.6z"/>' +
+  '</svg>'
 const COMPACT_LABEL = 'Compact'
 
 function drawLabel({ Box, Text, Svg }: Table, name: string): RenderElement {
@@ -1768,8 +1806,27 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
           </Box>
         )}
         {plan.session !== '' && (
-          <Box flexShrink={0}>
+          <Box flexShrink={0} flexDirection="row" alignItems="center" gap={1}>
+            {table.Svg !== undefined ? (
+              <table.Svg
+                source={sessionRing(known.session ?? 0)}
+                alt={SESSION_ALT}
+                width={FIGURE_PIXELS}
+                height={FIGURE_PIXELS}
+              />
+            ) : (
+              <Text>S:</Text>
+            )}
             <Text>{plan.session}</Text>
+          </Box>
+        )}
+        {plan.fill !== '' && (
+          <Box flexShrink={0}>
+            {table.Svg !== undefined ? (
+              <table.Svg source={FILL_BUBBLE} alt={FILL_ALT} width={FIGURE_PIXELS} height={FIGURE_PIXELS} />
+            ) : (
+              <Text>C:</Text>
+            )}
           </Box>
         )}
         {plan.fill !== '' && !plan.isFillHigh && (
