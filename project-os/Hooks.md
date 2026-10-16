@@ -483,4 +483,6 @@ closes the string or is read by a shell as code, and the reminder then arrives
 with words missing, or not at all, while the install still reports it on.
 Write "do not" rather than the short form, and name files without quotes. The
 guard lines carry `${CLAUDE_PROJECT_DIR}` on purpose; this list is for the
-reminder text only.
+reminder text only. The same shell eats the backslash escapes inside an inline
+script fed to node or python (seen 2026-10-16): a script that needs one goes
+to a file first and runs from there.

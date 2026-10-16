@@ -55,7 +55,10 @@
 //      still in the file today. A line fixed since is not listed. In a prose
 //      file a dash inside a fenced block (``` or ~~~) or an inline code span
 //      is not listed either: that is a rule showing the forbidden dash as its
-//      example, not a slip (2026-10-01). In a code file every one counts,
+//      example, not a slip (2026-10-01). A file moved to a new path inside
+//      the window counts whole, since git sees every line as added there;
+//      a plan moved under project-os/ at an install is the usual case
+//      (Orbit, 2026-10-16). In a code file every one counts,
 //      since a backtick there opens a template string whose text is shown.
 //   f. a .gitignore that does not keep out /.tmp/ or /backups/ (any pattern that
 //      ignores the folder counts, and a later "!" line that brings it back is
@@ -488,6 +491,8 @@ const FILE_EXT = /\.(md|mdx|markdown|txt|json|jsonc|mjs|cjs|js|jsx|ts|tsx|ps1|ps
 const MADE_LATER = [
   /-archive\.md$/, // an archive appears at the first rotation that needs it
   /(^|\/)Plan\.md$/, // a plan is moved in only when the project has one
+  /^Claude\.md$/, // the bare name, "a feature's Claude.md", exists once a feature does
+  /^features\/?$/, // the bare features folder, made with the first feature; a path inside it still counts
   /(^|\/)Kit-version\.json$/, // written by the install and by Compare-kit-files.mjs
   /(^|\/)CLAUDE-kit\.md$/, // exists only during a merge
   /(^|\/)\.mcp\.json(\.example)?$/, // written when a browser or tool server is set up

@@ -288,6 +288,9 @@ history."):
 "Your first Go commit starts it in this folder."
 "Putting it on GitHub is yours, whenever you want a copy off this computer."
 "Publish this folder there, not into a new repository that already has files."
+Ask git for the top folder again right before the report is written: an
+owner who ran a first commit mid-install has a history by then, and the four
+lines above would be false; say what git says at that moment.
 Write `Go commit` in
 the report's "What to say" section exactly as on any other install: it works
 as written. Every check above that reads git history (the CLAUDE.md one, the
@@ -336,7 +339,8 @@ Pass and fail are not the only outcomes:
   write the FUTURE command the plan will create, and mark every table that
   carries it, the check in CLAUDE.md's Go commit step 4 included, with
   "(nothing to run before plan step N)" right after the command, N being the
-  plan step that creates it, so a commit before that step runs nothing
+  plan step that creates it, a number or a lettered step such as M1 as the
+  plan names them, so a commit before that step runs nothing
   instead of failing. Keep the mark in that shape, parentheses included:
   `Go update kit` then reads it as the install's mark, not the owner's wording.
   The report's Problems section says so in one fixed line: "No check exists yet;

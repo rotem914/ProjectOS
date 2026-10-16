@@ -1768,6 +1768,28 @@ describe('the shortcut buttons', () => {
     await ui.press({ key: 'asked-0' })
     await kit.clock.settle()
     expect(kit.world.prompts.at(-1)?.text).toBe('Go rule')
+
+    // The words are read from the last block of the turn that asks, so a
+    // note after the report keeps the buttons (owner, 2026-10-16); the next
+    // prompt starts a new turn.
+    const kept = (text: string) =>
+      $.session
+        .append({
+          message: { type: 'assistant', role: 'assistant', content: [{ type: 'text', text }] },
+          door: 'response',
+          origin: { kind: 'model', model: 'claude-test' },
+          uuid: `row-${text.length}`,
+        })
+        .catch(() => undefined)
+    await kept('Say `Round C` and I start it.')
+    await reply('Draft done, nothing more to say.')
+    await kit.clock.settle()
+    expect((await buttonsOn(ui))[0]).toBe('Round C')
+    await $.prompt.submit(typed('later'))
+    await kit.clock.settle()
+    await reply('Draft done, nothing more to say.')
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
     await ui.unmount()
   })
 

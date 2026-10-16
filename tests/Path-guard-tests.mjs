@@ -1802,6 +1802,8 @@ console.log('path-guard: rule files change only on the owner\'s word');
   t('Map', w(`${ROOT}/project-os/Map.md`, without), false);
   t('Mistakes', w(`${ROOT}/project-os/Mistakes.md`, without), false);
   t('BugAtlas', w(`${ROOT}/project-os/BugAtlas.md`, without), false);
+  t('the plan, a record that changes on verdicts', w(`${ROOT}/project-os/Plan.md`, without), false);
+  t('a plan moved in by the install', in_(bash('mv plans/Plan.md project-os/Plan.md'), without), false);
   t('History-archive', w(`${ROOT}/project-os/History-archive.md`, without), false);
   t('History-scan-archive', w(`${ROOT}/project-os/History-scan-archive.md`, without), false);
   t('Decisions-archive', w(`${ROOT}/project-os/Decisions-archive.md`, without), false);

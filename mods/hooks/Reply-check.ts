@@ -50,6 +50,7 @@
 import type { EngineInterface, On, Timer } from 'claude-code'
 
 import { serverUrlIn } from './Project-band'
+import { noteTurnBlocks } from './Turn-blocks'
 
 /** What the project's Conversations.md asks of a reply, read once a session. */
 export type ReplyRules = {
@@ -660,6 +661,11 @@ export const registerReplyCheck = (on: On): void => {
   // A line the engine writes in the model's place (a sign-in notice, an API
   // error) is not the model's reply either, and is not fixed.
   on('session.append', { door: 'response' }, ($, e, next) => {
+    // The band reads the asked words from these blocks when the turn ends.
+    if (e.agentId === undefined && e.origin.kind === 'model' && e.origin.model !== ENGINE_STAND_IN) {
+      quietly(() => noteTurnBlocks(e.message.content))
+    }
+
     const now = found
     if (now === undefined || e.agentId !== undefined) return next(e)
     if (!now.rules.hasDashRule && now.place === undefined) return next(e)

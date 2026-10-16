@@ -28,6 +28,7 @@
 // the keyboard could not be answered from the keyboard, because the keys stay
 // with the row that was pressed.
 
+import { clearTurnBlocks, turnBlocks } from './Turn-blocks'
 import { atom, read, update } from 'claude-code'
 import type { Elements, EngineInterface, On, RenderElement } from 'claude-code'
 
@@ -644,6 +645,20 @@ const SAY_QUOTED = /\bsay\s+`([^`\n]{1,24})`/gi
 const SAY_BARE = /\b[Ss]ay\s+([A-Z]{2,}(?:\s+[A-Z]{2,})?)(?=[\s,.!?;:]|$)/g
 const VERDICTS = /\bfix\s*(?:\/|,)\s*drop\s*(?:\/|,|\s+or)\s*backlog\b/i
 const FAST_FOOTER = /^fast mode on\.?$/i
+
+/**
+ * The words a turn asks for: those of the last text block that asks any,
+ * the turn's final text last. A note or a wrap-up line after the report is
+ * that final text and asks nothing, so the report's words still count.
+ */
+export function askedWordsOfTurn(blocks: readonly string[]): string[] {
+  for (let at = blocks.length - 1; at >= 0; at -= 1) {
+    const words = askedWordsIn(blocks[at] ?? '')
+    if (words.length > 0) return words
+  }
+
+  return []
+}
 
 export function askedWordsIn(answer: string): string[] {
   const found: Array<{ at: number; word: string }> = []
@@ -3253,6 +3268,13 @@ export function registerProjectBand(on: On): void {
   // owner types them. Either way they pass here, and the Fast button follows.
   // A prompt that did not enter changes nothing.
   on('prompt.submit', EVERY_PROMPT, async ($, e, next) => {
+    // A new prompt starts a new turn: the blocks of the last one are gone.
+    try {
+      clearTurnBlocks()
+    } catch {
+      // Nothing to clear.
+    }
+
     const entered = await next(e)
 
     try {
@@ -3294,7 +3316,7 @@ export function registerProjectBand(on: On): void {
     // them away.
     if (e.agentId === undefined && !e.isAborted) {
       try {
-        const asked = askedWordsIn(e.answer)
+        const asked = askedWordsOfTurn([...turnBlocks(), e.answer])
 
         inBackground($, 'writing the asked words failed', () => setAsked($, asked))
       } catch (error) {

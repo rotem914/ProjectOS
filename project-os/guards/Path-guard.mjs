@@ -1125,7 +1125,10 @@ function isExtraRoot(full, rootKey) {
 // that word. The transcript is read only when a rule file is the target. No
 // transcript (a test, a run outside Claude Code) means no refusal here: this
 // guard fails open, like every other check in it.
-const RULE_RECORDS = /^(?:history(?:-archive|-scan-archive)?|decisions(?:-archive)?|backlog|map|mistakes|bugatlas)\.md$/;
+// The plan a project keeps under project-os/ is a record too: it changes
+// with every revision, on the owner's verdicts, not on Go rule (2026-10-16,
+// after an install's plan move was refused).
+const RULE_RECORDS = /^(?:history(?:-archive|-scan-archive)?|decisions(?:-archive)?|backlog|map|mistakes|bugatlas|plan)\.md$/;
 const OWNER_WORD = /\bgo rule\b/i;
 
 /** Is `full` (lowercased, resolved) a rule file of the project at `rootKey`? */

@@ -892,7 +892,7 @@ to Done and are never deleted, and the Open table is scanned at task pickup.
 
 The owner's word for a change to a rule file: `CLAUDE.md`, a rule doc under
 `project-os/` (never a living record: History, Decisions, Backlog, Map,
-Mistakes, the bug atlas), a guard under `project-os/guards/`, a feature's
+Mistakes, the plan, the bug atlas), a guard under `project-os/guards/`, a feature's
 `Claude.md`, an MCP server's rules doc. Without it in the owner's last message
 the folder guard refuses the write (rule 18, `project-os/Hooks.md`). Flow:
 

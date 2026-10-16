@@ -35,3 +35,7 @@ The lock is the change I trust least today: it reads a transcript, and transcrip
 
 Push to live, the guard now asks even you for ID 🔒
 ~~~
+
+### 22 · Labels in a stacked point
+
+Inside a stacked point (rule 10), each label is bold, with a gap line above it (rule 4).

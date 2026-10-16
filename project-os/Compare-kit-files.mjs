@@ -499,7 +499,9 @@ const range = (start, n) => Array.from({ length: n }, (_, i) => start + i);
 // install's text, not this project's wording, so a line that differs from its
 // filled kit line by such a mark alone reads as filled. Merged as wording, a
 // kit change beside the dev address went to the owner as their own (2026-10-02).
-const MARK = /\s*\((?:nothing to run before (?:(?:plan )?step \d+|that step)|none yet)\)/gi;
+// A step is a number, or a lettered one such as M1 or M3b, as a plan may
+// name them (Orbit, 2026-10-16).
+const MARK = /\s*\((?:nothing to run before (?:(?:plan )?step [A-Za-z]*\d+[a-z]?|that step)|none yet)\)/gi;
 const unmark = (s) => s.replace(MARK, '');
 
 // A choice the install settles from the owner's answer, written in square
