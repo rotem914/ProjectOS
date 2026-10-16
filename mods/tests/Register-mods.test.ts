@@ -115,6 +115,7 @@ describe('the guards around each part', () => {
       'session.start',
       'session.append',
       'tool.call',
+      'tool.call',
     ])
   })
 
@@ -171,6 +172,7 @@ describe('the guards around each part', () => {
       'turn.complete',
       'session.start',
       'session.append',
+      'tool.call',
       'tool.call',
       'session.start',
     ])

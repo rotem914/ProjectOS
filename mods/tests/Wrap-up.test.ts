@@ -13,7 +13,7 @@ import type { On, RenderSurface } from 'claude-code'
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { WRAP_UP_TOOL, wrapUpAsks } from '../hooks/Reply-check'
+import { WRAP_UP_TOOL, turnHoldsReport, wrapUpAsks } from '../hooks/Reply-check'
 
 // ---------------------------------------------------------------------------
 // Reading a call, called directly
@@ -64,6 +64,7 @@ describe('reading a wrap-up call', () => {
 const ROOT = '/work/site'
 const RULES_PATH = `${ROOT}/project-os/Conversations.md`
 const WRAP_UP_RULE = "The app's wrap-up box carries the recap only, never a question or buttons."
+const NO_PANEL_RULE = 'A report never ends on the panel: it numbers the options, each a Say word.'
 const DASH_RULE = 'Never write a dash longer than a hyphen.'
 
 // A path as the test wrote it: the engine hands a hook the path resolved for
@@ -110,6 +111,24 @@ const open = ($: Engine, surface: RenderSurface) =>
 /** The app's wrap-up call, as the model would make it. */
 const wrapUp = ($: Engine, args: Call) => $.tool.call({ tool: 'mcp__app__wrap_up', ...args } as never)
 
+/** The question panel, as the model raises it. */
+const panel = ($: Engine) =>
+  $.tool.call({
+    tool: 'AskUserQuestion',
+    questions: [{ question: 'Which one?', header: 'Pick', options: [{ label: 'A', description: 'a' }, { label: 'B', description: 'b' }], multiSelect: false }],
+  } as never)
+
+/** A text block of the reply, kept by the conversation. */
+const kept = ($: Engine, text: string) =>
+  $.session
+    .append({
+      message: { type: 'assistant', role: 'assistant', content: [{ type: 'text', text }] },
+      door: 'response',
+      origin: { kind: 'model', model: 'claude-test' },
+      uuid: `row-${text.length}`,
+    } as never)
+    .catch(() => undefined)
+
 const SURFACES = ['terminal', 'desktop'] as const
 type Surface = (typeof SURFACES)[number]
 
@@ -118,6 +137,54 @@ const onEachSurface = (name: string, body: ($: Engine, on: On, surface: Surface)
 }
 
 const WITH_RULE = { [RULES_PATH]: `${DASH_RULE}\n${WRAP_UP_RULE}` }
+const WITH_PANEL_RULE = { [RULES_PATH]: `${DASH_RULE}\n${NO_PANEL_RULE}` }
+
+describe('a report in the turn, read directly', () => {
+  test('a headline of its own makes a report; prose and a quoted heading do not', () => {
+    expect(turnHoldsReport(['The lock is in.', '----\n\n# Changed\n\nThe lock is in.'])).toBe(true)
+    expect(turnHoldsReport(['Looking at the file.', 'Running the checks.'])).toBe(false)
+    expect(turnHoldsReport(['> # Not a headline of mine'])).toBe(false)
+    expect(turnHoldsReport([])).toBe(false)
+  })
+})
+
+describe('the question panel after a report', () => {
+  onEachSurface('the panel is refused once the turn holds a report', async ($, on, surface) => {
+    const { reached } = world(on, WITH_PANEL_RULE)
+    await open($, surface)
+
+    await kept($, '----\n\n# Changed\n\nThe lock is in.')
+    const answer = await panel($)
+    expect('deny' in answer ? answer.deny : '').toMatch(/never ends on the question panel/)
+    expect(reached).toEqual([])
+  })
+
+  onEachSurface('a panel before any report passes, and a new prompt starts a clean turn', async ($, on, surface) => {
+    const { reached } = world(on, WITH_PANEL_RULE)
+    await open($, surface)
+
+    await kept($, 'Two readings of the ask are possible.')
+    const first = await panel($)
+    expect('deny' in first).toBe(false)
+    expect(reached).toHaveLength(1)
+
+    await kept($, '----\n\n# Changed\n\nDone.')
+    await $.prompt.submit({ text: 'next', wait: false, origin: { kind: 'composer' } } as never)
+    const second = await panel($)
+    expect('deny' in second).toBe(false)
+    expect(reached).toHaveLength(2)
+  })
+
+  onEachSurface('a project whose rules allow the panel lets it through', async ($, on, surface) => {
+    const { reached } = world(on, WITH_RULE)
+    await open($, surface)
+
+    await kept($, '----\n\n# Changed\n\nDone.')
+    const answer = await panel($)
+    expect('deny' in answer).toBe(false)
+    expect(reached).toHaveLength(1)
+  })
+})
 
 describe('the wrap-up box through the engine', () => {
   onEachSurface('a call that carries a question is refused, with the reason', async ($, on, surface) => {

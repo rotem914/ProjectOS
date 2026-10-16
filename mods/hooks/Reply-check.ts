@@ -50,7 +50,7 @@
 import type { EngineInterface, On, Timer } from 'claude-code'
 
 import { serverUrlIn } from './Project-band'
-import { noteTurnBlocks } from './Turn-blocks'
+import { noteTurnBlocks, turnBlocks } from './Turn-blocks'
 
 /** What the project's Conversations.md asks of a reply, read once a session. */
 export type ReplyRules = {
@@ -60,6 +60,8 @@ export type ReplyRules = {
   hasFullLinkRule: boolean
   /** The file says the app's wrap-up box carries the recap only. */
   hasWrapUpRule: boolean
+  /** The file says a report never ends on the question panel. */
+  hasNoPanelRule: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -73,6 +75,8 @@ const DASH_RULE = /longer\s+than\s+a\s+hyphen/i
 const FULL_LINK_RULE = /\bFULL\b[^\n]{0,40}\b(?:path|address|URL)\b/
 // "The app's wrap-up box carries the recap only, never a question or buttons."
 const WRAP_UP_RULE = /\bwrap-up box\b[^\n]{0,60}\brecap\b/i
+// "A report never ends on the panel: it numbers the options, each a Say word."
+const NO_PANEL_RULE = /\breport never ends on the (?:question )?panel\b/i
 
 /**
  * Reads the reply rules out of a Conversations.md. Only what the file states
@@ -82,6 +86,7 @@ export const readReplyRules = (conversations: string): ReplyRules => ({
   hasDashRule: DASH_RULE.test(conversations),
   hasFullLinkRule: FULL_LINK_RULE.test(conversations),
   hasWrapUpRule: WRAP_UP_RULE.test(conversations),
+  hasNoPanelRule: NO_PANEL_RULE.test(conversations),
 })
 
 // Where a walk up ends: at the drive, or at the share of a network path. A
@@ -539,6 +544,24 @@ export const wrapUpAsks = (call: Readonly<Record<string, unknown>>): string | nu
   return null
 }
 
+// The app's question panel, which the owner answers with buttons. Ending a
+// turn on it after a report folds the report into the step above and shows
+// the app's own paragraph instead (owner, 2026-10-15 and 2026-10-17, in two
+// projects), so the rule says a report never ends on the panel: the options
+// go under Next as Say words. A report is in the turn once a kept block
+// carries a headline of its own.
+export const PANEL_TOOL = 'AskUserQuestion'
+const HEADLINE = /^# \S/m
+
+/** Whether the turn's kept blocks already hold a report. */
+export const turnHoldsReport = (blocks: readonly string[]): boolean =>
+  blocks.some(block => HEADLINE.test(block))
+
+const panelRefused = (): string =>
+  'A report never ends on the question panel (project-os/Conversations.md, rule 13): ' +
+  'the report is already in this turn, so number the options under Next, each as Say `X`, ' +
+  'and end the turn on that text. The panel is for a question that blocks the work before it is done.'
+
 const wrapUpRefused = (asks: string): string =>
   'The wrap-up box carries the recap only, never a question or buttons ' +
   `(project-os/Conversations.md, the wrap-up rule), and this call carries ${asks}. ` +
@@ -696,5 +719,21 @@ export const registerReplyCheck = (on: On): void => {
     }
 
     return asks === null ? next(e) : { deny: wrapUpRefused(asks) }
+  })
+
+  // The question panel after a report, on the main loop, in a project whose
+  // rules say a report never ends on it.
+  on('tool.call', { tool: PANEL_TOOL }, (_$, e, next) => {
+    const now = found
+    if (now === undefined || !now.rules.hasNoPanelRule || e.agentId !== undefined) return next(e)
+
+    let holds = false
+    try {
+      holds = turnHoldsReport(turnBlocks())
+    } catch {
+      holds = false
+    }
+
+    return holds ? { deny: panelRefused() } : next(e)
   })
 }

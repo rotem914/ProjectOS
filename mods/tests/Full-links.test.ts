@@ -90,6 +90,8 @@ describe('the links fix, called directly', () => {
     expect(readReplyRules('A named route is the FULL absolute address, never a bare path.').hasFullLinkRule).toBe(true)
     expect(readReplyRules('The app\'s wrap-up box carries the recap only, never a question.').hasWrapUpRule).toBe(true)
     expect(readReplyRules('A wrap-up box is shown at the end.').hasWrapUpRule).toBe(false)
+    expect(readReplyRules('A report never ends on the panel: it numbers the options.').hasNoPanelRule).toBe(true)
+    expect(readReplyRules('The panel is fine at the end.').hasNoPanelRule).toBe(false)
     expect(readReplyRules('EVERY path is the FULL path from the\ndrive root.').hasFullLinkRule).toBe(true)
     expect(readReplyRules('It lifts ONLY on his report phrases: `full report`.').hasFullLinkRule).toBe(false)
   })

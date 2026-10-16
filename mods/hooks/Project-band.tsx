@@ -642,6 +642,10 @@ const ROW_SHORTCUTS = [MAIN_SHORTCUT, FAST_SHORTCUT] as const
 const FIX_WORD = /^fix\s/i
 const SAY_GO_KIT = /\bsay\s+`?go kit`?(?![\w])/gi
 const SAY_QUOTED = /\bsay\s+`([^`\n]{1,24})`/gi
+// The words chained to an asked one: "Say `Only 1` or `Only 2`", "Say `Fix`,
+// `Drop` or `Backlog`". Each is asked as much as the first (owner, 2026-10-17,
+// after Only 2 had no button).
+const SAY_CHAINED = /^\s*(?:,|or|\/)\s*`([^`\n]{1,24})`/i
 // The bare form is capitals only, as in "Say GO": a word in prose after "say"
 // ("I would say Fast mode") is no ask. Any other word is asked in backticks.
 const SAY_BARE = /\b[Ss]ay\s+([A-Z]{2,}(?:\s+[A-Z]{2,})?)(?=[\s,.!?;:]|$)/g
@@ -672,6 +676,15 @@ export function askedWordsIn(answer: string): string[] {
 
   collect(SAY_GO_KIT, answer, () => KIT_SHORTCUT)
   collect(SAY_QUOTED, answer, match => match[1] ?? '')
+  for (const match of answer.matchAll(SAY_QUOTED)) {
+    let at = (match.index ?? 0) + match[0].length
+    for (;;) {
+      const chained = SAY_CHAINED.exec(answer.slice(at))
+      if (chained === null) break
+      found.push({ at, word: chained[1] ?? '' })
+      at += chained[0].length
+    }
+  }
   // "Say Go kit" is read above, so the bare form never reads a lone "Go".
   collect(SAY_BARE, answer.replace(SAY_GO_KIT, ' '), match => match[1] ?? '')
   const verdicts = VERDICTS.exec(answer)

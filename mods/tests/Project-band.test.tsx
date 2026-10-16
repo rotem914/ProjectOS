@@ -1724,6 +1724,15 @@ describe('the shortcut buttons', () => {
     await reply('Say `fix map` and I correct the names.')
     await kit.clock.settle()
     expect((await buttonsOn(ui)).slice(0, 2)).toEqual(['fix map', 'Go commit \u00b7 2'])
+
+    // A word chained to an asked one with "or" or a comma is asked too
+    // (owner, 2026-10-17, after "Say `Only 1` or `Only 2`" gave one button).
+    await reply('Say `Go rule` to write both.\nSay `Only 1` or `Only 2` for one of them.')
+    await kit.clock.settle()
+    expect((await buttonsOn(ui)).slice(0, 3)).toEqual(['Go rule', 'Only 1', 'Only 2'])
+    await reply('Say `Fix`, `Drop` or `Backlog` on it.')
+    await kit.clock.settle()
+    expect((await buttonsOn(ui)).slice(0, 3)).toEqual(['Fix', 'Drop', 'Backlog'])
     await $.prompt.submit(typed('later'))
     await kit.clock.settle()
 

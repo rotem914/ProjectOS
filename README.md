@@ -175,7 +175,10 @@ the project does not have is left as written: the fix never guesses.
 desktop app ends a turn with that box, filled by a tool call, and with a
 question or buttons in it the app shows a paragraph of its own in place of the
 reply. The plugin refuses such a call with the reason, and the assistant calls
-again with the recap alone and puts the question in the reply.
+again with the recap alone and puts the question in the reply. In a project
+whose `project-os/Conversations.md` says a report never ends on the question
+panel, the plugin also refuses that panel once the turn already holds a
+report, with the reason: the options go under Next as Say words.
 
 Claude Code puts the plugin's name on what a mod shows: the short notice
 after a push and the message a button sends both carry it.
