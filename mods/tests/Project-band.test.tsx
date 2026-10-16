@@ -1759,6 +1759,15 @@ describe('the shortcut buttons', () => {
     await reply('The kit commit is in. Say Go commit when you want it.')
     await kit.clock.settle()
     expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
+
+    // A shortcut behind the three dots is still offered when asked for: the
+    // owner cannot see it there (seen 2026-10-16 with Go rule).
+    await reply('Say `Go rule` and I write the nine blocks.')
+    await kit.clock.settle()
+    expect((await buttonsOn(ui))[0]).toBe('Go rule')
+    await ui.press({ key: 'asked-0' })
+    await kit.clock.settle()
+    expect(kit.world.prompts.at(-1)?.text).toBe('Go rule')
     await ui.unmount()
   })
 

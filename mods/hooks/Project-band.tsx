@@ -606,7 +606,10 @@ function fastAfter(text: string, isOn: boolean): boolean {
 // verdicts, "fix / drop / backlog", offers each verdict for every item. A
 // reply that ends on a question and names no word offers Approve and Approve
 // all. Three at most, in the order the reply names them; a word that has a
-// button of its own in the row (Go commit) is left out. Two or more fixes
+// button of its own in the row (Go commit, FAST MODE) is left out, while a
+// shortcut that sits behind the three dots (Go rule, Go audit) is offered
+// like any other word: it was asked for, and the owner cannot see it (seen
+// 2026-10-16, after Go rule joined the list and lost its button). Two or more fixes
 // asked by name (Say `fix map`, Say `fix rows`) get Fix all before them, and
 // the row then holds one more than usual, so no fix is lost (owner,
 // 2026-10-16).
@@ -631,6 +634,8 @@ const ASKED_GAP_ALT = 'Answers'
 const APPROVE_WORDS = ['Approve', 'Approve all'] as const
 const VERDICT_WORDS = ['Fix all', 'Drop all', 'Backlog all'] as const
 const FIX_ALL = VERDICT_WORDS[0]
+// The shortcuts with a button of their own in the row, never offered twice.
+const ROW_SHORTCUTS = [MAIN_SHORTCUT, FAST_SHORTCUT] as const
 const FIX_WORD = /^fix\s/i
 const SAY_GO_KIT = /\bsay\s+`?go kit`?(?![\w])/gi
 const SAY_QUOTED = /\bsay\s+`([^`\n]{1,24})`/gi
@@ -662,7 +667,7 @@ export function askedWordsIn(answer: string): string[] {
     const clean = word.trim().replace(/\s+/g, ' ')
     const isTaken = (other: string) => other.toLowerCase() === clean.toLowerCase()
 
-    if (clean !== '' && clean.length <= ASKED_LABEL_MAX && !words.some(isTaken) && !SHORTCUTS.some(isTaken)) {
+    if (clean !== '' && clean.length <= ASKED_LABEL_MAX && !words.some(isTaken) && !ROW_SHORTCUTS.some(isTaken)) {
       words.push(clean)
     }
   }

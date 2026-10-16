@@ -138,7 +138,9 @@ own window, in the desktop app and in the terminal, in every folder you open.
   list of verdicts offers `Fix all`, `Drop all` and `Backlog all`, two or
   more fixes asked by name get `Fix all` before them, and a
   reply that ends on a yes-or-no question with no word named offers
-  `Approve` and `Approve all`. These answers sit right after the project's name, 48
+  `Approve` and `Approve all`. A shortcut behind the three dots, `Go rule` or
+  `Go audit`, is offered the same way when asked for; only `Go commit` and
+  `Fast mode`, which sit in the row already, are not. These answers sit right after the project's name, 48
   pixels from it, apart from the row's other buttons at its far end.
 - No `Push` in a project with a push step of its own, such as push checks or
   large files kept in Git LFS. Claude Code runs a mod's git without that
