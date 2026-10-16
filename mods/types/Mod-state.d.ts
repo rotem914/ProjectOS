@@ -73,6 +73,12 @@ export type ProjectBandFacts = {
    */
   fill?: number | null
   /**
+   * How much of the account's five-hour window is used, as a whole
+   * percentage, the "Session limit" of the app's usage box (owner,
+   * 2026-10-16). Null off a subscription or before the first reading.
+   */
+  session?: number | null
+  /**
    * How many heavy things in the project wait for the owner's word: leftovers
    * and backups over 1 GB, as the kit's own listing counts them. Null when
    * there are none, when the project has no such listing, and until it ran.

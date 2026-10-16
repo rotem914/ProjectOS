@@ -114,6 +114,8 @@ type World = {
   promptHoldMs: number
   /** How full the conversation is, in percent; null before its first answer. */
   fill: number | null
+  /** The five-hour window used, in percent; null off a subscription. */
+  session: number | null
   /** What the project's listing of heavy files prints. */
   heavyOut: string
   /** Whether the project's local address answers, and every address asked. */
@@ -218,6 +220,7 @@ function worldOf(changes: Partial<World> = {}): World {
     isPromptRefused: false,
     promptHoldMs: 0,
     fill: null,
+    session: null,
     heavyOut: '',
     isServerUp: false,
     fetched: [],
@@ -478,7 +481,7 @@ function install(on: On, changes: Partial<World> = {}): Kit {
     value: {
       startedAt: startOfTime,
       context: { window: 200_000, ...(world.fill === null ? {} : { percent: world.fill }) },
-      rateLimits: [],
+      rateLimits: world.session === null ? [] : [{ kind: 'five_hour', percentUsed: world.session }],
       cost: { usd: 0 },
     },
   }))
@@ -1993,7 +1996,7 @@ describe('the shortcut buttons', () => {
 
     const ui = await bandOn($, surface)
 
-    expect(await buttonsOn(ui)).toEqual(['42%', 'Go commit \u00b7 2', '\u22ee'])
+    expect(await buttonsOn(ui)).toEqual(['C: 42%', 'Go commit \u00b7 2', '\u22ee'])
     expect((await ui.find({ key: 'fill' }))?.props.plain).toBe(true)
     await ui.press({ key: 'fill' })
     await kit.clock.settle()
@@ -2012,6 +2015,30 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
+  // The five-hour window, the app's "Session limit", sits before the fill as
+  // words, S then C (owner, 2026-10-16); off a subscription it is absent.
+  onEachSurface('the session limit stands before the fill, as words', async ($, on, surface) => {
+    const kit = install(on, { changed: 2, fill: 23, session: 73.4 })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await buttonsOn(ui)).toEqual(['C: 23%', 'Go commit \u00b7 2', '\u22ee'])
+    const drawn = await ui.findAll({})
+    const session = drawn.findIndex(one => one.type === 'Text' && JSON.stringify(one).includes('S: 73%'))
+    const fill = drawn.findIndex(one => one.type === 'Button' && one.props.label === 'C: 23%')
+    expect(await ui.find({ type: 'Text', text: 'S: 73%' })).toBeTruthy()
+    expect(session).toBeGreaterThan(-1)
+    expect(session).toBeLessThan(fill)
+
+    kit.world.session = null
+    await endTurn($, kit)
+    expect(await ui.find({ type: 'Text', text: 'S: 73%' })).toBeFalsy()
+    expect(await buttonsOn(ui)).toEqual(['C: 23%', 'Go commit \u00b7 2', '\u22ee'])
+    await ui.unmount()
+  })
+
   onEachSurface('from 80% the number is pastel orange and Compact stands beside it', async ($, on, surface) => {
     const kit = install(on, { changed: 2, fill: 79 })
 
@@ -2020,7 +2047,7 @@ describe('the shortcut buttons', () => {
     const ui = await bandOn($, surface)
 
     // Below 80 nothing changes: the number is the plain button.
-    expect(await buttonsOn(ui)).toEqual(['79%', 'Go commit \u00b7 2', '\u22ee'])
+    expect(await buttonsOn(ui)).toEqual(['C: 79%', 'Go commit \u00b7 2', '\u22ee'])
 
     kit.world.fill = 80
     await endTurn($, kit)
@@ -2029,7 +2056,7 @@ describe('the shortcut buttons', () => {
     expect(await buttonsOn(ui)).toEqual(['Compact', 'Go commit \u00b7 2', '\u22ee'])
     expect(await ui.find({ key: 'fill' })).toBeFalsy()
 
-    const number = await ui.find({ type: 'Text', text: '80%' })
+    const number = await ui.find({ type: 'Text', text: 'C: 80%' })
 
     expect(number?.props.color).toBe('#F5BE8C')
     expect((await ui.find({ key: 'compact' }))?.props.plain).toBeUndefined()
@@ -2376,7 +2403,7 @@ describe('the server light', () => {
     // The dot is 6 pixels and sits before the percentage.
     const drawn = await ui.findAll({})
     const dot = drawn.findIndex(one => one.type === 'Svg' && String(one.props.source).includes('r="4"'))
-    const fill = drawn.findIndex(one => one.type === 'Button' && one.props.label === '23%')
+    const fill = drawn.findIndex(one => one.type === 'Button' && one.props.label === 'C: 23%')
 
     expect(drawn[dot]?.props).toMatchObject({ width: 6, height: 6, alt: 'Local server is running' })
     expect(dot).toBeGreaterThan(-1)

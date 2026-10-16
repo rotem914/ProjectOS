@@ -317,6 +317,8 @@ type RowPlan = {
   name: string
   /** How full the conversation is, as the row reads it; empty when unknown. */
   fill: string
+  /** The five-hour window, "S: 73%", drawn before the fill; empty when unknown. */
+  session: string
   /** True from 80% full: the number is orange words and Compact follows it. */
   isFillHigh: boolean
   words: string
@@ -1513,11 +1515,17 @@ function planOf(
   const fullName = labelOf(known)
   // The percentage alone, before the words (owner, 2026-10-03). It is drawn
   // without a frame, so it takes its own cells and the one that separates it.
+  // The five-hour window first, then the conversation, each with its letter
+  // ("S: 73%   C: 23%", owner, 2026-10-16); the window is words, never a button.
   const fill = known.fill ?? null
-  const fillText = fill === null ? '' : `${Math.round(fill)}%`
+  const fillText = fill === null ? '' : `C: ${Math.round(fill)}%`
+  const session = known.session ?? null
+  const sessionText = session === null ? '' : `S: ${Math.round(session)}%`
   const isFillHigh = fill !== null && Math.round(fill) >= FILL_HIGH
   const fillCells =
-    (fillText === '' ? 0 : fillText.length + 1) + (isFillHigh ? buttonsWidth([COMPACT_LABEL]) : 0)
+    (sessionText === '' ? 0 : sessionText.length + 1) +
+    (fillText === '' ? 0 : fillText.length + 1) +
+    (isFillHigh ? buttonsWidth([COMPACT_LABEL]) : 0)
   const steps = [
     { isShort: false, isInRow: true, hasCommit: hasMain, hasUpdate: canUpdate },
     { isShort: true, isInRow: true, hasCommit: hasMain, hasUpdate: canUpdate },
@@ -1527,6 +1535,7 @@ function planOf(
   let plan: RowPlan = {
     name: fullName,
     fill: fillText,
+    session: sessionText,
     isFillHigh,
     words: '',
     heavy: '',
@@ -1582,6 +1591,7 @@ function planOf(
     plan = {
       name: fullName,
       fill: fillText,
+      session: sessionText,
       isFillHigh,
       words,
       heavy: heavyWords,
@@ -1755,6 +1765,11 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
               width={SERVER_PIXELS}
               height={SERVER_PIXELS}
             />
+          </Box>
+        )}
+        {plan.session !== '' && (
+          <Box flexShrink={0}>
+            <Text>{plan.session}</Text>
           </Box>
         )}
         {plan.fill !== '' && !plan.isFillHigh && (
@@ -2602,14 +2617,18 @@ async function passRepo($: Dollar): Promise<void> {
   }
 }
 
-// How full the conversation is. The session has no figure before its first
-// answer, and none right after a compaction: the row shows nothing then. A
-// reading that failed keeps the figure the row already shows.
+// How full the conversation is, and how much of the account's five-hour
+// window is used. The session has no fill before its first answer, and none
+// right after a compaction: the row shows nothing then; the window is absent
+// off a subscription. A reading that failed keeps the figures the row shows.
 async function passFill($: Dollar): Promise<void> {
   try {
-    const fill = (await $.session.usage()).context.percent ?? null
+    const usage = await $.session.usage()
+    const fill = usage.context.percent ?? null
+    const window = usage.rateLimits.find(limit => limit.kind === 'five_hour')
+    const session = window === undefined ? null : window.percentUsed
 
-    await writeFacts($, now => (now === null ? now : { ...now, fill }))
+    await writeFacts($, now => (now === null ? now : { ...now, fill, session }))
   } catch (error) {
     note($, 'reading how full the conversation is failed', error)
   }
