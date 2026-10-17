@@ -2047,6 +2047,9 @@ describe('the shortcut buttons', () => {
     if (surface === 'desktop') {
       expect(pictures).toContain('Session limit')
       expect(pictures).toContain('Conversation')
+      // 20 pixels between the groups: a 4-pixel spacer between the ring's
+      // group and the bubble's, and one after the bubble's (owner, 2026-10-17).
+      expect(pictures.filter(alt => alt === 'Gap')).toHaveLength(2)
       const ring = (await ui.findAll({ type: 'Svg' })).find(one => one.props.alt === 'Session limit')
       expect(String(ring?.props.source)).toContain('<path d="M6 1.40A4.6 4.6 0 1 1')
       expect(ring?.props).toMatchObject({ width: 14, height: 14 })
@@ -2059,6 +2062,24 @@ describe('the shortcut buttons', () => {
     await endTurn($, kit)
     expect(await ui.find({ type: 'Text', text: '73%' })).toBeFalsy()
     expect(await buttonsOn(ui)).toEqual(['23%', 'Go commit \u00b7 2', '\u22ee'])
+
+    // A measurement the engine pushes lands at once, between turns, and the
+    // window's kind is read loosely (owner, 2026-10-17, after the ring stayed
+    // hidden until the next pass).
+    // The test kit keeps nothing beneath session.measure: the hooks run and
+    // the call then rejects for want of a store, like session.append.
+    await $.session
+      .measure({
+        startedAt: 0,
+        context: { window: 200_000, percent: 23 },
+        rateLimits: [{ kind: 'five_hour', percentUsed: 58.2 }],
+        changed: ['rateLimits'],
+      } as never)
+      .catch((error: unknown) => {
+        if (!String(error).includes('no implementation for session.measure')) throw error
+      })
+    await kit.clock.settle()
+    expect(await ui.find({ type: 'Text', text: '58%' })).toBeTruthy()
     await ui.unmount()
   })
 

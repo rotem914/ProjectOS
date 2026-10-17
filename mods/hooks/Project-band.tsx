@@ -56,6 +56,8 @@ const EVERY_SESSION = { isInteractive: [true, false] } as const
 const EVERY_TURN_END = { isAborted: [true, false] } as const
 // Passed by every prompt, typed with or without the ask to wait its turn.
 const EVERY_PROMPT = { wait: [true, false] } as const
+// Every measurement names at least one unit that moved.
+const EVERY_MEASURE = { changed: ['context', 'rateLimits', 'cost'] } as const
 // A conversation that takes the place of another in the same window: after
 // /clear, a resume, a compaction or a fork. No session start comes with it.
 const NEW_CONVERSATION = { source: ['clear', 'resume', 'compact', 'fork'] } as const
@@ -1683,6 +1685,18 @@ const FIGURE_PIXELS = 14
 const FIGURE_COLOR = NAME_COLOR
 const SESSION_ALT = 'Session limit'
 const FILL_ALT = 'Conversation'
+// The spacing of the figures (owner, 2026-10-17): 8 pixels between a picture
+// and its number, one cell of gap; 20 between the groups, and between the
+// server dot and the ring, which is a cell of gap on each side of a 4-pixel
+// spacer. The spacer is a transparent drawing, since a box of nothing draws
+// with no width; the terminal has no pictures and keeps its cells.
+const GROUP_GAP_PIXELS = 4
+const GROUP_GAP_SVG =
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${GROUP_GAP_PIXELS}" height="8" ` +
+  `viewBox="0 0 ${GROUP_GAP_PIXELS} 8">` +
+  `<rect width="${GROUP_GAP_PIXELS}" height="8" fill="#000000" fill-opacity="0"/>` +
+  '</svg>'
+const GROUP_GAP_ALT = 'Gap'
 
 /** A ring, faint, with an arc from the top filled to `percent` of the way round. */
 export function sessionRing(percent: number): string {
@@ -1818,6 +1832,9 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
             />
           </Box>
         )}
+        {server !== null && table.Svg !== undefined && (plan.session !== '' || plan.fill !== '') && (
+          <table.Svg source={GROUP_GAP_SVG} alt={GROUP_GAP_ALT} width={GROUP_GAP_PIXELS} height={8} />
+        )}
         {plan.session !== '' && (
           <Box flexShrink={0} flexDirection="row" alignItems="center" gap={1}>
             {table.Svg !== undefined ? (
@@ -1833,24 +1850,25 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
             <Text>{plan.session}</Text>
           </Box>
         )}
+        {plan.session !== '' && plan.fill !== '' && table.Svg !== undefined && (
+          <table.Svg source={GROUP_GAP_SVG} alt={GROUP_GAP_ALT} width={GROUP_GAP_PIXELS} height={8} />
+        )}
         {plan.fill !== '' && (
-          <Box flexShrink={0}>
+          <Box flexShrink={0} flexDirection="row" alignItems="center" gap={1}>
             {table.Svg !== undefined ? (
               <table.Svg source={FILL_BUBBLE} alt={FILL_ALT} width={FIGURE_PIXELS} height={FIGURE_PIXELS} />
             ) : (
               <Text>C:</Text>
             )}
+            {plan.isFillHigh ? (
+              <Text color={FILL_HIGH_COLOR}>{plan.fill}</Text>
+            ) : (
+              <Button key="fill" plain label={plan.fill} onPress={() => acts.compact()} />
+            )}
           </Box>
         )}
-        {plan.fill !== '' && !plan.isFillHigh && (
-          <Box flexShrink={0}>
-            <Button key="fill" plain label={plan.fill} onPress={() => acts.compact()} />
-          </Box>
-        )}
-        {plan.fill !== '' && plan.isFillHigh && (
-          <Box flexShrink={0}>
-            <Text color={FILL_HIGH_COLOR}>{plan.fill}</Text>
-          </Box>
+        {plan.fill !== '' && table.Svg !== undefined && (
+          <table.Svg source={GROUP_GAP_SVG} alt={GROUP_GAP_ALT} width={GROUP_GAP_PIXELS} height={8} />
         )}
         {plan.fill !== '' && plan.isFillHigh && (
           <Button key="compact" label={COMPACT_LABEL} onPress={() => acts.compact()} />
@@ -2687,6 +2705,16 @@ async function passRepo($: Dollar): Promise<void> {
   }
 }
 
+// The five-hour window among the rate-limit windows the engine reports, by
+// its kind, read loosely: "five_hour" today, and any spelling that names five
+// hours tomorrow. Null when no window is reported, off a subscription or
+// before the first reading.
+function sessionWindowOf(limits: ReadonlyArray<{ kind: string; percentUsed: number }>): number | null {
+  const window = limits.find(limit => /five|5/i.test(limit.kind))
+
+  return window === undefined ? null : window.percentUsed
+}
+
 // How full the conversation is, and how much of the account's five-hour
 // window is used. The session has no fill before its first answer, and none
 // right after a compaction: the row shows nothing then; the window is absent
@@ -2695,8 +2723,7 @@ async function passFill($: Dollar): Promise<void> {
   try {
     const usage = await $.session.usage()
     const fill = usage.context.percent ?? null
-    const window = usage.rateLimits.find(limit => limit.kind === 'five_hour')
-    const session = window === undefined ? null : window.percentUsed
+    const session = sessionWindowOf(usage.rateLimits)
 
     await writeFacts($, now => (now === null ? now : { ...now, fill, session }))
   } catch (error) {
@@ -3383,6 +3410,25 @@ export function registerProjectBand(on: On): void {
     }
 
     return entered
+  })
+
+  // The engine pushes a fresh measurement after each main turn and whenever
+  // a rate-limit window moves a whole point: the window's figure lands in
+  // the row the moment it is reported, not only when the pass after a turn
+  // happens to read it (owner, 2026-10-17, after the ring stayed hidden).
+  on('session.measure', EVERY_MEASURE, ($, e, next) => {
+    try {
+      const session = sessionWindowOf(e.rateLimits)
+      const fill = e.context.percent ?? null
+
+      inBackground($, 'writing the measurement failed', () =>
+        writeFacts($, now => (now === null ? now : { ...now, fill, session })),
+      )
+    } catch (error) {
+      note($, 'reading the measurement failed', error)
+    }
+
+    return next(e)
   })
 
   on('turn.complete', EVERY_TURN_END, ($, e, next) => {

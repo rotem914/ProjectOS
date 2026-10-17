@@ -150,7 +150,8 @@ own window, in the desktop app and in the terminal, in every folder you open.
 **Two percentages before the words**: how much of the account's five-hour
 window is used, the usage box's "Session limit", behind a small ring that
 fills with it, and how full the conversation is, behind a small speech bubble;
-in the terminal the pictures are the letters `S` and `C`. A press on the
+in the terminal the pictures are the letters `S` and `C`. Eight pixels sit
+between a picture and its number, twenty between the groups. A press on the
 second runs `/compact`, and from 80 it turns orange with a `Compact` button
 beside it. The first is absent off a subscription.
 
