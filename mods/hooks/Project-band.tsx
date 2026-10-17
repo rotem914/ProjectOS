@@ -1854,7 +1854,10 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
           <table.Svg source={GROUP_GAP_SVG} alt={GROUP_GAP_ALT} width={GROUP_GAP_PIXELS} height={8} />
         )}
         {plan.fill !== '' && (
-          <Box flexShrink={0} flexDirection="row" alignItems="center" gap={1}>
+          <Box flexShrink={0} flexDirection="row" alignItems="center" gap={plan.isFillHigh ? 1 : 0}>
+            {/* The number is a button below 80, and a button carries its own
+                padding: no gap before it, or the eight became sixteen (owner,
+                2026-10-17). The orange words past 80 take the cell of gap. */}
             {table.Svg !== undefined ? (
               <table.Svg source={FILL_BUBBLE} alt={FILL_ALT} width={FIGURE_PIXELS} height={FIGURE_PIXELS} />
             ) : (
