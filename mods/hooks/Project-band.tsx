@@ -1683,6 +1683,8 @@ const FILL_HIGH_COLOR = '#F5BE8C'
 // Drawn at 14 pixels on a 12-unit grid: 12 read as tiny (owner, 2026-10-17).
 // The bubble is two pixels shorter than the first cut, its width kept, and
 // its tail bigger, on sight (owner, 2026-10-17); the ring keeps its stroke.
+// The tail is the left wall itself, running straight down to a point, as the
+// owner's own Hey bubble draws it, with the bottom edge returning to it.
 const FIGURE_PIXELS = 14
 const FIGURE_COLOR = NAME_COLOR
 const SESSION_ALT = 'Session limit'
@@ -1723,7 +1725,7 @@ export function sessionRing(percent: number): string {
 const FILL_BUBBLE =
   `<svg xmlns="http://www.w3.org/2000/svg" width="${FIGURE_PIXELS}" height="${FIGURE_PIXELS}" viewBox="0 0 12 12" ` +
   `fill="none" stroke="${FIGURE_COLOR}" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">` +
-  '<path d="M4.1 2.3h3.4a2.6 2.6 0 0 1 2.6 2.6v1.2a2.6 2.6 0 0 1-2.6 2.6H6.6L2.6 11.8V8.6A2.6 2.6 0 0 1 1.5 6.1V4.9a2.6 2.6 0 0 1 2.6-2.6z"/>' +
+  '<path d="M4.1 2.3h3.4a2.6 2.6 0 0 1 2.6 2.6v1.2a2.6 2.6 0 0 1-2.6 2.6H5.4L1.5 11.6V4.9a2.6 2.6 0 0 1 2.6-2.6z"/>' +
   '</svg>'
 const COMPACT_LABEL = 'Compact'
 
