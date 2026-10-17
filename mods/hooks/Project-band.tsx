@@ -1689,18 +1689,23 @@ const FIGURE_PIXELS = 14
 const FIGURE_COLOR = NAME_COLOR
 const SESSION_ALT = 'Session limit'
 const FILL_ALT = 'Conversation'
-// The spacing of the figures (owner, 2026-10-17): 8 pixels between a picture
-// and its number, one cell of gap; 20 between the groups, and between the
-// server dot and the ring, which is a cell of gap on each side of a 4-pixel
-// spacer. The spacer is a transparent drawing, since a box of nothing draws
-// with no width; the terminal has no pictures and keeps its cells.
-const GROUP_GAP_PIXELS = 4
-const GROUP_GAP_SVG =
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${GROUP_GAP_PIXELS}" height="8" ` +
-  `viewBox="0 0 ${GROUP_GAP_PIXELS} 8">` +
-  `<rect width="${GROUP_GAP_PIXELS}" height="8" fill="#000000" fill-opacity="0"/>` +
+// The spacing of the figures (owner, 2026-10-17): 6 pixels between a picture
+// and its number, a 6-pixel spacer and no gap (8 at first, one cell of gap,
+// then two closer on sight); 20 between the groups, and between the server
+// dot and the ring, which is a cell of gap on each side of a 4-pixel spacer.
+// A spacer is a transparent drawing, since a box of nothing draws with no
+// width and a margin comes in whole cells; the terminal has no pictures and
+// keeps its cells.
+const spacerSvg = (pixels: number): string =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${pixels}" height="8" viewBox="0 0 ${pixels} 8">` +
+  `<rect width="${pixels}" height="8" fill="#000000" fill-opacity="0"/>` +
   '</svg>'
+const GROUP_GAP_PIXELS = 4
+const GROUP_GAP_SVG = spacerSvg(GROUP_GAP_PIXELS)
 const GROUP_GAP_ALT = 'Gap'
+const FIGURE_GAP_PIXELS = 6
+const FIGURE_GAP_SVG = spacerSvg(FIGURE_GAP_PIXELS)
+const FIGURE_GAP_ALT = 'Figure gap'
 
 /** A ring, faint, with an arc from the top filled to `percent` of the way round. */
 export function sessionRing(percent: number): string {
@@ -1840,7 +1845,7 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
           <table.Svg source={GROUP_GAP_SVG} alt={GROUP_GAP_ALT} width={GROUP_GAP_PIXELS} height={8} />
         )}
         {plan.session !== '' && (
-          <Box flexShrink={0} flexDirection="row" alignItems="center" gap={1}>
+          <Box flexShrink={0} flexDirection="row" alignItems="center" gap={table.Svg === undefined ? 1 : 0}>
             {table.Svg !== undefined ? (
               <table.Svg
                 source={sessionRing(known.session ?? 0)}
@@ -1851,6 +1856,9 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
             ) : (
               <Text>S:</Text>
             )}
+            {table.Svg !== undefined && (
+              <table.Svg source={FIGURE_GAP_SVG} alt={FIGURE_GAP_ALT} width={FIGURE_GAP_PIXELS} height={8} />
+            )}
             <Text>{plan.session}</Text>
           </Box>
         )}
@@ -1858,19 +1866,26 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
           <table.Svg source={GROUP_GAP_SVG} alt={GROUP_GAP_ALT} width={GROUP_GAP_PIXELS} height={8} />
         )}
         {plan.fill !== '' && (
-          <Box flexShrink={0} flexDirection="row" alignItems="center" gap={plan.isFillHigh ? 1 : 0}>
+          <Box flexShrink={0} flexDirection="row" alignItems="center" gap={table.Svg === undefined ? 1 : 0}>
             {/* The number is a button below 80, and a button carries its own
-                padding: no gap before it, or the eight became sixteen (owner,
-                2026-10-17). The orange words past 80 take the cell of gap. */}
+                cell of padding: the spacer and a margin of minus one cell on
+                it leave the six (owner, 2026-10-17; first no gap at all, or
+                the eight became sixteen). The orange words past 80 take the
+                spacer alone. */}
             {table.Svg !== undefined ? (
               <table.Svg source={FILL_BUBBLE} alt={FILL_ALT} width={FIGURE_PIXELS} height={FIGURE_PIXELS} />
             ) : (
               <Text>C:</Text>
             )}
+            {table.Svg !== undefined && (
+              <table.Svg source={FIGURE_GAP_SVG} alt={FIGURE_GAP_ALT} width={FIGURE_GAP_PIXELS} height={8} />
+            )}
             {plan.isFillHigh ? (
               <Text color={FILL_HIGH_COLOR}>{plan.fill}</Text>
             ) : (
-              <Button key="fill" plain label={plan.fill} onPress={() => acts.compact()} />
+              <Box flexShrink={0} marginLeft={table.Svg === undefined ? 0 : -1}>
+                <Button key="fill" plain label={plan.fill} onPress={() => acts.compact()} />
+              </Box>
             )}
           </Box>
         )}

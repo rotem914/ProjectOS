@@ -2050,6 +2050,10 @@ describe('the shortcut buttons', () => {
       // 20 pixels between the groups: a 4-pixel spacer between the ring's
       // group and the bubble's, and one after the bubble's (owner, 2026-10-17).
       expect(pictures.filter(alt => alt === 'Gap')).toHaveLength(2)
+      // Six pixels between a picture and its number: a spacer after each
+      // picture, with no cell of gap (owner, 2026-10-17, two closer than the
+      // first eight).
+      expect(pictures.filter(alt => alt === 'Figure gap')).toHaveLength(2)
       const ring = (await ui.findAll({ type: 'Svg' })).find(one => one.props.alt === 'Session limit')
       expect(String(ring?.props.source)).toContain('<path d="M6 1.40A4.6 4.6 0 1 1')
       expect(ring?.props).toMatchObject({ width: 14, height: 14 })
