@@ -3481,6 +3481,19 @@ export function registerProjectBand(on: On): void {
       }
     }
 
+    // The turn's blocks end with it: the buttons come from the last reply
+    // alone. A prompt the row itself sends skips its hook on prompts, so
+    // the blocks of the reply before stayed, and a report that asked
+    // nothing still showed the words of the one before it (owner,
+    // 2026-10-18, after a Go commit press).
+    if (e.agentId === undefined) {
+      try {
+        clearTurnBlocks()
+      } catch {
+        // Nothing to clear.
+      }
+    }
+
     // A reply that ends on "Fast mode on" puts the button on the mode.
     if (e.agentId === undefined && !e.isAborted && !work.isFast) {
       try {

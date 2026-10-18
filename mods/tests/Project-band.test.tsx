@@ -1804,6 +1804,21 @@ describe('the shortcut buttons', () => {
     await reply('Draft done, nothing more to say.')
     await kit.clock.settle()
     expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
+
+    // The buttons come from the last reply alone, whatever sent the prompt:
+    // a press on a row button skips the hook on prompts, and the reply
+    // before must not leak its words into the next (owner, 2026-10-18, after
+    // a Go commit press showed a word from the reply before).
+    await kept('Say `Round D` and I start it.')
+    await reply('Draft done, nothing more to say.')
+    await kit.clock.settle()
+    expect((await buttonsOn(ui))[0]).toBe('Round D')
+    await ui.press({ key: 'asked-0' })
+    await kit.clock.settle()
+    expect(kit.world.prompts.at(-1)?.text).toBe('Round D')
+    await reply('The commit is in.')
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
     await ui.unmount()
   })
 
