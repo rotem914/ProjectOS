@@ -70,3 +70,7 @@ Instead, while half the ask is open:
 The day count still stops when the computer sleeps.
 Say `Cloud` and I build the Cloudflare counter.
 ~~~
+
+### 25 · The wrap-up call comes first
+
+The call comes first, and the whole reply follows it as the closing message (rule 19).
