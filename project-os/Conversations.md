@@ -525,6 +525,7 @@ All 16 old links land correctly.
 ### 19 · The wrap-up box carries the recap alone
 
 The app's wrap-up box carries the recap only, never a question or buttons.
+The call comes first, and the whole reply follows it as the closing message.
 
 The Claude desktop app ends a turn with a wrap-up box, filled by a tool call.
 With a question in it, the app folds the reply into the step above and shows a
