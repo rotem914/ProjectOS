@@ -39,3 +39,18 @@ Push to live, the guard now asks even you for ID 🔒
 ### 22 · Labels in a stacked point
 
 Inside a stacked point (rule 10), each label is bold, with a gap line above it (rule 4).
+
+### 23 · A figure the owner must define is asked in the owner's words
+
+When a number on the owner's screen can be counted two ways, each way gets one line: who it counts and over which minutes.
+Never a term from the tool, and never the owner's own label used as if it explained itself.
+Rule 14 already frames every decision in product terms; this is the shape that works for a number.
+
+~~~
+Never:
+Say `5 min` to make Realtime the last 5 minutes instead of Google's 30.
+
+Instead:
+The big top number counts people from the last 30 minutes, as Google's live screen does.
+Say `5 min` and it counts only who is on the site this moment.
+~~~
