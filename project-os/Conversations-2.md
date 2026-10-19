@@ -54,3 +54,19 @@ Instead:
 The big top number counts people from the last 30 minutes, as Google's live screen does.
 Say `5 min` and it counts only who is on the site this moment.
 ~~~
+
+### 24 · Next ends on the open piece, never on the commit line
+
+Next carries the state of the task, not the state of the files.
+While any piece of the ask is open, Next names that piece and its Say word.
+The commit line comes only when the whole ask is done, and then it stands alone.
+The commit policy already ties the commit line to a finished task; this is its reply-side half.
+
+~~~
+Never:
+Uncommitted, and `Go commit` locks it in whenever you want.
+
+Instead, while half the ask is open:
+The day count still stops when the computer sleeps.
+Say `Cloud` and I build the Cloudflare counter.
+~~~
