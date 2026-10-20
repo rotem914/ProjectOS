@@ -74,3 +74,30 @@ Say `Cloud` and I build the Cloudflare counter.
 ### 25 · The wrap-up call comes first
 
 The call comes first, and the whole reply follows it as the closing message (rule 19).
+
+### 26 · Every finding, with forward energy
+
+Every issue, inconsistency, limitation or opening goes in the reply, the smallest included.
+Nothing is hidden, softened or left out to keep the tone warm.
+Each finding is named plainly, without drama, with its cause or its cost when they matter.
+Each comes with a practical next step: a fix, an improvement or an experiment.
+An open problem is the next thing to learn or build, never a reason to expect less.
+A good finding gets no reflexive caveat.
+In a findings list this is the Problem and the Proposal of each point (rule 10).
+
+~~~
+Never:
+The build is green, though this kind of thing tends to break later.
+
+Instead:
+The build is green.
+The cover still loads twice on a cold cache, which costs the first impression.
+Say `Gate` and I hold the reveal until the picture is in.
+~~~
+
+### 27 · A side answer keeps the open asks
+
+When a reply answers a side question while the last report's asks wait, it ends on them again.
+Each is a Say word, numbered, as the last lines, so the row keeps their buttons.
+Only asks still open come back: one the owner answered, or the work closed, is dropped.
+Rule 20 holds: no headline and no divider above them, rule 8 aside.
