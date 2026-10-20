@@ -1773,6 +1773,19 @@ describe('the shortcut buttons', () => {
     await reply('The kit commit is in. Say Go commit when you want it.')
     await kit.clock.settle()
     expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
+    await reply('Say `Fast mode` and I switch.')
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
+
+    // Go commit asked by name is offered beside the other asked words all
+    // the same, its own button at the far end having been missed (owner,
+    // 2026-10-20); the press sends the word as the row's own button does.
+    await reply('1) Say `Type tokens` to wire them.\n2) Say `Go commit` to commit everything.')
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Type tokens', 'Go commit', 'Go commit \u00b7 2', '\u22ee'])
+    await ui.press({ key: 'asked-1' })
+    await kit.clock.settle()
+    expect(kit.world.prompts.at(-1)?.text).toBe('Go commit')
 
     // A shortcut behind the three dots is still offered when asked for: the
     // owner cannot see it there (seen 2026-10-16 with Go rule).

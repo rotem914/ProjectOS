@@ -639,8 +639,11 @@ const ASKED_GAP_ALT = 'Answers'
 const APPROVE_WORDS = ['Approve', 'Approve all'] as const
 const VERDICT_WORDS = ['Fix all', 'Drop all', 'Backlog all'] as const
 const FIX_ALL = VERDICT_WORDS[0]
-// The shortcuts with a button of their own in the row, never offered twice.
-const ROW_SHORTCUTS = [MAIN_SHORTCUT, FAST_SHORTCUT] as const
+// The shortcuts with a button of their own in the row that are not offered
+// twice. Go commit is offered again among the asked words when a reply asks
+// for it: its own button at the far end was missed beside the asked ones
+// (owner, 2026-10-20, "Say Type tokens, say Go commit" read as one button).
+const ROW_SHORTCUTS = [FAST_SHORTCUT] as const
 const FIX_WORD = /^fix\s/i
 const SAY_GO_KIT = /\bsay\s+`?go kit`?(?![\w])/gi
 const SAY_QUOTED = /\bsay\s+`([^`\n]{1,24})`/gi
