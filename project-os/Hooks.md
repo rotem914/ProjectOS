@@ -234,7 +234,7 @@ a rule file, `CLAUDE.md`, a rule doc under `project-os/` (never a living
 record: History, Decisions, Backlog, Map, Mistakes, the bug atlas), a guard
 under `project-os/guards/`, a feature's `Claude.md` or an MCP server's rules
 doc, unless the owner's last typed message in the session's transcript says
-`Go rule` (`CLAUDE.md`, rule 18 and the `Go rule` shortcut). It reads the
+`Update rule` (`CLAUDE.md`, rule 18 and the `Update rule` shortcut). It reads the
 transcript Claude Code names in the hook's payload, only when a rule file is
 the target; a payload without one, a test or a run outside Claude Code, is not
 refused. It catches what the guard sees: the file tools, a redirection, a

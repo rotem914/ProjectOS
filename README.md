@@ -53,7 +53,7 @@ Each one ships with its structure already in place and a worked example at the e
 | `project-os/Hooks.md` | What the hooks do, how they get wired, and how to check they work. |
 | `project-os/Hooks-settings.json` | The ready setup: the reminder text and the two guard lines. |
 | `project-os/Install-project-hooks.mjs` | Writes that setup into the project's own settings, on a computer without the plugin below, or one whose plugin carries older guards than the project. |
-| `project-os/guards/Path-guard.mjs` | The folder guard: refuses the writes it recognises outside the project, and a change to a rule file without the owner's `Go rule`. |
+| `project-os/guards/Path-guard.mjs` | The folder guard: refuses the writes it recognises outside the project, and a change to a rule file without the owner's `Update rule`. |
 | `project-os/guards/Destructive-guard.mjs` | The destructive-command guard: refuses the one-way commands it recognises. |
 | `project-os/guards/Check-on-stop.mjs` | The check when a turn ends: runs the project's quick check after a turn that changed code, and sends the assistant back when it fails. |
 | `project-os/Check-command.json` | The quick check that runs by itself, one command, set at install. |
@@ -138,9 +138,9 @@ own window, in the desktop app and in the terminal, in every folder you open.
   list of verdicts offers `Fix all`, `Drop all` and `Backlog all`, two or
   more fixes asked by name get `Fix all` before them, and a
   reply that ends on a yes-or-no question with no word named offers
-  `Approve` and `Approve all`. A shortcut behind the three dots, `Go rule` or
-  `Go audit`, is offered the same way when asked for; only `Go commit` and
-  `Fast mode`, which sit in the row already, are not. These answers sit right after the project's name, 48
+  `Approve` and `Approve all`. A shortcut behind the three dots, `Update rule` or
+  `Go audit`, is offered the same way when asked for, and so is `Go commit`,
+  beside its own button; only `Fast mode`, which sits in the row, is not. These answers sit right after the project's name, 48
   pixels from it, apart from the row's other buttons at its far end.
 - No `Push` in a project with a push step of its own, such as push checks or
   large files kept in Git LFS. Claude Code runs a mod's git without that

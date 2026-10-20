@@ -72,6 +72,9 @@ const SHORTCUTS = [
   'Go commit and backup',
   'Go audit',
   'Go update kit',
+  'Update rule',
+  // Update rule's name until 2026-10-20, listed for a project whose CLAUDE.md
+  // still carries it, until its kit update brings the new name.
   'Go rule',
   'Go code review',
   'GO visual qa',
@@ -611,8 +614,8 @@ function fastAfter(text: string, isOn: boolean): boolean {
 // verdicts, "fix / drop / backlog", offers each verdict for every item. A
 // reply that ends on a question and names no word offers Approve and Approve
 // all. Three at most, in the order the reply names them; a word that has a
-// button of its own in the row (Go commit, FAST MODE) is left out, while a
-// shortcut that sits behind the three dots (Go rule, Go audit) is offered
+// button of its own in the row (FAST MODE) is left out, while a
+// shortcut that sits behind the three dots (Update rule, Go audit) is offered
 // like any other word: it was asked for, and the owner cannot see it (seen
 // 2026-10-16, after Go rule joined the list and lost its button). Two or more fixes
 // asked by name (Say `fix map`, Say `fix rows`) get Fix all before them, and

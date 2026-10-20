@@ -515,7 +515,7 @@ ever revisits it; a blank one gets answered in ten seconds.
 
 Replace every value written in double curly braces with the real thing, in
 CLAUDE.md and every file under project-os/. The folder guard's lock on rule
-files sleeps while a placeholder remains, so this step needs no `Go rule`
+files sleeps while a placeholder remains, so this step needs no `Update rule`
 from the owner; it closes on each file as its last placeholder goes. None may survive there, and that
 includes the ones sitting inside example fences (`~~~` blocks): an example
 reply in Conversations.md carries the dev address too, and a careful reader of

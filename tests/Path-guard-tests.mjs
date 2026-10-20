@@ -1760,7 +1760,8 @@ hookIn('[R9] POSIX: from a subfolder, ../../x leaves the project', PROOT, { ...b
 
 // Rule files change only on the owner's word (2026-10-15): a write to one is
 // refused unless the owner's last typed message in the transcript the payload
-// names says "Go rule". The transcripts here are made for the run and removed.
+// names says "Update rule", or the older "Go rule". The transcripts here are
+// made for the run and removed.
 console.log('path-guard: rule files change only on the owner\'s word');
 {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'projectos-word-'));
@@ -1774,17 +1775,19 @@ console.log('path-guard: rule files change only on the owner\'s word');
     return p;
   };
   const without = transcript('without.jsonl', said('Go kit'), assistant, toolResult);
-  const withWord = transcript('with.jsonl', said('Go rule, the lock paragraph as proposed'), assistant, toolResult);
-  const stale = transcript('stale.jsonl', said('Go rule'), assistant, said('thanks'), toolResult);
-  const meta = transcript('meta.jsonl', said('Go rule'), line('user', [{ type: 'text', text: 'Go kit' }], { isMeta: true }), toolResult);
-  const summary = transcript('summary.jsonl', said('Go rule'), line('user', 'This session is being continued', { isCompactSummary: true }));
-  const plain = transcript('plain.jsonl', line('user', 'go RULE'), toolResult);
+  const withWord = transcript('with.jsonl', said('Update rule, the lock paragraph as proposed'), assistant, toolResult);
+  const stale = transcript('stale.jsonl', said('Update rule'), assistant, said('thanks'), toolResult);
+  const meta = transcript('meta.jsonl', said('Update rule'), line('user', [{ type: 'text', text: 'Go kit' }], { isMeta: true }), toolResult);
+  const summary = transcript('summary.jsonl', said('Update rule'), line('user', 'This session is being continued', { isCompactSummary: true }));
+  const plain = transcript('plain.jsonl', line('user', 'update RULE'), toolResult);
+  const oldWord = transcript('old.jsonl', said('Go rule'), assistant, toolResult);
   const w = (file, transcript_path) => ({ ...write(file), transcript_path });
   const in_ = (payload, transcript_path) => ({ ...payload, transcript_path });
   t('a Write to CLAUDE.md without the word is refused', w(`${ROOT}/CLAUDE.md`, without), true);
   tWhy('and the reason names the rule file', w(`${ROOT}/CLAUDE.md`, without), 'a rule file');
   t('the same Write with the word passes', w(`${ROOT}/CLAUDE.md`, withWord), false);
   t('the word in any case, in a plain-string message', w(`${ROOT}/CLAUDE.md`, plain), false);
+  t('the older word, Go rule, still opens the lock', w(`${ROOT}/CLAUDE.md`, oldWord), false);
   t('the word in an older message does not carry', w(`${ROOT}/CLAUDE.md`, stale), true);
   t('a meta line the app wrote is not the owner', w(`${ROOT}/CLAUDE.md`, meta), false);
   t('a compaction summary is not the owner either', w(`${ROOT}/CLAUDE.md`, summary), false);
@@ -1848,7 +1851,7 @@ console.log('path-guard: rule files change only on the owner\'s word');
     t('once the last placeholder is gone the lock closes', here(write(`${root}/CLAUDE.md`)), true);
     fs.rmSync(proj, { recursive: true, force: true });
   }
-  hook('run as a process, a rule-file write without the word exits 2 and names the word', payload(w(`${ROOT}/CLAUDE.md`, without)), 2, 'Go rule');
+  hook('run as a process, a rule-file write without the word exits 2 and names the word', payload(w(`${ROOT}/CLAUDE.md`, without)), 2, 'Update rule');
   hook('run as a process, the same write with the word exits 0', payload(w(`${ROOT}/CLAUDE.md`, withWord)), 0);
   fs.rmSync(dir, { recursive: true, force: true });
 }

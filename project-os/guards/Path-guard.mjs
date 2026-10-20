@@ -1120,16 +1120,19 @@ function isExtraRoot(full, rootKey) {
 // MCP rules. One session rewrote the reply rules in the middle of a
 // discussion, unasked (2026-10-15), and a rule changed without the owner's
 // word is a rule the owner never set. So a write to a rule file passes only
-// while the owner's last typed message says "Go rule"; otherwise it is
+// while the owner's last typed message says "Update rule"; otherwise it is
 // refused, and the assistant proposes the change in the reply and asks for
 // that word. The transcript is read only when a rule file is the target. No
 // transcript (a test, a run outside Claude Code) means no refusal here: this
 // guard fails open, like every other check in it.
 // The plan a project keeps under project-os/ is a record too: it changes
-// with every revision, on the owner's verdicts, not on Go rule (2026-10-16,
+// with every revision, on the owner's verdicts, not on Update rule (2026-10-16,
 // after an install's plan move was refused).
 const RULE_RECORDS = /^(?:history(?:-archive|-scan-archive)?|decisions(?:-archive)?|backlog|map|mistakes|bugatlas|plan)\.md$/;
-const OWNER_WORD = /\bgo rule\b/i;
+// The word is "Update rule" (owner, 2026-10-20: in every case). "Go rule",
+// the word until then, still opens the lock, so a project whose rules ask
+// for it is not locked out before its kit update brings the new word.
+const OWNER_WORD = /\b(?:update|go) rule\b/i;
 
 /** Is `full` (lowercased, resolved) a rule file of the project at `rootKey`? */
 function isRuleFile(full, rootKey) {
@@ -1151,13 +1154,13 @@ let CURRENT_PAYLOAD = null;
 let OWNER_WORD_SAID = undefined;
 
 /**
- * Whether the owner's last typed message says "Go rule": true, false, or null
+ * Whether the owner's last typed message says "Update rule": true, false, or null
  * when there is no transcript to read, which the lock treats as not refused.
  * A `user` entry whose content is only tool results is the harness feeding a
  * tool's output back, a meta entry is the app's own, and a compaction summary
  * is the engine's; only a typed message counts, the newest one.
  */
-function ownerSaidGoRule() {
+function ownerSaidUpdateRule() {
   if (OWNER_WORD_SAID !== undefined) return OWNER_WORD_SAID;
   OWNER_WORD_SAID = readOwnerWord(CURRENT_PAYLOAD);
   return OWNER_WORD_SAID;
@@ -1223,9 +1226,9 @@ function stillBeingSetUp(spelled, full) {
  */
 function ruleFileReason(full, rootKey, what, spelled = null) {
   if (stillBeingSetUp(spelled, full)) return null;
-  if (ownerSaidGoRule() !== false) return null;
+  if (ownerSaidUpdateRule() !== false) return null;
   const rel = String(full).toLowerCase().slice(rootKey.length + 1);
-  return `a rule file: ${what} writes to "${rel}", and the owner's last message does not say Go rule`;
+  return `a rule file: ${what} writes to "${rel}", and the owner's last message does not say Update rule`;
 }
 
 // A path as the command spelled it, resolved against `base` with its case
@@ -1284,8 +1287,8 @@ function ruleFileScriptRisk(body, prog, root, base, argv) {
     const named = ruleFilesNamedIn(body, root, base);
     if (named.length === 0) return null;
     if (!scriptMayWrite(body, prog, argv)) return null;
-    if (ownerSaidGoRule() !== false) return null;
-    return `a rule file: the script passed to \`${prog}\` names "${named[0]}" and can write, and the owner's last message does not say Go rule`;
+    if (ownerSaidUpdateRule() !== false) return null;
+    return `a rule file: the script passed to \`${prog}\` names "${named[0]}" and can write, and the owner's last message does not say Update rule`;
   } finally {
     LOOP_VARS = saved;
   }
@@ -5116,7 +5119,7 @@ function main() {
   if (reason && reason.startsWith('a rule file:')) {
     process.stderr.write(
       `path-guard: blocked - ${reason}. A rule changes only on the owner's word: propose the change in the ` +
-        'reply, as before and after, and ask them to say Go rule (CLAUDE.md, the iron rule and the Go rule ' +
+        'reply, as before and after, and ask them to say Update rule (CLAUDE.md, the iron rule and the Update rule ' +
         'shortcut). The living records, History, Decisions, Backlog, Map and Mistakes, are not rule files.\n'
     );
     return BLOCK;

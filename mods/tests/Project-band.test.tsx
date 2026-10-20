@@ -1466,9 +1466,29 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
-  // Go rule, the owner's word for a change to a rule file (2026-10-15), is a
-  // shortcut like the others: a button in More when CLAUDE.md carries it.
-  onEachSurface('Go rule is listed in More when the project carries it', async ($, on, surface) => {
+  // Update rule, the owner's word for a change to a rule file (2026-10-15,
+  // named Go rule until 2026-10-20), is a shortcut like the others: a button
+  // in More when CLAUDE.md carries it.
+  onEachSurface('Update rule is listed in More when the project carries it', async ($, on, surface) => {
+    const kit = install(on, {
+      folder: 'D:\\Work\\Site',
+      files: { 'D:/Work/Site/CLAUDE.md': '### `Go commit`\n### `Update rule`\n' },
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    await ui.press({ key: 'more' })
+    expect(await buttonsOn(ui)).toEqual(['Update rule', 'X'])
+    await ui.press({ key: 'update-rule' })
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Update rule'])
+    await ui.unmount()
+  })
+
+  // A project whose CLAUDE.md still names the old word keeps its button until
+  // its kit update brings the new name.
+  onEachSurface('a project that still carries Go rule keeps that button', async ($, on, surface) => {
     const kit = install(on, {
       folder: 'D:\\Work\\Site',
       files: { 'D:/Work/Site/CLAUDE.md': '### `Go commit`\n### `Go rule`\n' },
@@ -1480,8 +1500,6 @@ describe('the shortcut buttons', () => {
 
     await ui.press({ key: 'more' })
     expect(await buttonsOn(ui)).toEqual(['Go rule', 'X'])
-    await ui.press({ key: 'go-rule' })
-    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go rule'])
     await ui.unmount()
   })
 
@@ -1727,9 +1745,9 @@ describe('the shortcut buttons', () => {
 
     // A word chained to an asked one with "or" or a comma is asked too
     // (owner, 2026-10-17, after "Say `Only 1` or `Only 2`" gave one button).
-    await reply('Say `Go rule` to write both.\nSay `Only 1` or `Only 2` for one of them.')
+    await reply('Say `Update rule` to write both.\nSay `Only 1` or `Only 2` for one of them.')
     await kit.clock.settle()
-    expect((await buttonsOn(ui)).slice(0, 3)).toEqual(['Go rule', 'Only 1', 'Only 2'])
+    expect((await buttonsOn(ui)).slice(0, 3)).toEqual(['Update rule', 'Only 1', 'Only 2'])
     await reply('Say `Fix`, `Drop` or `Backlog` on it.')
     await kit.clock.settle()
     expect((await buttonsOn(ui)).slice(0, 3)).toEqual(['Fix', 'Drop', 'Backlog'])
@@ -1789,12 +1807,12 @@ describe('the shortcut buttons', () => {
 
     // A shortcut behind the three dots is still offered when asked for: the
     // owner cannot see it there (seen 2026-10-16 with Go rule).
-    await reply('Say `Go rule` and I write the nine blocks.')
+    await reply('Say `Update rule` and I write the nine blocks.')
     await kit.clock.settle()
-    expect((await buttonsOn(ui))[0]).toBe('Go rule')
+    expect((await buttonsOn(ui))[0]).toBe('Update rule')
     await ui.press({ key: 'asked-0' })
     await kit.clock.settle()
-    expect(kit.world.prompts.at(-1)?.text).toBe('Go rule')
+    expect(kit.world.prompts.at(-1)?.text).toBe('Update rule')
 
     // The words are read from the last block of the turn that asks, so a
     // note after the report keeps the buttons (owner, 2026-10-16); the next
