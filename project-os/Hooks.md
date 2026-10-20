@@ -343,10 +343,39 @@ turn, and is never left with a broken project that was called done.
 - **It fails open.** No git, a check that cannot start or runs past two and a
   half minutes, any error of its own: the turn ends as usual.
 
-**Not shipped yet: the reply linter.** It would check each reply against the
-reply rules and correct the next one. It is a script of its own with a test
-suite, and it has not been made generic yet, so the kit does not carry it.
-Hooks.md says so here rather than pretending; a project that wants it writes it.
+## The reply check when a turn ends
+
+`guards/Reply-format-check.mjs`, run by the plugin on the Stop event, just
+before the check above. It reads the reply that ended the turn against
+`project-os/Conversations.md` and its continuation files, and checks only the
+rules a script can test without judgment: the reply language when it is
+English, the line ceiling and the words in a line (rule 1), a divider above
+every `# H1` (rule 3) and above every bold point headline (rule 10), one
+sentence per line (rule 5), two asks as two numbered items (rule 8), and a
+link or a path in full inside a fence (rule 12). Every other rule needs
+judgment, and stays the assistant's.
+
+- **It warns, it never blocks.** The owner has already read the reply, and a
+  forced rewrite would show the same answer twice. It leaves a note, and the
+  owner's next message carries it to the assistant, once: the next reply is
+  the one corrected, and the assistant is told never to resend this one. The
+  owner sees nothing.
+- **Only what the project's rules state.** Each check runs only while its
+  rule's own sentence is in the project's Conversations files, and the note
+  names the rule by the project's own number. The limits are read from
+  rule 1 itself, so a project that changed them is held to its own, and a
+  rule reworded or dropped is not checked.
+- **Quiet through the install.** While Conversations.md still holds a setup
+  placeholder, nothing is checked: the rules are not the owner's yet, and the
+  install's question batch is long by design. The install's closing report
+  comes after that, and is held to every rule but the line ceiling, which
+  rule 1 lifts for it.
+- **A plugin thing only.** `Hooks-settings.json` does not carry it, and the
+  kit's script wired in a project's own settings would have nowhere to leave
+  its note. A project that wires a reply checker of its own on Stop, a script
+  named `conversations-lint`, keeps that one, and the plugin stands down.
+- **It fails open.** An unreadable transcript, no rules file, any error of
+  its own: no note, and the turn ends as usual.
 
 ## The laws every hook here obeys
 

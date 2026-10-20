@@ -56,6 +56,7 @@ Each one ships with its structure already in place and a worked example at the e
 | `project-os/guards/Path-guard.mjs` | The folder guard: refuses the writes it recognises outside the project, and a change to a rule file without the owner's `Update rule`. |
 | `project-os/guards/Destructive-guard.mjs` | The destructive-command guard: refuses the one-way commands it recognises. |
 | `project-os/guards/Check-on-stop.mjs` | The check when a turn ends: runs the project's quick check after a turn that changed code, and sends the assistant back when it fails. |
+| `project-os/guards/Reply-format-check.mjs` | The reply check when a turn ends: reads the reply against the reply rules a script can test, and corrects the next reply when one was broken. |
 | `project-os/Check-command.json` | The quick check that runs by itself, one command, set at install. |
 
 **Five upkeep scripts.** All of them run on Node. The first two also ship as PowerShell twins that do the same thing, for anyone who prefers them.

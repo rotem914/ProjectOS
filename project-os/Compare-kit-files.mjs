@@ -116,6 +116,7 @@ const KIT_FILES = [
   { path: 'project-os/guards/Path-guard.mjs', kind: 'machinery' },
   { path: 'project-os/guards/Destructive-guard.mjs', kind: 'machinery' },
   { path: 'project-os/guards/Check-on-stop.mjs', kind: 'machinery' },
+  { path: 'project-os/guards/Reply-format-check.mjs', kind: 'machinery' },
   { path: 'project-os/Install-project-hooks.mjs', kind: 'machinery' },
   { path: 'project-os/Find-heavy-files.mjs', kind: 'machinery' },
   { path: 'project-os/Archive-old-rows.ps1', kind: 'machinery' },

@@ -131,7 +131,7 @@
   .card.owner { background: var(--brand); color: #fff; }
   .card.owner .ct i { color: #C9D0F5; }
   .card.owner .note { color: #E3E7FB; border-color: #8E9AE0; }
-  .cols { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px; min-height: 0; }
+  .cols { flex: 1; display: grid; grid-template-columns: repeat(5, 1fr); gap: 28px; min-height: 0; }
   .cols .card { padding: 24px; gap: 12px; }
   .cols .card::after { display: none; }
   .when { font-size: 14px; font-weight: 600; color: var(--brand); background: var(--panel); border-radius: 20px; padding: 4px 12px; align-self: flex-start; }
@@ -266,6 +266,7 @@ const PARTS = [
     ['Folder guard', 'No write outside the project'],
     ['Destructive guard', 'No one-way command by accident'],
     ['Check when a turn ends', 'Broken code is never called done'],
+    ['Reply check', 'A broken reply rule, mended next reply'],
   ] },
   { id: 'scripts', title: 'Upkeep scripts', items: [
     ['Archive old rows', 'Growing files stay short'],
@@ -328,6 +329,13 @@ const GUARDS = { title: 'Guards and hooks: rules that do not rely on memory', co
     'Each state is checked once, so it never traps the turn.',
     'Fast mode skips it. Go commit still runs every check.',
     'Only for a project approved on this computer.',
+  ]],
+  ['Reply check', 'After every reply', [
+    'Reads the reply against the reply rules a script can test.',
+    'Never blocks: the owner has already read it.',
+    'A broken rule leaves a note, and the next reply is the one corrected.',
+    'Checks only what the project\'s own rules say, under its own numbers.',
+    'Quiet while the install sets the rules up.',
   ]],
 ], laws: [
   ['Fail open', 'A bug in a guard must never trap you inside your own project.'],

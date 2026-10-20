@@ -124,6 +124,19 @@
 // A project whose own settings already wire a check on Stop (a script named
 // check-on-stop) keeps its own: the plugin stands down there.
 //
+// THE REPLY CHECK. On Stop the plugin also reads the reply that ended the
+// turn against the project's reply rules, through its own copy of
+// project-os/guards/Reply-format-check.mjs, which checks only what the
+// project's Conversations.md files state. It never blocks: the owner has
+// already read the reply. It leaves a note, one small file per session in the
+// plugin's own folder under the OS temp folder (never in the project), and on
+// the owner's next message the prompt hook prints that note once and deletes
+// it, so the next reply is the one corrected. It runs before the check above,
+// with a few seconds of its own, so the check keeps its time. A project whose
+// own settings wire a reply checker of its own on Stop (a script named
+// conversations-lint) keeps it, and the plugin stands down there. In the kit
+// repository itself it does not run, as the check does not.
+//
 // FAIL OPEN. Any error of its own exits 0 silently. Set PROJECTOS_PLUGIN_LOG
 // to a file path to get one line per call appended there, for diagnosis.
 //
@@ -737,6 +750,79 @@ function runCheck(rawPayload, root) {
   return 0;
 }
 
+// Where a reply's note waits for the next prompt (see THE REPLY CHECK above),
+// one file per session id.
+const REPLY_NOTES = path.join(os.tmpdir(), 'ProjectOS-plugin-replies');
+const REPLY_CHECK_MS = 5000;
+const noteFile = (id) => path.join(REPLY_NOTES, `${String(id).replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 100)}.txt`);
+
+// A project that wires a reply checker of its own on Stop keeps it. Only its
+// own: the kit's script wired in settings would have no place for its note
+// and no prompt hook to print it, so the plugin's copy keeps running.
+function ownReplyCheckWired(root) {
+  return settingsCommands(settingsDir(root), 'Stop').some((c) => /conversations-lint(?!-recall)/i.test(c));
+}
+
+// A note goes into the assistant's context, so its folder must be this
+// user's alone. On macOS and Linux the OS temp folder can be shared, and a
+// folder another user made first, or one others can write in, is never used.
+function notesFolderIsOurs() {
+  try {
+    const st = fs.lstatSync(REPLY_NOTES);
+    if (!st.isDirectory()) return false;
+    return typeof process.getuid !== 'function' || (st.uid === process.getuid() && (st.mode & 0o022) === 0);
+  } catch {
+    return false;
+  }
+}
+
+// Notes older than a week belong to sessions long gone: removed on the way,
+// so the folder never grows.
+function pruneNotes() {
+  let names;
+  try { names = fs.readdirSync(REPLY_NOTES); } catch { return; }
+  for (const name of names) {
+    const file = path.join(REPLY_NOTES, name);
+    try {
+      if (Date.now() - fs.lstatSync(file).mtimeMs > 7 * DAY) fs.rmSync(file, { force: true });
+    } catch { /* another session's file, mid-write or gone: skip it */ }
+  }
+}
+
+function runReplyCheck(rawPayload, root, payload) {
+  if (ownReplyCheckWired(root)) { log('stop: the project wires its own reply check, stand down'); return; }
+  if (!payload.session_id) { log('stop: no session id, no reply check'); return; }
+  const script = guardScript('Reply-format-check.mjs');
+  if (!fs.existsSync(script)) { log('stop: Reply-format-check.mjs is missing, no reply check'); return; }
+  try { fs.mkdirSync(REPLY_NOTES, { recursive: true, mode: 0o700 }); } catch { /* checked just below */ }
+  if (!notesFolderIsOurs()) { log(`stop: ${norm(REPLY_NOTES)} is not this user's alone, no reply check`); return; }
+  pruneNotes();
+  const r = spawnSync(process.execPath, [script], {
+    input: rawPayload,
+    encoding: 'utf8',
+    env: { ...process.env, CLAUDE_PROJECT_DIR: root, REPLY_CHECK_NOTE: noteFile(payload.session_id) },
+    timeout: REPLY_CHECK_MS,
+  });
+  log(`stop: reply check ${r.error ? r.error.message : `exit ${r.status}`}`);
+}
+
+// The note the last reply left, printed once and deleted. Only a plain file
+// this user owns, in a folder that is this user's alone: never a link, which
+// could point at any file the user can read.
+function takeNote(payload) {
+  if (!payload.session_id || !notesFolderIsOurs()) return '';
+  const file = noteFile(payload.session_id);
+  try {
+    const st = fs.lstatSync(file);
+    if (!st.isFile() || (typeof process.getuid === 'function' && st.uid !== process.getuid())) return '';
+    const note = fs.readFileSync(file, 'utf8');
+    fs.rmSync(file, { force: true });
+    return note.trim();
+  } catch {
+    return '';
+  }
+}
+
 function runGuard(name, rawPayload, root) {
   const script = guardScript(name);
   if (!fs.existsSync(script)) return unchecked(name, `${name} is missing from ${norm(path.dirname(script))}`);
@@ -818,10 +904,18 @@ try {
       const lines = runReminders(kit, root, 'UserPromptSubmit', view);
       if (lines.length) process.stdout.write(`[ProjectOS plugin] ${lines.join('\n')}\n`);
     }
+    // The last reply's note, whatever the marker's state (see THE REPLY
+    // CHECK above).
+    const note = mode === 'prompt' ? takeNote(payload) : '';
+    if (note) process.stdout.write(`<reply-format-check>\n${note}\n</reply-format-check>\n`);
   } else if (mode === 'stop') {
     // The kit's own project-os files are templates: nothing to check there.
     if (isKitItself(root)) log('stop: kit repository itself, inert');
-    else code = runCheck(raw, root);
+    else {
+      // Its own catch: a slip in the reply check must never cost the check.
+      try { runReplyCheck(raw, root, payload); } catch (err) { log(`stop: reply check error, skipped: ${err && err.message}`); }
+      code = runCheck(raw, root);
+    }
   } else if (mode === 'pretool') {
     const tool = String(payload.tool_name || '');
     const dir = settingsDir(root);

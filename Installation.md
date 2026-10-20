@@ -99,7 +99,7 @@ files are never adapted by hand:
 - **The scripts are read by their header only.** `Archive-old-rows.mjs` and
   `Backup-whole-project.mjs` with their PowerShell twins (`.ps1`),
   `Find-heavy-files.mjs`, `Audit-project-records.mjs`, `Compare-kit-files.mjs`,
-  `Install-project-hooks.mjs`, the two files under `project-os/guards/`
+  `Install-project-hooks.mjs`, the files under `project-os/guards/`
   and `hooks/dispatch.mjs` at the kit root (part of the plugin, never copied
   into a project) open with a
   comment that says what they do and how they are wired; read that and stop.

@@ -537,5 +537,5 @@ carries this rule.
 ---
 
 Replies shaped by this file are for one reader's eye.
-No tooling ever parses one back, so every format choice serves scanning, nothing
-else.
+The plugin reads each one back only to hold it to these rules, so every format
+choice still serves scanning, nothing else.
