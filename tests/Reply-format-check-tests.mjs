@@ -523,6 +523,46 @@ test('a project that renamed rule 10\'s labels has its findings lists read by it
   assert.equal(flags('Text.\n\n**Glued headline**\n\nIssue:\nIt breaks.', 'Rule 10 (', { root }), true);
 });
 
+test('rule 5: one initial alone still ends a sentence', () => {
+  assert.equal(flags('I would ship B. It keeps the old links.', 'Rule 5 ('), true);
+});
+
+test('a lone indented marker, a tab, and an indented marker inside a fence never hide what follows', () => {
+  for (const reply of [
+    'List item:\n\n    ```\n\nFirst one. Second one.\n\nThe page:\n\n```\nhttp://localhost:3000/x\n```',
+    'List item:\n\n\t```\n\nFirst one. Second one.',
+    '```\n- step one\n    ```\n- step two\n```\n\nFirst one. Second one.',
+    'List item:\n\n    ```\n\nFirst one. Second one.',
+  ]) {
+    assert.equal(flags(reply, 'Rule 5 ('), true, reply);
+  }
+});
+
+test('turn: a slash command the owner typed starts a turn', () => {
+  const rows = [
+    row('user', 'give me a full report'),
+    row('assistant', [{ type: 'text', text: 'Long one.' }]),
+    row('user', '<command-name>/ultrareview</command-name>'),
+    row('assistant', [{ type: 'text', text: lines(6) }]),
+  ];
+
+  assert.match(check('', { rows }).note, /Rule 1 \(cut hard\)/);
+});
+
+test('the second Stop adds to the first Stop\'s note, never replaces it', () => {
+  const note = path.join(TMP, 'kept note.txt');
+  const run = (input) =>
+    spawnSync(process.execPath, [SCRIPT], { input, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: DEFAULT, REPLY_CHECK_NOTE: note } });
+
+  run(JSON.stringify({ transcript_path: transcript(lines(10)) }));
+  run(JSON.stringify({ transcript_path: transcript('The type check broke. It is fixed now.'), stop_hook_active: true }));
+
+  const kept = fs.readFileSync(note, 'utf8');
+
+  assert.match(kept, /Rule 1 \(cut hard\)/);
+  assert.match(kept, /Rule 5 \(/);
+});
+
 test('a fence inside a list item, indented four spaces, is still a fence', () => {
   const reply = '1) Run it:\n\n    ```\n    # from the project folder\n    npm test\n    ```';
 

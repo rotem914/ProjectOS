@@ -233,8 +233,9 @@ const textOf = (content) => {
 // Only the owner typing starts a turn. Not a tool's output handed back, and
 // not what the harness writes on its own: a row marked isMeta (an image's
 // caption, a skill's text, "Continue from where you left off."), the summary
-// after a compaction, a background task's notice, a command's own output, or
-// a copy of the request sent to the model (a row of another type).
+// after a compaction, a background task's notice, a command's own output (a
+// command the owner typed is the owner's typing), or a copy of the request
+// sent to the model (a row of another type).
 const isOwnerTyping = (row, message) => {
   if (row.type !== undefined && row.type !== 'user') return false;
   if (row.isMeta || row.isCompactSummary) return false;
@@ -244,7 +245,7 @@ const isOwnerTyping = (row, message) => {
     ? content.some((block) => block && block.type !== 'tool_result')
     : typeof content === 'string';
 
-  return typed && !/^\s*<(?:task-notification|local-command|command-name)/.test(textOf(content));
+  return typed && !/^\s*<(?:task-notification|local-command)/.test(textOf(content));
 };
 
 /**
@@ -295,11 +296,29 @@ export function lastTurnIn(transcript) {
 // ---------------------------------------------------------------------------
 
 // One fence model for every check. A fence opens on a run of three or more
-// backticks or tildes at the start of a line, indented or not (a fence inside
-// a list item sits deeper), and closes on a later run of the same mark at
-// least as long, with nothing after it. An unclosed fence runs to the end.
-const FENCE_OPEN = /^\s*(`{3,}|~{3,})/;
-const FENCE_CLOSE = /^\s*(`{3,}|~{3,})\s*$/;
+// backticks or tildes at the start of a line, and closes on a later run of the
+// same mark at least as long, with nothing after it, at most three columns
+// deeper than its own (a tab counts four), so an indented marker quoted inside
+// a fence stays content. An unclosed fence runs to the end. Deeper than three
+// columns, a marker opens a fence only when a closing marker as deep follows:
+// that is a fence inside a list item, while a lone indented marker is a code
+// line that must never silence the rest of the reply, and a later fence at the
+// margin is never its close.
+const FENCE_OPEN = /^([ \t]*)(`{3,}|~{3,})/;
+const FENCE_CLOSE = /^([ \t]*)(`{3,}|~{3,})\s*$/;
+const cols = (ws) => ws.replace(/\t/g, '    ').length;
+const closedLater = (lines, from, marker, indent) =>
+  lines.slice(from).some((line) => {
+    const close = FENCE_CLOSE.exec(line);
+
+    return (
+      close !== null &&
+      cols(close[1]) >= 4 &&
+      cols(close[1]) <= indent + 3 &&
+      close[2][0] === marker[0] &&
+      close[2].length >= marker.length
+    );
+  });
 
 /** The reply's lines, and which of them sit in a fence or the FAST MODE offer. */
 export function linesOf(reply) {
@@ -309,14 +328,16 @@ export function linesOf(reply) {
   const fences = [];
   let mark = null;
   let length = 0;
+  let indent = 0;
 
   for (let i = 0; i < lines.length; i += 1) {
     if (mark === null) {
       const open = FENCE_OPEN.exec(lines[i]);
 
-      if (open) {
-        mark = open[1][0];
-        length = open[1].length;
+      if (open && (cols(open[1]) <= 3 || closedLater(lines, i + 1, open[2], cols(open[1])))) {
+        mark = open[2][0];
+        length = open[2].length;
+        indent = cols(open[1]);
         fenced[i] = true;
         fences.push({ from: i + 1, to: lines.length });
       }
@@ -324,7 +345,7 @@ export function linesOf(reply) {
       fenced[i] = true;
       const close = FENCE_CLOSE.exec(lines[i]);
 
-      if (close && close[1][0] === mark && close[1].length >= length) {
+      if (close && close[2][0] === mark && close[2].length >= length && cols(close[1]) <= indent + 3) {
         mark = null;
         length = 0;
         fences[fences.length - 1].to = i;
@@ -513,8 +534,9 @@ const TWO_SENTENCES = /[\p{Ll}\p{Lu}\p{Nd})\]"'\u201d\u2019][.!?]\s+["'\u201c(]*
 const ABBR_LATIN = /(^|[\s(])(e\.g\.|i\.e\.|etc\.|vs\.|cf\.|a\.m\.|p\.m\.)(?=$|[\s),;:])/gi;
 const ABBR_TITLE =
   /(^|[\s(])(Dr\.|Mr\.|Mrs\.|Ms\.|No\.|Fig\.|St\.|Mt\.|Jr\.|Sr\.|Inc\.|Ltd\.|Co\.|U\.S\.|Ph\.D\.|approx\.|incl\.)(?=$|[\s),;:])/g;
-// An initial, as in "J. K. Rowling": one capital and its stop.
-const INITIAL = /(^|[\s(])([A-Z]\.)(?=\s+[A-Z])/g;
+// Initials, as in "J. K. Rowling": two or more, each a capital and its stop.
+// One alone stays a sentence end: "Plan B. It keeps the links." is two.
+const INITIAL = /(^|[\s(])((?:[A-Z]\.\s+)+[A-Z]\.)(?=\s+[A-Z])/g;
 // A list item's own marker, "1." or "-", is not a sentence end.
 const LIST_MARKER = /^(?:[-*+]|\d{1,3}[.)])\s+/;
 const maskAbbr = (line) => {
@@ -811,17 +833,30 @@ function readStdin() {
   }
 }
 
-function writeNote(text) {
+// The second Stop of a turn adds to the first's note, never replaces it:
+// the reply the owner read before the check sent the assistant back still
+// counts.
+function writeNote(text, keepEarlier) {
   if (NOTE === '') return;
 
   try {
     fs.mkdirSync(path.dirname(NOTE), { recursive: true });
 
+    let earlier = '';
+
+    if (keepEarlier) {
+      try {
+        if (fs.lstatSync(NOTE).isFile()) earlier = fs.readFileSync(NOTE, 'utf8');
+      } catch {
+        // No earlier note: this one stands alone.
+      }
+    }
+
     const draft = `${NOTE}.${process.pid}.tmp`;
 
     // Created new or not at all: a file or a link already standing at that
     // name, in a temp folder others may share, is never written through.
-    fs.writeFileSync(draft, text, { encoding: 'utf8', flag: 'wx' });
+    fs.writeFileSync(draft, earlier ? `${earlier}\n${text}` : text, { encoding: 'utf8', flag: 'wx' });
     fs.renameSync(draft, NOTE);
   } catch {
     // A note that cannot be kept is a correction lost, never an error.
@@ -866,7 +901,7 @@ function main() {
     names: projectNames(ROOT),
   });
 
-  if (note !== '') writeNote(note);
+  if (note !== '') writeNote(note, Boolean(payload.stop_hook_active));
 
   process.exit(ALLOW);
 }
