@@ -56,6 +56,8 @@ const EVERY_SESSION = { isInteractive: [true, false] } as const
 const EVERY_TURN_END = { isAborted: [true, false] } as const
 // Passed by every prompt, typed with or without the ask to wait its turn.
 const EVERY_PROMPT = { wait: [true, false] } as const
+// Every step of a turn carries its turn's id.
+const EVERY_STEP = { turnId: /^/ } as const
 // Every measurement names at least one unit that moved.
 const EVERY_MEASURE = { changed: ['context', 'rateLimits', 'cost'] } as const
 // A conversation that takes the place of another in the same window: after
@@ -623,6 +625,19 @@ function fastAfter(text: string, isOn: boolean): boolean {
 // 2026-10-16).
 const KIT_SHORTCUT = 'Go kit'
 const ASKED_MAX = 3
+
+// The word the row offers after a turn that ended before its reply did: the
+// owner pressed Stop, an error ended it (a usage or rate limit, an overload,
+// a dropped connection), or the model stopped mid-reply at its output limit
+// or the conversation's. The owner typed "continue" by hand each time
+// (owner, 2026-10-22). A press sends it; the next prompt takes it away.
+export const CONTINUE_WORD = 'Continue'
+const CUT_STOPS: readonly (string | null)[] = ['max_tokens', 'model_context_window_exceeded']
+
+/** True when a turn ended before its reply did. */
+export function isCutShort(reason: string, lastStop: string | null): boolean {
+  return reason === 'aborted' || reason === 'error' || CUT_STOPS.includes(lastStop)
+}
 const ASKED_LABEL_MAX = 24
 // The answer buttons sit right after the project's name, 48 pixels from it
 // on the desktop (owner, 2026-10-11; 64 at first, then 48 on sight), apart
@@ -2184,6 +2199,8 @@ const work: {
   isFast: boolean
   /** The backup's age the owner hid its words at; kept here the same way. */
   backupHidden: number | null
+  /** Why the main loop's last model response stopped, until its turn ends. */
+  lastStop: string | null
 } = {
   startFolder: '',
   isSeen: false,
@@ -2210,6 +2227,7 @@ const work: {
   project: null,
   isFast: false,
   backupHidden: null,
+  lastStop: null,
 }
 
 function note($: Dollar, what: string, error: unknown): void {
@@ -3412,9 +3430,11 @@ export function registerProjectBand(on: On): void {
   // owner types them. Either way they pass here, and the Fast button follows.
   // A prompt that did not enter changes nothing.
   on('prompt.submit', EVERY_PROMPT, async ($, e, next) => {
-    // A new prompt starts a new turn: the blocks of the last one are gone.
+    // A new prompt starts a new turn: the blocks of the last one are gone,
+    // and so is the way its model stopped.
     try {
       clearTurnBlocks()
+      work.lastStop = null
     } catch {
       // Nothing to clear.
     }
@@ -3476,12 +3496,21 @@ export function registerProjectBand(on: On): void {
     }
 
     // The words a reply asks for are its buttons; any other reply takes
-    // them away.
-    if (e.agentId === undefined && !e.isAborted) {
+    // them away. A turn that ended before its reply did offers Continue in
+    // their place.
+    if (e.agentId === undefined) {
       try {
-        const asked = askedWordsOfTurn([...turnBlocks(), e.answer])
+        const lastStop = work.lastStop
 
-        inBackground($, 'writing the asked words failed', () => setAsked($, asked))
+        work.lastStop = null
+
+        if (isCutShort(e.reason, lastStop)) {
+          inBackground($, 'writing the continue word failed', () => setAsked($, [CONTINUE_WORD]))
+        } else if (!e.isAborted) {
+          const asked = askedWordsOfTurn([...turnBlocks(), e.answer])
+
+          inBackground($, 'writing the asked words failed', () => setAsked($, asked))
+        }
       } catch (error) {
         note($, 'reading the asked words failed', error)
       }
@@ -3513,6 +3542,23 @@ export function registerProjectBand(on: On): void {
     }
 
     return next(e)
+  })
+
+  // Why the main loop's model stopped: a reply cut at the output limit, or
+  // the conversation's, still ends its turn as an answer, so the turn's end
+  // cannot tell. Everything passes through untouched.
+  on('turn.step', EVERY_STEP, async function* ($, e, next) {
+    const result = yield* next(e)
+
+    if (e.agentId === undefined) {
+      try {
+        work.lastStop = result.stopReason
+      } catch {
+        // A stop that cannot be read offers nothing.
+      }
+    }
+
+    return result
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {

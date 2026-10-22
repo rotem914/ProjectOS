@@ -143,6 +143,9 @@ own window, in the desktop app and in the terminal, in every folder you open.
   `Go audit`, is offered the same way when asked for, and so is `Go commit`,
   beside its own button; only `Fast mode`, which sits in the row, is not. These answers sit right after the project's name, 48
   pixels from it, apart from the row's other buttons at its far end.
+  A turn that ended before its reply did (you pressed Stop, a usage limit
+  or another error ended it, or the reply was cut off at its length limit)
+  offers `Continue` in the same place, until your next message.
 - No `Push` in a project with a push step of its own, such as push checks or
   large files kept in Git LFS. Claude Code runs a mod's git without that
   step, so a push from the row would skip it. The row says

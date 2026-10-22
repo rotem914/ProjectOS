@@ -122,6 +122,8 @@ type World = {
   heavyOut: string
   /** Whether the project's local address answers, and every address asked. */
   isServerUp: boolean
+  /** Why the model stops in the next step the mod sees. */
+  stop: 'end_turn' | 'max_tokens' | 'model_context_window_exceeded' | null
   fetched: string[]
   /** Every slash command the mod ran. */
   commands: string[]
@@ -225,6 +227,7 @@ function worldOf(changes: Partial<World> = {}): World {
     session: null,
     heavyOut: '',
     isServerUp: false,
+    stop: 'end_turn',
     fetched: [],
     commands: [],
     offered: ['compact'],
@@ -418,6 +421,9 @@ function install(on: On, changes: Partial<World> = {}): Kit {
   on('classic.SessionStart', () => ({}))
   on('session.root', () => ({ value: world.folder }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('turn.step', async function* (_, e) {
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: world.stop, usage: null }
+  })
   on('process.run', (_, e) =>
     e.argv[0] === 'node' ? answer(0, world.heavyOut) : gitOf(world, clock, e.argv, e.init),
   )
@@ -1692,6 +1698,70 @@ describe('the shortcut buttons', () => {
     await kit.clock.settle()
     expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['FAST OFF'])
     expect(await buttonsOn(ui)).toEqual(['Fast mode', '\u22ee'])
+    await ui.unmount()
+  })
+
+  // A turn that ended before its reply did offers Continue first in the
+  // row: the owner typed "continue" by hand after every Stop, every limit
+  // and every reply cut off (owner, 2026-10-22). A press sends the word, and
+  // any prompt takes it away.
+  onEachSurface('Continue is offered after a turn that ended before its reply did', async ($, on, surface) => {
+    const kit = install(on, { changed: 2 })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+    const ended = (reason: 'answer' | 'aborted' | 'error', answer = 'Done.') =>
+      $.turn.complete({ answer, durationMs: 1200, isAborted: reason === 'aborted', turnId: 'turn-1', reason })
+    const stepped = async (stop: World['stop']) => {
+      kit.world.stop = stop
+      const stream = $.turn.step({ turnId: 'turn-1', index: 0, model: 'claude-test', messageCount: 1 })
+
+      for await (const _chunk of stream) {
+        // Nothing streams beneath: the step's stop is all it carries.
+      }
+
+      await stream.result
+    }
+
+    // Stopped by the owner: Continue, and a press sends it.
+    await ended('aborted', '')
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Continue', 'Go commit \u00b7 2', '\u22ee'])
+    await ui.press({ key: 'asked-0' })
+    await kit.clock.settle()
+    expect(kit.world.prompts.at(-1)?.text).toBe('Continue')
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
+
+    // Ended by an error (a usage limit, an overload): Continue, until a prompt.
+    await ended('error', '')
+    await kit.clock.settle()
+    expect((await buttonsOn(ui))[0]).toBe('Continue')
+    await $.prompt.submit(typed('what happened?'))
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
+
+    // A reply the model stopped at its output limit ends as an answer; the
+    // step's stop tells it apart, even when the cut text asked for a word.
+    await stepped('max_tokens')
+    await ended('answer', 'Say `Round D` and I sta')
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Continue', 'Go commit \u00b7 2', '\u22ee'])
+    await $.prompt.submit(typed('go on'))
+    await kit.clock.settle()
+
+    // A reply that ended whole offers no Continue, and a cut step of an
+    // earlier turn does not carry over to it.
+    await stepped('end_turn')
+    await ended('answer', 'All done.')
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
+    await stepped('model_context_window_exceeded')
+    await $.prompt.submit(typed('next'))
+    await kit.clock.settle()
+    await ended('answer', 'All done.')
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
     await ui.unmount()
   })
 

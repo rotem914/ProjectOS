@@ -104,7 +104,7 @@ describe('the guards around each part', () => {
 
     expect(register(on, {})).toBeUndefined()
 
-    // Six hooks from the band, then four from the reply check: the rules
+    // Seven hooks from the band, then four from the reply check: the rules
     // read at session start, the fixes as a reply is kept, the wrap-up box,
     // the question panel.
     expect(eventsOf(registered)).toEqual([
@@ -113,6 +113,7 @@ describe('the guards around each part', () => {
       'prompt.submit',
       'session.measure',
       'turn.complete',
+      'turn.step',
       'ui.render',
       'session.start',
       'session.append',
@@ -173,6 +174,7 @@ describe('the guards around each part', () => {
       'prompt.submit',
       'session.measure',
       'turn.complete',
+      'turn.step',
       'session.start',
       'session.append',
       'tool.call',
@@ -209,6 +211,7 @@ describe('the guards around each part', () => {
       'prompt.submit',
       'session.measure',
       'turn.complete',
+      'turn.step',
       'ui.render',
       'session.start',
       'session.start',
