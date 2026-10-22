@@ -145,7 +145,8 @@ own window, in the desktop app and in the terminal, in every folder you open.
   pixels from it, apart from the row's other buttons at its far end.
   A turn that ended before its reply did (you pressed Stop, a usage limit
   or another error ended it, or the reply was cut off at its length limit)
-  offers `Continue` in the same place, until your next message.
+  offers `Continue` in the same place, until your next message. A
+  conversation you reopen gets its last reply's buttons back.
 - No `Push` in a project with a push step of its own, such as push checks or
   large files kept in Git LFS. Claude Code runs a mod's git without that
   step, so a push from the row would skip it. The row says

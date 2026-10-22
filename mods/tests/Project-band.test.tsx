@@ -16,7 +16,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On, RenderElement } from 'claude-code'
 import type { Engine, MockClock } from 'claude-code/testing'
 
-import { sessionRing } from '../hooks/Project-band'
+import { buttonsOfConversation, sessionRing } from '../hooks/Project-band'
 
 const PLUGIN = 'project-os'
 const SURFACES = ['terminal', 'desktop'] as const
@@ -124,6 +124,8 @@ type World = {
   isServerUp: boolean
   /** Why the model stops in the next step the mod sees. */
   stop: 'end_turn' | 'max_tokens' | 'model_context_window_exceeded' | null
+  /** The conversation's rows, as the mod reads them back. */
+  messages: { role: 'user' | 'assistant'; text: string; toolUses: never[] }[]
   fetched: string[]
   /** Every slash command the mod ran. */
   commands: string[]
@@ -228,6 +230,7 @@ function worldOf(changes: Partial<World> = {}): World {
     heavyOut: '',
     isServerUp: false,
     stop: 'end_turn',
+    messages: [],
     fetched: [],
     commands: [],
     offered: ['compact'],
@@ -420,6 +423,7 @@ function install(on: On, changes: Partial<World> = {}): Kit {
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('classic.SessionStart', () => ({}))
   on('session.root', () => ({ value: world.folder }))
+  on('session.messages', () => ({ value: world.messages }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
   on('turn.step', async function* (_, e) {
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: world.stop, usage: null }
@@ -2200,6 +2204,60 @@ describe('the shortcut buttons', () => {
       })
     await kit.clock.settle()
     expect(await ui.find({ type: 'Text', text: '58%' })).toBeTruthy()
+    await ui.unmount()
+  })
+
+  // A reopened conversation starts with an empty row, so its last reply's
+  // buttons are read back from the conversation (owner, 2026-10-22).
+  test('the last reply\'s buttons are read back from the conversation', () => {
+    const said = (role: 'user' | 'assistant', text: string, toolResults?: unknown[]) => ({ role, text, toolResults })
+    const asked = [said('user', 'fix the share card'), said('assistant', 'Two ways.\n\n1) Say `Figma` and you export it.\n2) Say `Build it` and I make it.')]
+
+    expect(buttonsOfConversation(asked)).toEqual(['Figma', 'Build it'])
+    expect(buttonsOfConversation([])).toEqual([])
+    expect(buttonsOfConversation([said('user', 'thanks')])).toEqual([])
+
+    // A tool's answer is part of the turn; the owner's message ends it.
+    expect(
+      buttonsOfConversation([
+        said('user', 'go'),
+        said('assistant', 'Working on it.'),
+        said('user', '', [{}]),
+        said('assistant', 'Done.\n\nSay `Go commit` to lock it in.'),
+      ]),
+    ).toEqual(['Go commit'])
+    expect(buttonsOfConversation([...asked, said('user', 'later')])).toEqual([])
+
+    // Stopped, or ended by a limit or an error: Continue.
+    expect(buttonsOfConversation([said('user', 'go'), said('assistant', 'Half a'), said('user', '[Request interrupted by user]')])).toEqual(['Continue'])
+    expect(buttonsOfConversation([said('user', 'go'), said('user', '[Request interrupted by user for tool use]')])).toEqual(['Continue'])
+    for (const failed of [
+      "You've hit your session limit \u00b7 resets 9pm (Asia/Jerusalem)",
+      "You've reached your Fable limit. Switch to another model, or wait.",
+      "You're out of usage credits. Run /usage-credits to keep using Claude.",
+      'API Error: 529 Overloaded. This is a server-side issue.',
+    ]) {
+      expect(buttonsOfConversation([said('user', 'go'), said('assistant', failed)])).toEqual(['Continue'])
+    }
+
+    // A stop the owner answered with a new message is over.
+    expect(buttonsOfConversation([said('user', 'go'), said('user', '[Request interrupted by user]'), said('user', 'never mind')])).toEqual([])
+  })
+
+  onEachSurface('a reopened conversation gets its last reply\'s buttons back', async ($, on, surface) => {
+    const kit = install(on, {
+      changed: 2,
+      messages: [
+        { role: 'user', text: 'fix the share card', toolUses: [] },
+        { role: 'assistant', text: '1) Say `Figma` and you export it.\n2) Say `Build it` and I make it.', toolUses: [] },
+      ],
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await buttonsOn(ui)).toEqual(['Figma', 'Build it', 'Go commit \u00b7 2', '\u22ee'])
     await ui.unmount()
   })
 

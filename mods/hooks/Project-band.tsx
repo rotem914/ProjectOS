@@ -638,6 +638,70 @@ const CUT_STOPS: readonly (string | null)[] = ['max_tokens', 'model_context_wind
 export function isCutShort(reason: string, lastStop: string | null): boolean {
   return reason === 'aborted' || reason === 'error' || CUT_STOPS.includes(lastStop)
 }
+
+// How a stopped turn and a failed one are written into the conversation: the
+// row Claude Code adds when the owner presses Stop, and the reply it writes
+// in the model's place when an error or a limit ends the turn (read from the
+// owner's own transcripts, 2026-10-22).
+const STOPPED_ROW = /^\[Request interrupted by user/
+const FAILED_REPLY =
+  /^(?:API Error\b|You've hit your [\w ]*limit\b|You've reached your [\w .-]*limit\b|You're out of usage credits\b|Failed to authenticate\b)/
+
+/** One row of the conversation, as much of it as the row reads. */
+export type ConversationRow = {
+  role: 'user' | 'assistant'
+  text: string
+  toolResults?: readonly unknown[]
+}
+
+/**
+ * The buttons the conversation's last reply leaves, read back from its rows:
+ * Continue when its turn was stopped or failed, else the words it asks for.
+ * A reopened conversation starts with an empty row (owner, 2026-10-22: the
+ * buttons were gone when he came back to a conversation), so the row reads
+ * them again. The walk goes back from the end to the owner's last message.
+ */
+export function buttonsOfConversation(rows: readonly ConversationRow[]): string[] {
+  const blocks: string[] = []
+
+  for (let at = rows.length - 1; at >= 0; at -= 1) {
+    const row = rows[at]
+
+    if (row === undefined) {
+      continue
+    }
+
+    const text = row.text.trim()
+
+    if (row.role === 'user') {
+      if (STOPPED_ROW.test(text)) {
+        // Stopped with nothing after it: Continue. A reply after the stop
+        // is the turn the row answers.
+        return blocks.length === 0 ? [CONTINUE_WORD] : askedWordsOfTurn(blocks)
+      }
+
+      // A tool's answer is part of the turn; anything else the owner said
+      // ends the walk.
+      if (text === '' && (row.toolResults?.length ?? 0) > 0) {
+        continue
+      }
+
+      break
+    }
+
+    if (text === '') {
+      continue
+    }
+
+    if (blocks.length === 0 && FAILED_REPLY.test(text)) {
+      return [CONTINUE_WORD]
+    }
+
+    blocks.unshift(row.text)
+  }
+
+  return askedWordsOfTurn(blocks)
+}
 const ASKED_LABEL_MAX = 24
 // The answer buttons sit right after the project's name, 48 pixels from it
 // on the desktop (owner, 2026-10-11; 64 at first, then 48 on sight), apart
@@ -2201,6 +2265,8 @@ const work: {
   backupHidden: number | null
   /** Why the main loop's last model response stopped, until its turn ends. */
   lastStop: string | null
+  /** Prompts entered so far: a read of the conversation started before one is stale. */
+  prompts: number
 } = {
   startFolder: '',
   isSeen: false,
@@ -2228,6 +2294,7 @@ const work: {
   isFast: false,
   backupHidden: null,
   lastStop: null,
+  prompts: 0,
 }
 
 function note($: Dollar, what: string, error: unknown): void {
@@ -3357,6 +3424,26 @@ async function cancelAsk($: Dollar, columns: number): Promise<void> {
 // starts without. A compaction goes on in the same conversation, so the mode
 // is kept through it; any other new conversation starts with the mode off.
 // The backup words the owner hid follow the same road.
+// The buttons the conversation's last reply left, put back when the row's
+// values start empty: a reopened or resumed conversation, a new window. A
+// prompt entered while the conversation was read wins: its turn decides.
+async function restoreButtons($: Dollar): Promise<void> {
+  const promptsBefore = work.prompts
+  let buttons: string[]
+
+  try {
+    buttons = buttonsOfConversation(await $.session.messages())
+  } catch (error) {
+    note($, 'reading the last reply failed', error)
+
+    return
+  }
+
+  if (buttons.length > 0 && work.prompts === promptsBefore) {
+    await setAsked($, buttons)
+  }
+}
+
 async function begin($: Dollar, isNewCode: boolean, keepsFast: boolean): Promise<void> {
   const passesBefore = work.passes
 
@@ -3378,6 +3465,7 @@ async function begin($: Dollar, isNewCode: boolean, keepsFast: boolean): Promise
   await writeFacts($, now =>
     now === null ? now : { ...now, backupHidden: work.backupHidden },
   )
+  await restoreButtons($)
 
   if (work.isSeen && work.passes === passesBefore) {
     await refresh($)
@@ -3444,6 +3532,7 @@ export function registerProjectBand(on: On): void {
     try {
       // Whatever was typed or pressed, the Go kit ask has had its answer.
       if (!('drop' in entered)) {
+        work.prompts += 1
         inBackground($, 'clearing the asked words failed', () => setAsked($, []))
       }
 
