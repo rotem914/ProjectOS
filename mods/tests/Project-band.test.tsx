@@ -2413,6 +2413,16 @@ describe('the shortcut buttons', () => {
 
     expect(number?.props.color).toBe('#F5BE8C')
     expect(kit.world.commands).toEqual([])
+
+    // The square turns with its number (owner, 2026-11-04); the terminal
+    // writes a letter and has no picture to turn.
+    if (surface === 'desktop') {
+      const square = (await ui.findAll({ type: 'Svg' })).find(one => one.props.alt === 'Conversation')
+
+      expect(String(square?.props.source)).toContain('stroke="#F5BE8C"')
+      expect(String(square?.props.source)).toContain('fill="#F5BE8C"')
+      expect(String(square?.props.source)).not.toContain('#B3B4BC')
+    }
     await ui.unmount()
   })
 
@@ -2584,7 +2594,7 @@ describe('Update Kit', () => {
     const ui = await bandOn($, surface)
 
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toEqual(['Update Kit \u00b7 1', 'X'])
+    expect(await buttonsOn(ui)).toEqual(['Compact', 'Update Kit \u00b7 1', 'X'])
     await ui.press({ key: 'go-update-kit' })
     await kit.clock.settle()
     expect(kit.world.prompts).toHaveLength(1)

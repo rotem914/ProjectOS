@@ -111,6 +111,14 @@ const KIT_MARKERS = ['project-os/Hooks-settings.json', 'project-os/hooks-setting
 const RESEARCH_SHORTCUT = '/deep-research'
 const RESEARCH_COMMAND = 'deep-research'
 const RESEARCH_LABEL = 'Deep Research'
+// Compact is a command of Claude Code too, and sits in the More list of every
+// project that carries the kit, at all times (owner, 2026-11-04: a permanent
+// Compact button there, after the one beside the fill was taken out the same
+// day). A press runs it as /compact typed by the owner, and the row reads the
+// fill again when it is done.
+const COMPACT_SHORTCUT = '/compact'
+const COMPACT_COMMAND = 'compact'
+const COMPACT_LABEL = 'Compact'
 // Fast mode sits beside Go commit in the row (owner, 2026-10-03). The kit's
 // heading for it is the mode's name, the button reads shorter, and the words
 // it sends are the ones that switch the mode on.
@@ -1538,6 +1546,10 @@ function buttonTextOf(phrase: string, isFast: boolean, isUpdateWaiting = false):
     return isUpdateWaiting ? `${UPDATE_LABEL} \u00b7 1` : UPDATE_LABEL
   }
 
+  if (phrase === COMPACT_SHORTCUT) {
+    return COMPACT_LABEL
+  }
+
   return phrase === RESEARCH_SHORTCUT ? RESEARCH_LABEL : phrase
 }
 
@@ -1593,6 +1605,7 @@ function planOf(
             known.shortcuts.includes(phrase),
         ),
         ...(known.hasResearch === true ? [RESEARCH_SHORTCUT] : []),
+        ...(known.hasKit === true ? [COMPACT_SHORTCUT] : []),
         // The kit's update is offered only while one waits, and it comes
         // last, so it sits beside the button that closes the list (owner,
         // 2026-10-04).
@@ -1835,8 +1848,12 @@ const SQUARE_SHAPE = 'M4.35 1.4h3.3a2 2 0 0 1 2 2v5.2a2 2 0 0 1-2 2h-3.3a2 2 0 0
 const SQUARE_TOP = 1.4
 const SQUARE_BOTTOM = 10.6
 
-/** A rounded square, filled from its bottom to `percent` of its height. */
-export function fillSquare(percent: number): string {
+/**
+ * A rounded square, filled from its bottom to `percent` of its height, in
+ * `color`: the row's grey, or the number's orange from 80, so the picture
+ * turns with its number (owner, 2026-11-04).
+ */
+export function fillSquare(percent: number, color: string = FIGURE_COLOR): string {
   const share = Math.min(100, Math.max(0, percent)) / 100
   const height = (SQUARE_BOTTOM - SQUARE_TOP) * share
   const fill =
@@ -1844,11 +1861,11 @@ export function fillSquare(percent: number): string {
       ? ''
       : `<clipPath id="fill-clip"><path d="${SQUARE_SHAPE}"/></clipPath>` +
         `<rect x="0" y="${(SQUARE_BOTTOM - height).toFixed(2)}" width="12" height="${height.toFixed(2)}" ` +
-        `fill="${FIGURE_COLOR}" fill-opacity="0.9" stroke="none" clip-path="url(#fill-clip)"/>`
+        `fill="${color}" fill-opacity="0.9" stroke="none" clip-path="url(#fill-clip)"/>`
 
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${FIGURE_PIXELS}" height="${FIGURE_PIXELS}" viewBox="0 0 12 12" ` +
-    `fill="none" stroke="${FIGURE_COLOR}" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">` +
+    `fill="none" stroke="${color}" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">` +
     `<path d="${SQUARE_SHAPE}" stroke-opacity="0.35"/>${fill}</svg>`
   )
 }
@@ -2024,7 +2041,7 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
                 padding, which pushed the picture away from its number). */}
             {table.Svg !== undefined ? (
               <table.Svg
-                source={fillSquare(known.fill ?? 0)}
+                source={fillSquare(known.fill ?? 0, plan.isFillHigh ? FILL_HIGH_COLOR : FIGURE_COLOR)}
                 alt={FILL_ALT}
                 width={FIGURE_PIXELS}
                 height={FIGURE_PIXELS}
@@ -3145,6 +3162,25 @@ async function submitShortcut($: Dollar, phrase: string, columns: number): Promi
   if ((await read($, ask)) !== null) {
     await closeAsk($)
     await ringBack($, ['more'], columns)
+  }
+
+  // Compact is a command, not words for the model: it is run as the owner
+  // typing /compact would run it, and waits its turn behind a running turn.
+  if (phrase === COMPACT_SHORTCUT) {
+    inBackground($, 'running /compact failed', async () => {
+      try {
+        await $.command.run({ command: COMPACT_COMMAND })
+      } catch (error) {
+        note($, 'running /compact failed', error)
+        $.ui.toast('Could not run /compact. Type it in the message box instead.', {
+          timeoutMs: LONG_TOAST_MS,
+        })
+      } finally {
+        await refresh($)
+      }
+    })
+
+    return
   }
 
   // Deep research is a command, not words for the model: it is run as the

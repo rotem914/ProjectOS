@@ -126,7 +126,8 @@ own window, in the desktop app and in the terminal, in every folder you open.
   answers, grey while it does not, whoever started the server.
 - Buttons. One for each kit shortcut the project's `CLAUDE.md` carries:
   `Go commit` in the row, only while files wait, with their count inside it
-  (`Go commit · 1`), the rest behind the three dots. A press sends the phrase as
+  (`Go commit · 1`), the rest behind the three dots, where `Compact` always
+  waits too and runs `/compact`. A press sends the phrase as
   your own message. While a reply is still running the words wait for it to
   end: the button reads with three dots meanwhile, a toast says so, and a
   second press does not queue them again. `Push` and `Update plugin` show only while there is
@@ -160,7 +161,7 @@ square that fills with it too; in the terminal the pictures are the letters
 between a picture and its number, twenty between the groups. Resting the
 pointer on the dot or a picture shows its name above the bar: `Local server`,
 `Usage limit`, `Context window`. From 80 the
-second turns orange. The first is absent off a subscription, and keeps its
+second turns orange, its picture with it. The first is absent off a subscription, and keeps its
 last reading, from any window, until a new one lands or five hours pass.
 
 **How long the last reply took**, under the message box: `12s` under a
