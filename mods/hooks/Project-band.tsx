@@ -1563,8 +1563,10 @@ function sentOf(phrase: string, isFast: boolean, isUpdateByLink = false): string
 }
 
 // The row must fit the width it is given. When it cannot, the words get
-// shorter first, then Go commit and Fast move behind More, then Update
-// plugin does.
+// shorter first, then Fast mode moves behind More, then Go commit does, then
+// Update plugin. Fast goes first because the words a reply asks for take its
+// room, and Go commit is the button pressed most (owner, 2026-11-04, on a row
+// with Go commit asked at the left and Go commit and Fast mode at the right).
 // Past that the layout cuts the words, down to a handful of cells and then
 // away, and when even the label and the buttons do not fit, the label's name
 // is cut. Push stays in every step.
@@ -1632,10 +1634,11 @@ function planOf(
   const fillCells =
     (sessionText === '' ? 0 : sessionText.length + 4) + (fillText === '' ? 0 : fillText.length + 4)
   const steps = [
-    { isShort: false, isInRow: true, hasCommit: hasMain, hasUpdate: canUpdate },
-    { isShort: true, isInRow: true, hasCommit: hasMain, hasUpdate: canUpdate },
-    { isShort: true, isInRow: false, hasCommit: false, hasUpdate: canUpdate },
-    { isShort: true, isInRow: false, hasCommit: false, hasUpdate: false },
+    { isShort: false, hasFast, hasCommit: hasMain, hasUpdate: canUpdate },
+    { isShort: true, hasFast, hasCommit: hasMain, hasUpdate: canUpdate },
+    { isShort: true, hasFast: false, hasCommit: hasMain, hasUpdate: canUpdate },
+    { isShort: true, hasFast: false, hasCommit: false, hasUpdate: canUpdate },
+    { isShort: true, hasFast: false, hasCommit: false, hasUpdate: false },
   ]
   let plan: RowPlan = {
     name: fullName,
@@ -1656,9 +1659,10 @@ function planOf(
   let fixed = 0
 
   for (const step of steps) {
-    // Fast keeps Go commit's company: in the row with it, behind More with it.
-    // A due backup has its age in the words, and its button behind More.
-    const isFastInRow = hasFast && step.isInRow
+    // Fast mode is the first button behind More when the row is crowded, Go
+    // commit the next. A due backup has its age in the words, and its button
+    // behind More.
+    const isFastInRow = step.hasFast
     const words = wordsOf(
       known,
       step.isShort,

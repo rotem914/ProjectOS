@@ -1712,6 +1712,35 @@ describe('the shortcut buttons', () => {
   // row: the owner typed "continue" by hand after every Stop, every limit
   // and every reply cut off (owner, 2026-10-22). A press sends the word, and
   // any prompt takes it away.
+  // When the words a reply asks for crowd the row, Fast mode is the first
+  // button behind More and Go commit stays (owner, 2026-11-04, on a row with
+  // three asked words at the left).
+  onEachSurface('a crowded row folds Fast mode behind More before Go commit', async ($, on, surface) => {
+    const kit = install(on, {
+      changed: 3,
+      files: { 'D:/Work/Site/CLAUDE.md': '### `Go commit`\n### `FAST MODE`\n' },
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface, width(surface, 70))
+
+    // With room, both stay, and nothing waits behind More.
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 3', 'Fast mode'])
+    await $.turn.complete({
+      answer: 'Say `Alpha`, say `Beta` or say `Gamma`.',
+      durationMs: 1200,
+      isAborted: false,
+      turnId: 'turn-1',
+      reason: 'answer',
+    })
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Alpha', 'Beta', 'Gamma', 'Go commit \u00b7 3', '\u22ee'])
+    await ui.press({ key: 'more' })
+    expect((await buttonsOn(ui))[0]).toBe('Fast mode')
+    await ui.unmount()
+  })
+
   onEachSurface('Continue is offered after a turn that ended before its reply did', async ($, on, surface) => {
     const kit = install(on, { changed: 2 })
 
