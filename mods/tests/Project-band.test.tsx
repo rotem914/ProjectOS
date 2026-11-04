@@ -1509,12 +1509,13 @@ describe('the shortcut buttons', () => {
   })
 
   // Update rule, the owner's word for a change to a rule file (2026-10-15,
-  // named Go rule until 2026-10-20), is a shortcut like the others: a button
-  // in More when CLAUDE.md carries it.
-  onEachSurface('Update rule is listed in More when the project carries it', async ($, on, surface) => {
+  // named Go rule until 2026-10-20), has no button of its own (owner,
+  // 2026-11-05): it means something only right after a change is proposed,
+  // and that reply asks for it, which the asked-word tests below cover.
+  onEachSurface('Update rule stays out of More though the project carries it', async ($, on, surface) => {
     const kit = install(on, {
       folder: 'D:\\Work\\Site',
-      files: { 'D:/Work/Site/CLAUDE.md': '### `Go commit`\n### `Update rule`\n' },
+      files: { 'D:/Work/Site/CLAUDE.md': '### `Go commit`\n### `Go audit`\n### `Update rule`\n' },
     })
 
     await start($, kit)
@@ -1522,9 +1523,7 @@ describe('the shortcut buttons', () => {
     const ui = await bandOn($, surface)
 
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toEqual(['Update rule', 'X'])
-    await ui.press({ key: 'update-rule' })
-    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Update rule'])
+    expect(await buttonsOn(ui)).toEqual(['Go audit', 'X'])
     await ui.unmount()
   })
 
@@ -2492,7 +2491,6 @@ describe('the shortcut buttons', () => {
           '### `FAST MODE`',
           '### `Go backup`',
           '### `Go audit`',
-          '### `Update rule`',
           '### `Go code review`',
           '### `GO visual qa`',
         ].join('\n'),
@@ -2519,7 +2517,6 @@ describe('the shortcut buttons', () => {
     if (surface === 'desktop') {
       expect(await cardOf('spaced-go-backup')).toContain('Zip the whole project into the backups folder')
       expect(await cardOf('spaced-go-audit')).toContain('Count the gaps in the project')
-      expect(await cardOf('spaced-update-rule')).toContain('Write the rule change I proposed')
       expect(await cardOf('spaced-go-code-review')).toContain('Review the whole codebase for bugs')
       expect(await cardOf('spaced-go-visual-qa')).toContain('Test the site in the browser as a visitor would')
       expect(await cardOf('spaced-/deep-research')).toContain('Research a topic across many sources')

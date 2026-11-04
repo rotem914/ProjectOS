@@ -69,13 +69,15 @@ const NEW_CONVERSATION = { source: ['clear', 'resume', 'compact', 'fork'] } as c
 // so a project without the kit never gets a button that does nothing.
 // Go commit and backup has no button (owner, 2026-11-04: take it off); its
 // heading is still read whole, so it is never taken for Go commit.
+// Update rule has none either (owner, 2026-11-05): the word means something
+// only right after a rule change is proposed, and that reply asks for it,
+// so it comes as an asked word then.
 const SHORTCUTS = [
   'Go commit',
   'FAST MODE',
   'Go backup',
   'Go audit',
   'Go update kit',
-  'Update rule',
   // Update rule's name until 2026-10-20, listed for a project whose CLAUDE.md
   // still carries it, until its kit update brings the new name.
   'Go rule',
@@ -630,7 +632,8 @@ function fastAfter(text: string, isOn: boolean): boolean {
 // reply that ends on a question and names no word offers Approve and Approve
 // all. Three at most, in the order the reply names them; a word that has a
 // button of its own in the row (FAST MODE) is left out, while a
-// shortcut that sits behind the three dots (Update rule, Go audit) is offered
+// shortcut that sits behind the three dots (Go audit), or the word with no
+// button at all (Update rule), is offered
 // like any other word: it was asked for, and the owner cannot see it (seen
 // 2026-10-16, after Go rule joined the list and lost its button). Two or more fixes
 // asked by name (Say `fix map`, Say `fix rows`) get Fix all before them, and
@@ -1938,7 +1941,6 @@ const CLOSE_TIP = 'Close the list'
 const SHORTCUT_TIPS: Readonly<Record<string, string>> = {
   'Go backup': 'Zip the whole project into the backups folder',
   'Go audit': 'Count the gaps in the project\u2019s records',
-  'Update rule': 'Write the rule change I proposed',
   'Go code review': 'Review the whole codebase for bugs',
   'GO visual qa': 'Test the site in the browser as a visitor would',
   [RESEARCH_SHORTCUT]: 'Research a topic across many sources',

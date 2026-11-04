@@ -142,8 +142,9 @@ own window, in the desktop app and in the terminal, in every folder you open.
   list of verdicts offers `Fix all`, `Drop all` and `Backlog all`, two or
   more fixes asked by name get `Fix all` before them, and a
   reply that ends on a yes-or-no question with no word named offers
-  `Approve` and `Approve all`. A shortcut behind the three dots, `Update rule` or
-  `Go audit`, is offered the same way when asked for, and so is `Go commit`,
+  `Approve` and `Approve all`. `Update rule` has no button of its own and comes
+  only this way, right after a rule change is proposed. A shortcut behind the
+  three dots, such as `Go audit`, is offered the same way when asked for, and so is `Go commit`,
   beside its own button; only `Fast mode`, which sits in the row, is not. These answers sit right after the project's name, 48
   pixels from it, apart from the row's other buttons at its far end.
   A turn that ended before its reply did (you pressed Stop, a usage limit
