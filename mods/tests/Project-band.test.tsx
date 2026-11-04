@@ -1741,6 +1741,46 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
+  // Each figure carries its name as a card, hidden until the pointer rests on
+  // the figure, to its right (owner, 2026-11-04, through a side chat): the
+  // name and nothing more. The terminal has no pointer and draws none.
+  test('each figure carries its name as a card shown while the pointer rests on it', async ($, on) => {
+    const kit = install(on, {
+      files: { 'D:/Work/Site/CLAUDE.md': '### `Go commit`\nLocal app URL: `http://localhost:4321`\n' },
+      fill: 23,
+      session: 73.4,
+    })
+
+    await start($, kit)
+    await kit.clock.settle()
+
+    const ui = await bandOn($, 'desktop')
+    // A hidden card is no element of its own in the drawing: it sits among
+    // its group's children, its hover recorded beside its props.
+    type Drawn = { props: Record<string, unknown>; hover?: { display?: string }; children?: Drawn[] }
+    const groups = (await ui.findAll({ type: 'Box' })) as unknown as Drawn[]
+    const cardOf = (key: string) =>
+      groups.find(one => one.props.key === key)?.children?.find(child => child.hover?.display === 'flex')
+
+    for (const [key, words] of [
+      ['server-dot', 'Local server'],
+      ['usage-limit', 'Usage limit'],
+      ['context-window', 'Context window'],
+    ]) {
+      const card = cardOf(String(key))
+
+      expect(JSON.stringify(card)).toContain(words)
+      expect(card?.props).toMatchObject({ display: 'none', position: 'absolute', top: 0 })
+      expect(Number(card?.props.right)).toBeLessThan(0)
+    }
+    await ui.unmount()
+
+    const terminal = await bandOn($, 'terminal')
+
+    expect(JSON.stringify(await terminal.findAll({ type: 'Box' }))).not.toContain('"hover"')
+    await terminal.unmount()
+  })
+
   onEachSurface('Continue is offered after a turn that ended before its reply did', async ($, on, surface) => {
     const kit = install(on, { changed: 2 })
 

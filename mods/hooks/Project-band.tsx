@@ -1773,6 +1773,17 @@ const FIGURE_PIXELS = 14
 const FIGURE_COLOR = NAME_COLOR
 const SESSION_ALT = 'Session limit'
 const FILL_ALT = 'Conversation'
+// A word for each figure, shown to its right, inside the bar, while the
+// pointer rests on it (owner, 2026-11-04, through a side chat: the pictures
+// alone did not say what they count). The figure's name and nothing more
+// (owner: no need to load it). The card is drawn hidden and absolutely
+// placed, so it moves nothing, and the surface shows it on hover with no
+// hook run; the band's own area clips it, so it cannot leave the bar.
+const SERVER_TIP = 'Local server'
+const SESSION_TIP = 'Usage limit'
+const FILL_TIP = 'Context window'
+const TIP_BACKGROUND = '#383838'
+const TIP_COLOR = '#D4D4D4'
 // The spacing of the figures (owner, 2026-10-17): 6 pixels between a picture
 // and its number, a 6-pixel spacer and no gap (8 at first, one cell of gap,
 // then two closer on sight); 20 between the groups, and between the server
@@ -1836,6 +1847,26 @@ export function fillSquare(percent: number): string {
     `<svg xmlns="http://www.w3.org/2000/svg" width="${FIGURE_PIXELS}" height="${FIGURE_PIXELS}" viewBox="0 0 12 12" ` +
     `fill="none" stroke="${FIGURE_COLOR}" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">` +
     `<path d="${SQUARE_SHAPE}" stroke-opacity="0.35"/>${fill}</svg>`
+  )
+}
+
+// The card's right edge sits its own width and a cell past the figure's
+// right edge, so its left edge is one cell right of the figure, whatever the
+// figure's width in cells.
+function drawTip({ Box, Text }: Table, words: string): RenderElement {
+  return (
+    <Box
+      position="absolute"
+      top={0}
+      right={-(words.length + 3)}
+      display="none"
+      hover={{ display: 'flex' }}
+      backgroundColor={TIP_BACKGROUND}
+      paddingX={1}
+      flexShrink={0}
+    >
+      <Text color={TIP_COLOR}>{words}</Text>
+    </Box>
   )
 }
 
@@ -1936,20 +1967,27 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
         flexShrink={1}
       >
         {server !== null && table.Svg !== undefined && (
-          <Box flexShrink={0}>
+          <Box key="server-dot" flexShrink={0}>
             <table.Svg
               source={serverDot(server === 'up' ? SERVER_UP_COLOR : SERVER_DOWN_COLOR)}
               alt={server === 'up' ? SERVER_UP_ALT : SERVER_DOWN_ALT}
               width={SERVER_PIXELS}
               height={SERVER_PIXELS}
             />
+            {drawTip(table, SERVER_TIP)}
           </Box>
         )}
         {server !== null && table.Svg !== undefined && (plan.session !== '' || plan.fill !== '') && (
           <table.Svg source={GROUP_GAP_SVG} alt={GROUP_GAP_ALT} width={GROUP_GAP_PIXELS} height={8} />
         )}
         {plan.session !== '' && (
-          <Box flexShrink={0} flexDirection="row" alignItems="center" gap={table.Svg === undefined ? 1 : 0}>
+          <Box
+            key="usage-limit"
+            flexShrink={0}
+            flexDirection="row"
+            alignItems="center"
+            gap={table.Svg === undefined ? 1 : 0}
+          >
             {table.Svg !== undefined ? (
               <table.Svg
                 source={sessionRing(known.session ?? 0)}
@@ -1964,13 +2002,20 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
               <table.Svg source={FIGURE_GAP_SVG} alt={FIGURE_GAP_ALT} width={FIGURE_GAP_PIXELS} height={8} />
             )}
             <Text>{plan.session}</Text>
+            {table.Svg !== undefined && drawTip(table, SESSION_TIP)}
           </Box>
         )}
         {plan.session !== '' && plan.fill !== '' && table.Svg !== undefined && (
           <table.Svg source={GROUP_GAP_SVG} alt={GROUP_GAP_ALT} width={GROUP_GAP_PIXELS} height={8} />
         )}
         {plan.fill !== '' && (
-          <Box flexShrink={0} flexDirection="row" alignItems="center" gap={table.Svg === undefined ? 1 : 0}>
+          <Box
+            key="context-window"
+            flexShrink={0}
+            flexDirection="row"
+            alignItems="center"
+            gap={table.Svg === undefined ? 1 : 0}
+          >
             {/* The number is words at every fill, so the spacer alone leaves
                 the six (owner, 2026-11-04: as a button it carried its own
                 padding, which pushed the picture away from its number). */}
@@ -1988,6 +2033,7 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
               <table.Svg source={FIGURE_GAP_SVG} alt={FIGURE_GAP_ALT} width={FIGURE_GAP_PIXELS} height={8} />
             )}
             {plan.isFillHigh ? <Text color={FILL_HIGH_COLOR}>{plan.fill}</Text> : <Text>{plan.fill}</Text>}
+            {table.Svg !== undefined && drawTip(table, FILL_TIP)}
           </Box>
         )}
         {plan.fill !== '' && table.Svg !== undefined && (
