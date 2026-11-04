@@ -67,11 +67,12 @@ const NEW_CONVERSATION = { source: ['clear', 'resume', 'compact', 'fork'] } as c
 // The shortcuts a button exists for, in the order More lists them. A button
 // appears only when the project's CLAUDE.md carries the phrase as a heading,
 // so a project without the kit never gets a button that does nothing.
+// Go commit and backup has no button (owner, 2026-11-04: take it off); its
+// heading is still read whole, so it is never taken for Go commit.
 const SHORTCUTS = [
   'Go commit',
   'FAST MODE',
   'Go backup',
-  'Go commit and backup',
   'Go audit',
   'Go update kit',
   'Update rule',
@@ -1589,6 +1590,7 @@ function planOf(
   state: ProjectBandBusy,
   columns: number,
   isCheckDrawn = false,
+  now: number | null = null,
 ): RowPlan {
   const isInRepo = known.repo !== null
   // Go commit shows only while there is something to commit (owner,
@@ -1644,7 +1646,7 @@ function planOf(
   const fill = known.fill ?? null
   const fillText = fill === null ? '' : `${Math.round(fill)}%`
   const session = known.session ?? null
-  const sessionText = session === null ? '' : `${Math.round(session)}%`
+  const sessionText = session === null ? '' : (sessionLeftOf(session, known.sessionResets, now) ?? `${Math.round(session)}%`)
   const isFillHigh = fill !== null && Math.round(fill) >= FILL_HIGH
   const fillCells =
     (sessionText === '' ? 0 : sessionText.length + 4) + (fillText === '' ? 0 : fillText.length + 4)
@@ -1842,6 +1844,25 @@ export function sessionTipOf(resetsAt: string | null | undefined, now: number): 
   return `${SESSION_TIP} \u00b7 Resets ${left} \u00b7 ${clock}`
 }
 
+/**
+ * At 100 the ring's number is the time left until the window resets, as
+ * "1h, 20m" or "54m" (owner, 2026-11-04: at 100% the percentage says
+ * nothing, the wait does). Null below 100, or when no future reset is known,
+ * and the percentage shows.
+ */
+export function sessionLeftOf(percent: number, resetsAt: string | null | undefined, now: number | null): string | null {
+  const at = typeof resetsAt === 'string' ? Date.parse(resetsAt) : Number.NaN
+
+  if (Math.round(percent) < 100 || now === null || !Number.isFinite(at) || at <= now) {
+    return null
+  }
+
+  const minutes = Math.ceil((at - now) / 60_000)
+  const hours = Math.floor(minutes / 60)
+
+  return hours > 0 ? `${hours}h, ${minutes % 60}m` : `${minutes}m`
+}
+
 export function sessionRing(percent: number): string {
   const share = Math.min(100, Math.max(0, percent)) / 100
   const r = 4.6
@@ -1933,7 +1954,7 @@ function drawLabel({ Box, Text, Svg }: Table, name: string): RenderElement {
 function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
   const { Box, Text, Button } = table
   const { known, state } = look
-  const plan = planOf(known, state, look.columns, look.isCheckDrawn)
+  const plan = planOf(known, state, look.columns, look.isCheckDrawn, look.now)
   const files = known.repo?.files ?? null
   const isPushArmed = look.open !== null && look.open.kind === 'push'
   const canPush = isPushArmed || pushTarget(known.repo) !== null

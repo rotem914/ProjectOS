@@ -16,7 +16,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On, RenderElement } from 'claude-code'
 import type { Engine, MockClock } from 'claude-code/testing'
 
-import { buttonsOfConversation, sessionRing, sessionTipOf } from '../hooks/Project-band'
+import { buttonsOfConversation, sessionLeftOf, sessionRing, sessionTipOf } from '../hooks/Project-band'
 
 const PLUGIN = 'project-os'
 const SURFACES = ['terminal', 'desktop'] as const
@@ -1443,7 +1443,9 @@ describe('the shortcut buttons', () => {
     // prompt always carry the phrase the kit's way.
     expect(await buttonsOn(ui)).toEqual(['\u22ee'])
     await ui.press({ key: 'more' })
-    expect(await buttonsOn(ui)).toEqual(['Go backup', 'Go commit and backup', 'X'])
+    // Go commit and backup has no button (owner, 2026-11-04), and its heading
+    // is still not taken for Go commit.
+    expect(await buttonsOn(ui)).toEqual(['Go backup', 'X'])
     await ui.press({ key: 'go-backup' })
     expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go backup'])
     await ui.unmount()
@@ -2128,7 +2130,6 @@ describe('the shortcut buttons', () => {
     await ui.press({ key: 'more' })
     expect(await buttonsOn(ui)).toEqual([
       'Go backup',
-      'Go commit and backup',
       'Go audit',
       'Go code review',
       'X',
@@ -2411,6 +2412,20 @@ describe('the shortcut buttons', () => {
     expect(sessionTipOf(new Date(now - 60_000).toISOString(), now)).toBe('Usage limit')
     expect(sessionTipOf(null, now)).toBe('Usage limit')
     expect(sessionTipOf('not a time', now)).toBe('Usage limit')
+  })
+
+  // At 100 the number is the wait until the reset (owner, 2026-11-04).
+  test('at 100 the ring\'s number is the time left until the reset', () => {
+    const now = Date.UTC(2026, 10, 4, 20, 0, 0)
+    const in80 = new Date(now + 80 * 60_000).toISOString()
+    const in54 = new Date(now + 54 * 60_000).toISOString()
+
+    expect(sessionLeftOf(100, in80, now)).toBe('1h, 20m')
+    expect(sessionLeftOf(99.6, in54, now)).toBe('54m')
+    expect(sessionLeftOf(97, in80, now)).toBeNull()
+    expect(sessionLeftOf(100, null, now)).toBeNull()
+    expect(sessionLeftOf(100, new Date(now - 60_000).toISOString(), now)).toBeNull()
+    expect(sessionLeftOf(100, in80, null)).toBeNull()
   })
 
   onEachSurface('the ring\'s card carries the reset the engine reports', async ($, on, surface) => {
@@ -2868,7 +2883,6 @@ describe('More', () => {
     expect(await wordsOn(ui)).toBe('site-web')
     expect(await buttonsOn(ui)).toEqual([
       'Go backup',
-      'Go commit and backup',
       'Go audit',
       'Go code review',
       'X',
@@ -3914,7 +3928,6 @@ describe('a narrow row', () => {
     expect(await buttonsOn(narrow)).toEqual([
       'Go commit',
       'Go backup',
-      'Go commit and backup',
       'Go audit',
       'Go code review',
       'X',
