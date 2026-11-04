@@ -1810,11 +1810,14 @@ export function sessionRing(percent: number): string {
 }
 
 // The cylinder's body, closed, so the fill can be clipped to it; the top rim
-// is drawn over it. The fill is measured on the body's own height, so a half
-// fill reaches half way up the cylinder, not half way up the box.
+// is drawn over it. The fill is measured from the body's bottom to the rim's
+// lower edge, not to the top of the box: measured to the top, a 70 percent
+// fill reached under the rim and read as full, since the rim's ellipse looks
+// like part of the body (owner, 2026-11-04). Now the room left is the dark
+// band between the rim and the fill, and a full cylinder is filled to its rim.
 const CYLINDER_BODY =
   'M1.7 2.8v6.4c0 .8 1.9 1.5 4.3 1.5s4.3-.7 4.3-1.5V2.8c0-.8-1.9-1.5-4.3-1.5S1.7 2 1.7 2.8z'
-const CYLINDER_TOP = 1.3
+const CYLINDER_TOP = 4.3
 const CYLINDER_BOTTOM = 10.7
 
 /** A storage cylinder, filled from its bottom to `percent` of its height. */
