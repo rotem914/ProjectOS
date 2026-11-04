@@ -633,8 +633,11 @@ function gitRuns(world: World, command: string): GitCall[] {
 // The band's width that leaves `usable` cells for the row: the terminal keeps
 // a few cells at the end for its own mark, the desktop a few at the start
 // for the drawing before the name.
+// The desktop's cells are a fifth narrower than the row's own letters, so
+// the row takes a fifth more than the desktop reports (2026-11-04): a test
+// that wants `usable` cells for the row reports fewer to the desktop.
 function width(surface: Surface, usable: number): number {
-  return usable + (surface === 'terminal' ? MARK : MARK_CELLS)
+  return surface === 'terminal' ? usable + MARK : Math.ceil((usable + MARK_CELLS) / 1.2)
 }
 
 // One test per surface, with the surface in its name.
@@ -2177,6 +2180,11 @@ describe('the shortcut buttons', () => {
       const ring = (await ui.findAll({ type: 'Svg' })).find(one => one.props.alt === 'Session limit')
       expect(String(ring?.props.source)).toContain('<path d="M6 1.40A4.6 4.6 0 1 1')
       expect(ring?.props).toMatchObject({ width: 14, height: 14 })
+      // The conversation's picture is a storage cylinder filled to the fill
+      // (owner, 2026-11-04, picked as 7 of 10 on a board).
+      const cylinder = (await ui.findAll({ type: 'Svg' })).find(one => one.props.alt === 'Conversation')
+      expect(String(cylinder?.props.source)).toContain('<ellipse cx="6" cy="2.8"')
+      expect(String(cylinder?.props.source)).toContain('clip-path="url(#fill-clip)"')
     } else {
       expect(await ui.find({ type: 'Text', text: 'S:' })).toBeTruthy()
       expect(await ui.find({ type: 'Text', text: 'C:' })).toBeTruthy()

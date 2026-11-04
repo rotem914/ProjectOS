@@ -154,8 +154,9 @@ own window, in the desktop app and in the terminal, in every folder you open.
 
 **Two percentages before the words**: how much of the account's five-hour
 window is used, the usage box's "Session limit", behind a small ring that
-fills with it, and how full the conversation is, behind a small speech bubble;
-in the terminal the pictures are the letters `S` and `C`. Six pixels sit
+fills with it, and how full the conversation is, behind a small storage
+cylinder that fills with it too; in the terminal the pictures are the letters
+`S` and `C`. Six pixels sit
 between a picture and its number, twenty between the groups. From 80 the
 second turns orange. The first is absent off a subscription.
 

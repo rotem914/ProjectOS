@@ -188,6 +188,9 @@ const WRITE_WAIT_MS = 30
 // The terminal draws its own collapse mark over the last cells of the band.
 // The row keeps clear of them there, so the mark never covers a button.
 const TERMINAL_MARK_CELLS = 4
+// How much more room a remote surface has than its cells say (see the row's
+// drawing, where the budget is set).
+const REMOTE_ROOM = 1.2
 // Words cut to fewer cells than this say nothing, so they are left out.
 const WORDS_MIN_CELLS = 8
 
@@ -1755,13 +1758,11 @@ const NAME_COLOR = '#B3B4BC'
 const FILL_HIGH = 80
 const FILL_HIGH_COLOR = '#F5BE8C'
 // The two small pictures before the percentages, in the row's own grey: a
-// ring whose arc fills to the five-hour window's percentage, and a speech
-// bubble for the conversation (owner, 2026-10-17).
+// ring whose arc fills to the five-hour window's percentage, and a storage
+// cylinder that fills from its bottom to the conversation's (owner,
+// 2026-11-04, picked as 7 of 10 on a board; the speech bubble it replaces,
+// picked 2026-10-17 on a board of four, did not read as "context").
 // Drawn at 14 pixels on a 12-unit grid: 12 read as tiny (owner, 2026-10-17).
-// The bubble is two pixels shorter than the first cut, its width kept, and
-// its tail bigger, on sight (owner, 2026-10-17); the ring keeps its stroke.
-// The tail is the left wall itself, running straight down to a point, as the
-// owner's own Hey bubble draws it, with the bottom edge returning to it.
 const FIGURE_PIXELS = 14
 const FIGURE_COLOR = NAME_COLOR
 const SESSION_ALT = 'Session limit'
@@ -1804,11 +1805,31 @@ export function sessionRing(percent: number): string {
   return `${head}<path d="M${cx} ${(cy - r).toFixed(2)}A${r} ${r} 0 ${large} 1 ${x} ${y}"/></svg>`
 }
 
-const FILL_BUBBLE =
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${FIGURE_PIXELS}" height="${FIGURE_PIXELS}" viewBox="0 0 12 12" ` +
-  `fill="none" stroke="${FIGURE_COLOR}" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">` +
-  '<path d="M4.1 2.3h3.4a2.6 2.6 0 0 1 2.6 2.6v1.2a2.6 2.6 0 0 1-2.6 2.6H5.4L1.5 11.6V4.9a2.6 2.6 0 0 1 2.6-2.6z"/>' +
-  '</svg>'
+// The cylinder's body, closed, so the fill can be clipped to it; the top rim
+// is drawn over it. The fill is measured on the body's own height, so a half
+// fill reaches half way up the cylinder, not half way up the box.
+const CYLINDER_BODY =
+  'M1.7 2.8v6.4c0 .8 1.9 1.5 4.3 1.5s4.3-.7 4.3-1.5V2.8c0-.8-1.9-1.5-4.3-1.5S1.7 2 1.7 2.8z'
+const CYLINDER_TOP = 1.3
+const CYLINDER_BOTTOM = 10.7
+
+/** A storage cylinder, filled from its bottom to `percent` of its height. */
+export function fillCylinder(percent: number): string {
+  const share = Math.min(100, Math.max(0, percent)) / 100
+  const height = (CYLINDER_BOTTOM - CYLINDER_TOP) * share
+  const fill =
+    share <= 0
+      ? ''
+      : `<clipPath id="fill-clip"><path d="${CYLINDER_BODY}"/></clipPath>` +
+        `<rect x="0" y="${(CYLINDER_BOTTOM - height).toFixed(2)}" width="12" height="${height.toFixed(2)}" ` +
+        `fill="${FIGURE_COLOR}" fill-opacity="0.9" stroke="none" clip-path="url(#fill-clip)"/>`
+
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${FIGURE_PIXELS}" height="${FIGURE_PIXELS}" viewBox="0 0 12 12" ` +
+    `fill="none" stroke="${FIGURE_COLOR}" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">` +
+    `<path d="${CYLINDER_BODY}"/><ellipse cx="6" cy="2.8" rx="4.3" ry="1.5"/>${fill}</svg>`
+  )
+}
 
 function drawLabel({ Box, Text, Svg }: Table, name: string): RenderElement {
   return (
@@ -1946,7 +1967,12 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
                 the six (owner, 2026-11-04: as a button it carried its own
                 padding, which pushed the picture away from its number). */}
             {table.Svg !== undefined ? (
-              <table.Svg source={FILL_BUBBLE} alt={FILL_ALT} width={FIGURE_PIXELS} height={FIGURE_PIXELS} />
+              <table.Svg
+                source={fillCylinder(known.fill ?? 0)}
+                alt={FILL_ALT}
+                width={FIGURE_PIXELS}
+                height={FIGURE_PIXELS}
+              />
             ) : (
               <Text>C:</Text>
             )}
@@ -3623,8 +3649,18 @@ export function registerProjectBand(on: On): void {
             (open === null || open.kind === 'push') &&
             table.Svg !== undefined &&
             known.repo?.files === 0
+          // A remote surface reports its width in cells of its code font,
+          // wider than the letters the row is drawn in, and a button's real
+          // padding is narrower than the cells counted for it. So the row
+          // folded Go commit and Fast mode behind More with a third of the
+          // row still free, once a Stop put Continue in it (owner,
+          // 2026-11-04). Measured on two screenshots, the desktop has a
+          // fifth more room than its cells say, and everything the row draws
+          // stays under four fifths of its estimate, so a fifth more budget
+          // never overflows. The terminal's cells are its own letters.
+          const reported = e.props.bodyColumns > 0 ? e.props.bodyColumns : 1_000
           const columns =
-            (e.props.bodyColumns > 0 ? e.props.bodyColumns : 1_000) -
+            Math.floor(e.surface === 'terminal' ? reported : reported * REMOTE_ROOM) -
             reserve -
             (table.Svg !== undefined ? MARK_CELLS : 0) -
             (table.Svg !== undefined && (known.server ?? null) !== null ? SERVER_CELLS : 0) -
