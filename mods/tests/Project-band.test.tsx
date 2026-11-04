@@ -2007,7 +2007,10 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
-  onEachSurface('the row is silent about a backup until it is 30 days old, then offers a button', async ($, on, surface) => {
+  // The age shows as words in the row, and the button waits behind More
+  // (owner, 2026-11-04: it sat in the row until the app drew every button
+  // larger).
+  onEachSurface('the row is silent about a backup until it is 30 days old, then says its age', async ($, on, surface) => {
     const kit = install(on, {
       backups: [
         { name: 'Site_2026-08-01_10-00.zip', daysOld: 60 },
@@ -2033,19 +2036,20 @@ describe('the shortcut buttons', () => {
     expect(await buttonsOn(ui)).toEqual(['\u22ee'])
     kit.world.backups = [{ name: 'Site_2026-09-03_10-00.zip', daysOld: 30 }]
     await endTurn($, kit)
-    expect(await wordsOn(ui)).toBe('site-web | All committed')
-    expect(await buttonsOn(ui)).toEqual(['Backup 30d', '\u22ee'])
+    expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 Backup 30d')
+    expect(await buttonsOn(ui)).toEqual(['\u22ee'])
 
-    // The button is the backup shortcut, so More does not list it again.
-    await ui.press({ key: 'go-backup' })
-    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go backup'])
+    // The button is behind More, and a press there sends the phrase.
     await ui.press({ key: 'more' })
     expect(await buttonsOn(ui)).toEqual([
+      'Go backup',
       'Go commit and backup',
       'Go audit',
       'Go code review',
       'X',
     ])
+    await ui.press({ key: 'go-backup' })
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go backup'])
     await ui.unmount()
   })
 
@@ -2070,8 +2074,9 @@ describe('the shortcut buttons', () => {
 
     const narrow = await bandOn($, surface, width(surface, 44))
 
-    expect(await wordsOn(narrow)).toBe('site-web | 3 to commit \u00b7 Backup 45d')
-    expect(await buttonsOn(narrow)).toEqual(['\u22ee'])
+    // Without a backup button the row keeps Go commit, and the age its words.
+    expect(await wordsOn(narrow)).toBe('site-web | Backup 45d')
+    expect(await buttonsOn(narrow)).toEqual(['Go commit \u00b7 3', '\u22ee'])
     await narrow.press({ key: 'more' })
     expect(await buttonsOn(narrow)).toContain('Go backup')
     await narrow.unmount()

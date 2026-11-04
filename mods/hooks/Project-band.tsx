@@ -123,7 +123,10 @@ const FAST_ON_LABEL = 'Fast Off'
 const FAST_OFF_SENT = 'FAST OFF'
 // The backup's age is read from the newest ZIP in the project's backups
 // folder, where the kit's backup puts it. It is quiet words until the backup
-// is this many days old, and a button from then on (owner, 2026-10-04).
+// is this many days old, and from then on the age sits in the row's words
+// while the Go backup button waits behind the three dots (owner, 2026-10-04;
+// the button sat in the row until 2026-11-04, when the app drew every button
+// larger and the row grew crowded).
 // A press on the quiet words takes them out of the row, and runs no backup:
 // they come back when the backup is a day older, or in the next conversation
 // (owner, 2026-10-04).
@@ -335,8 +338,6 @@ type RowPlan = {
   hasFast: boolean
   /** What the Fast button reads: the mode's state rides in it. */
   fastLabel: string
-  /** What the backup button reads; empty when the row draws none. */
-  backup: string
   /** The backup's age as quiet words a press hides; empty when not shown. */
   backupQuiet: string
   /** True once the newest backup is old enough to call for a new one. */
@@ -1560,8 +1561,8 @@ function sentOf(phrase: string, isFast: boolean, isUpdateByLink = false): string
 }
 
 // The row must fit the width it is given. When it cannot, the words get
-// shorter first, then Go commit, Fast and the backup button move behind More,
-// then Update plugin does.
+// shorter first, then Go commit and Fast move behind More, then Update
+// plugin does.
 // Past that the layout cuts the words, down to a handful of cells and then
 // away, and when even the label and the buttons do not fit, the label's name
 // is cut. Push stays in every step.
@@ -1646,7 +1647,6 @@ function planOf(
     hasCommit: false,
     hasFast: false,
     fastLabel,
-    backup: '',
     backupQuiet,
     isBackupDue,
     hasUpdate: false,
@@ -1657,21 +1657,19 @@ function planOf(
 
   for (const step of steps) {
     // Fast keeps Go commit's company: in the row with it, behind More with it.
-    // So does the backup button, which the row draws only for a backup that
-    // is due. A due backup behind More has its age in the words.
+    // A due backup has its age in the words, and its button behind More.
     const isFastInRow = hasFast && step.isInRow
-    const isBackupInRow = isBackupDue && step.isInRow
     const words = wordsOf(
       known,
       step.isShort,
       step.hasCommit,
-      isBackupDue && !isBackupInRow ? backupText : '',
+      isBackupDue ? backupText : '',
       isCheckDrawn,
     ).join(' \u00b7 ')
     const more = [
       ...(hasMain && !step.hasCommit ? [MAIN_SHORTCUT] : []),
       ...(hasFast && !isFastInRow ? [FAST_SHORTCUT] : []),
-      ...others.filter(phrase => !(isBackupInRow && phrase === BACKUP_SHORTCUT)),
+      ...others,
     ]
     const moreHasUpdate = canUpdate && !step.hasUpdate
     const buttons = [
@@ -1679,7 +1677,6 @@ function planOf(
       ...(step.hasCommit ? [sendingOr(state, MAIN_SHORTCUT, commitLabelOf(known))] : []),
       ...(isFastInRow ? [fastLabel] : []),
       ...(canPush ? [pushLabelOf(state, known)] : []),
-      ...(isBackupInRow ? [backupText] : []),
       ...(step.hasUpdate ? [updateLabelOf(state, known)] : []),
       ...(more.length > 0 || moreHasUpdate ? [MORE_LABEL] : []),
     ]
@@ -1702,7 +1699,6 @@ function planOf(
       hasCommit: step.hasCommit,
       hasFast: isFastInRow,
       fastLabel,
-      backup: isBackupInRow ? backupText : '',
       backupQuiet,
       isBackupDue,
       hasUpdate: step.hasUpdate,
@@ -1743,7 +1739,6 @@ function keysOf(known: ProjectBandFacts, state: ProjectBandBusy, columns: number
     ...(plan.hasCommit ? ['go-commit'] : []),
     ...(pushTarget(known.repo) !== null ? ['push'] : []),
     ...(plan.hasFast ? [keyOf(FAST_SHORTCUT)] : []),
-    ...(plan.backup !== '' ? [keyOf(BACKUP_SHORTCUT)] : []),
     ...(plan.hasUpdate ? ['update-plugin'] : []),
     ...(plan.more.length > 0 || plan.moreHasUpdate ? ['more'] : []),
   ]
@@ -1857,7 +1852,6 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
     plan.hasCommit ||
     plan.hasFast ||
     canPush ||
-    plan.backup !== '' ||
     plan.hasUpdate ||
     hasMore
 
@@ -2038,13 +2032,6 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
                 key={keyOf(FAST_SHORTCUT)}
                 label={plan.fastLabel}
                 onPress={() => acts.shortcut(FAST_SHORTCUT)}
-              />
-            )}
-            {plan.backup !== '' && (
-              <Button
-                key={keyOf(BACKUP_SHORTCUT)}
-                label={plan.backup}
-                onPress={() => acts.shortcut(BACKUP_SHORTCUT)}
               />
             )}
             {plan.hasUpdate && (
