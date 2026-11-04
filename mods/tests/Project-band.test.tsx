@@ -2190,10 +2190,16 @@ describe('the shortcut buttons', () => {
       expect(await ui.find({ type: 'Text', text: 'C:' })).toBeTruthy()
     }
 
+    // The window is the account's: its last reading stays until a new one
+    // lands, for as long as the window itself, since a stopped turn and a
+    // fresh window report none (owner, 2026-11-04, "Keep last").
     kit.world.session = null
     await endTurn($, kit)
-    expect(await ui.find({ type: 'Text', text: '73%' })).toBeFalsy()
+    expect(await ui.find({ type: 'Text', text: '73%' })).toBeTruthy()
     expect(await ui.find({ type: 'Text', text: '23%' })).toBeTruthy()
+    await kit.clock.advance(5 * 60 * 60_000)
+    await endTurn($, kit)
+    expect(await ui.find({ type: 'Text', text: '73%' })).toBeFalsy()
 
     // A measurement the engine pushes lands at once, between turns, and the
     // window's kind is read loosely (owner, 2026-10-17, after the ring stayed
@@ -2212,6 +2218,41 @@ describe('the shortcut buttons', () => {
       })
     await kit.clock.settle()
     expect(await ui.find({ type: 'Text', text: '58%' })).toBeTruthy()
+    await ui.unmount()
+  })
+
+  // A new window starts with no reading of the account's window until a reply
+  // finishes: the last reading any window kept shows at once.
+  onEachSurface('a new window shows the last reading of the account\'s window', async ($, on, surface) => {
+    const kit = install(on, {
+      changed: 2,
+      fill: 23,
+      session: null,
+      stored: { 'session-window': { percent: 41.6, at: startOfTime - 60_000 } },
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await ui.find({ type: 'Text', text: '42%' })).toBeTruthy()
+    await ui.unmount()
+  })
+
+  onEachSurface('a reading older than the account\'s window is not shown', async ($, on, surface) => {
+    const kit = install(on, {
+      changed: 2,
+      fill: 23,
+      session: null,
+      stored: { 'session-window': { percent: 41.6, at: startOfTime - 6 * 60 * 60_000 } },
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await ui.find({ type: 'Text', text: '42%' })).toBeFalsy()
+    expect(await ui.find({ type: 'Text', text: '23%' })).toBeTruthy()
     await ui.unmount()
   })
 

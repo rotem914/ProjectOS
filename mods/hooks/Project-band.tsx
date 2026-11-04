@@ -2826,6 +2826,52 @@ function sessionWindowOf(limits: ReadonlyArray<{ kind: string; percentUsed: numb
   return window === undefined ? null : window.percentUsed
 }
 
+// The window is the account's, not one conversation's, so its last reading
+// is kept in the plugin's own store and shown until a new one lands: a
+// window starts with no reading until a reply finishes, and a stopped turn
+// brings none, which left the ring hidden after every restart (owner,
+// 2026-11-04, "Keep last"). A reading older than the window itself is stale
+// and is not shown.
+const SESSION_WINDOW_KEY = 'session-window'
+const SESSION_WINDOW_MS = 5 * 60 * 60_000
+
+type SessionWindowKept = { percent: number; at: number }
+
+function asSessionWindow(value: unknown): SessionWindowKept | null {
+  if (typeof value !== 'object' || value === null) {
+    return null
+  }
+
+  const { percent, at } = value as Partial<SessionWindowKept>
+
+  return typeof percent === 'number' && typeof at === 'number' ? { percent, at } : null
+}
+
+/** The window's reading to show: the reported one, else the kept one while it is fresh. */
+async function sessionWindowShown($: Dollar, reported: number | null): Promise<number | null> {
+  try {
+    if (reported !== null) {
+      await $.store.set(SESSION_WINDOW_KEY, { percent: reported, at: await $.clock.now() })
+
+      return reported
+    }
+
+    const kept = asSessionWindow(await $.store.get(SESSION_WINDOW_KEY))
+
+    if (kept === null) {
+      return null
+    }
+
+    const age = (await $.clock.now()) - kept.at
+
+    return age >= 0 && age < SESSION_WINDOW_MS ? kept.percent : null
+  } catch (error) {
+    note($, 'keeping the window\'s reading failed', error)
+
+    return reported
+  }
+}
+
 // How full the conversation is, and how much of the account's five-hour
 // window is used. The session has no fill before its first answer, and none
 // right after a compaction: the row shows nothing then; the window is absent
@@ -2834,7 +2880,7 @@ async function passFill($: Dollar): Promise<void> {
   try {
     const usage = await $.session.usage()
     const fill = usage.context.percent ?? null
-    const session = sessionWindowOf(usage.rateLimits)
+    const session = await sessionWindowShown($, sessionWindowOf(usage.rateLimits))
 
     await writeFacts($, now => (now === null ? now : { ...now, fill, session }))
   } catch (error) {
@@ -3521,12 +3567,14 @@ export function registerProjectBand(on: On): void {
   // happens to read it (owner, 2026-10-17, after the ring stayed hidden).
   on('session.measure', EVERY_MEASURE, ($, e, next) => {
     try {
-      const session = sessionWindowOf(e.rateLimits)
+      const reported = sessionWindowOf(e.rateLimits)
       const fill = e.context.percent ?? null
 
-      inBackground($, 'writing the measurement failed', () =>
-        writeFacts($, now => (now === null ? now : { ...now, fill, session })),
-      )
+      inBackground($, 'writing the measurement failed', async () => {
+        const session = await sessionWindowShown($, reported)
+
+        await writeFacts($, now => (now === null ? now : { ...now, fill, session }))
+      })
     } catch (error) {
       note($, 'reading the measurement failed', error)
     }
