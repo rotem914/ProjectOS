@@ -156,9 +156,8 @@ own window, in the desktop app and in the terminal, in every folder you open.
 window is used, the usage box's "Session limit", behind a small ring that
 fills with it, and how full the conversation is, behind a small speech bubble;
 in the terminal the pictures are the letters `S` and `C`. Six pixels sit
-between a picture and its number, twenty between the groups. A press on the
-second runs `/compact`, and from 80 it turns orange with a `Compact` button
-beside it. The first is absent off a subscription.
+between a picture and its number, twenty between the groups. From 80 the
+second turns orange. The first is absent off a subscription.
 
 **How long the last reply took**, under the message box: `12s` under a
 minute, `2:36m` from there. It stays until the next reply ends.

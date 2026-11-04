@@ -301,7 +301,6 @@ type Acts = {
   askPush: () => Promise<void>
   askUpdate: () => Promise<void>
   askMore: (phrases: string[], hasUpdate: boolean) => Promise<void>
-  compact: () => Promise<void>
   hideBackup: () => Promise<void>
   recheckHeavy: () => Promise<void>
   confirmPush: () => void
@@ -1628,9 +1627,7 @@ function planOf(
   const sessionText = session === null ? '' : `${Math.round(session)}%`
   const isFillHigh = fill !== null && Math.round(fill) >= FILL_HIGH
   const fillCells =
-    (sessionText === '' ? 0 : sessionText.length + 4) +
-    (fillText === '' ? 0 : fillText.length + 4) +
-    (isFillHigh ? buttonsWidth([COMPACT_LABEL]) : 0)
+    (sessionText === '' ? 0 : sessionText.length + 4) + (fillText === '' ? 0 : fillText.length + 4)
   const steps = [
     { isShort: false, isInRow: true, hasCommit: hasMain, hasUpdate: canUpdate },
     { isShort: true, isInRow: true, hasCommit: hasMain, hasUpdate: canUpdate },
@@ -1733,7 +1730,6 @@ function keysOf(known: ProjectBandFacts, state: ProjectBandBusy, columns: number
 
   return [
     ...askedOf(known).map((_word, at) => `asked-${at}`),
-    ...(plan.fill !== '' ? [plan.isFillHigh ? 'compact' : 'fill'] : []),
     ...(plan.heavy !== '' ? ['heavy'] : []),
     ...(plan.backupQuiet !== '' ? ['backup-age'] : []),
     ...(plan.hasCommit ? ['go-commit'] : []),
@@ -1751,10 +1747,11 @@ function keyOf(phrase: string): string {
 // The name's color is the owner's choice (2026-10-04), a quiet grey.
 const NAME_COLOR = '#B3B4BC'
 
-// From 80% full the percentage turns a pastel orange, not a loud one, and a
-// plain grey Compact button stands to its right (owner, 2026-10-08). A
-// button cannot be colored, so the number is words then, and the press moves
-// to Compact.
+// From 80% full the percentage turns a pastel orange, not a loud one (owner,
+// 2026-10-08). The number is plain words at every fill: it was a button that
+// ran /compact, with a Compact button beside it from 80, until the app drew
+// buttons larger and the button's padding pushed the picture away from its
+// number (owner, 2026-11-04). /compact is typed now.
 const FILL_HIGH = 80
 const FILL_HIGH_COLOR = '#F5BE8C'
 // The two small pictures before the percentages, in the row's own grey: a
@@ -1812,7 +1809,6 @@ const FILL_BUBBLE =
   `fill="none" stroke="${FIGURE_COLOR}" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">` +
   '<path d="M4.1 2.3h3.4a2.6 2.6 0 0 1 2.6 2.6v1.2a2.6 2.6 0 0 1-2.6 2.6H5.4L1.5 11.6V4.9a2.6 2.6 0 0 1 2.6-2.6z"/>' +
   '</svg>'
-const COMPACT_LABEL = 'Compact'
 
 function drawLabel({ Box, Text, Svg }: Table, name: string): RenderElement {
   return (
@@ -1946,11 +1942,9 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
         )}
         {plan.fill !== '' && (
           <Box flexShrink={0} flexDirection="row" alignItems="center" gap={table.Svg === undefined ? 1 : 0}>
-            {/* The number is a button below 80, and a button carries its own
-                cell of padding: the spacer and a margin of minus one cell on
-                it leave the six (owner, 2026-10-17; first no gap at all, or
-                the eight became sixteen). The orange words past 80 take the
-                spacer alone. */}
+            {/* The number is words at every fill, so the spacer alone leaves
+                the six (owner, 2026-11-04: as a button it carried its own
+                padding, which pushed the picture away from its number). */}
             {table.Svg !== undefined ? (
               <table.Svg source={FILL_BUBBLE} alt={FILL_ALT} width={FIGURE_PIXELS} height={FIGURE_PIXELS} />
             ) : (
@@ -1959,20 +1953,11 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
             {table.Svg !== undefined && (
               <table.Svg source={FIGURE_GAP_SVG} alt={FIGURE_GAP_ALT} width={FIGURE_GAP_PIXELS} height={8} />
             )}
-            {plan.isFillHigh ? (
-              <Text color={FILL_HIGH_COLOR}>{plan.fill}</Text>
-            ) : (
-              <Box flexShrink={0} marginLeft={table.Svg === undefined ? 0 : -1}>
-                <Button key="fill" plain label={plan.fill} onPress={() => acts.compact()} />
-              </Box>
-            )}
+            {plan.isFillHigh ? <Text color={FILL_HIGH_COLOR}>{plan.fill}</Text> : <Text>{plan.fill}</Text>}
           </Box>
         )}
         {plan.fill !== '' && table.Svg !== undefined && (
           <table.Svg source={GROUP_GAP_SVG} alt={GROUP_GAP_ALT} width={GROUP_GAP_PIXELS} height={8} />
-        )}
-        {plan.fill !== '' && plan.isFillHigh && (
-          <Button key="compact" label={COMPACT_LABEL} onPress={() => acts.compact()} />
         )}
         {plan.heavy !== '' && (
           <Box flexShrink={0}>
@@ -3110,38 +3095,6 @@ async function submitShortcut($: Dollar, phrase: string, columns: number): Promi
   })
 }
 
-// A press on the percentage compacts the conversation, as /compact typed by
-// the owner does. The command waits its turn behind a running turn.
-async function submitCompact($: Dollar): Promise<void> {
-  const now = await $.clock.now()
-  const last = work.lastShortcut
-  const isRepeat =
-    last !== null &&
-    last.phrase === '/compact' &&
-    now - last.at >= 0 &&
-    now - last.at < REPEAT_PRESS_MS
-
-  // A double click is one press: the second would compact once more.
-  if (isRepeat) {
-    return
-  }
-
-  work.lastShortcut = { phrase: '/compact', at: now }
-
-  inBackground($, 'running /compact failed', async () => {
-    try {
-      await $.command.run({ command: 'compact' })
-    } catch (error) {
-      note($, 'running /compact failed', error)
-      $.ui.toast('Could not run /compact. Type it in the message box instead.', {
-        timeoutMs: LONG_TOAST_MS,
-      })
-    } finally {
-      await refresh($)
-    }
-  })
-}
-
 async function askPush($: Dollar): Promise<void> {
   if (work.running.isPushing) {
     return
@@ -3700,8 +3653,6 @@ export function registerProjectBand(on: On): void {
               askMore($, phrases, hasUpdate).catch(error =>
                 note($, 'opening More failed', error),
               ),
-            compact: () =>
-              submitCompact($).catch(error => note($, 'a press on the fill failed', error)),
             hideBackup: () =>
               hideBackup($).catch(error => note($, 'hiding the backup words failed', error)),
             recheckHeavy: () =>
