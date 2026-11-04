@@ -158,7 +158,7 @@ fills with it, and how full the conversation is, behind a small rounded
 square that fills with it too; in the terminal the pictures are the letters
 `S` and `C`. Six pixels sit
 between a picture and its number, twenty between the groups. Resting the
-pointer on the dot or a picture shows its name to its right: `Local server`,
+pointer on the dot or a picture shows its name above the bar: `Local server`,
 `Usage limit`, `Context window`. From 80 the
 second turns orange. The first is absent off a subscription, and keeps its
 last reading, from any window, until a new one lands or five hours pass.

@@ -1742,8 +1742,9 @@ describe('the shortcut buttons', () => {
   })
 
   // Each figure carries its name as a card, hidden until the pointer rests on
-  // the figure, to its right (owner, 2026-11-04, through a side chat): the
-  // name and nothing more. The terminal has no pointer and draws none.
+  // the figure (owner, 2026-11-04, through a side chat): the name and nothing
+  // more. The desktop app floats it above the bar. The terminal has no pointer
+  // and draws none.
   test('each figure carries its name as a card shown while the pointer rests on it', async ($, on) => {
     const kit = install(on, {
       files: { 'D:/Work/Site/CLAUDE.md': '### `Go commit`\nLocal app URL: `http://localhost:4321`\n' },

@@ -1773,12 +1773,14 @@ const FIGURE_PIXELS = 14
 const FIGURE_COLOR = NAME_COLOR
 const SESSION_ALT = 'Session limit'
 const FILL_ALT = 'Conversation'
-// A word for each figure, shown to its right, inside the bar, while the
-// pointer rests on it (owner, 2026-11-04, through a side chat: the pictures
-// alone did not say what they count). The figure's name and nothing more
-// (owner: no need to load it). The card is drawn hidden and absolutely
-// placed, so it moves nothing, and the surface shows it on hover with no
-// hook run; the band's own area clips it, so it cannot leave the bar.
+// A word for each figure, shown while the pointer rests on it (owner,
+// 2026-11-04, through a side chat: the pictures alone did not say what they
+// count). The figure's name and nothing more (owner: no need to load it).
+// The card is drawn hidden and absolutely placed, so it moves nothing, and
+// the surface shows it on hover with no hook run. It was placed to the
+// figure's right, inside the bar, on the belief that the band's area clips
+// it; the desktop app instead floats it above the bar, outside its bounds,
+// as a tooltip of its own (seen 2026-11-04, the owner pleased).
 const SERVER_TIP = 'Local server'
 const SESSION_TIP = 'Usage limit'
 const FILL_TIP = 'Context window'
@@ -1851,9 +1853,9 @@ export function fillSquare(percent: number): string {
   )
 }
 
-// The card's right edge sits its own width and a cell past the figure's
-// right edge, so its left edge is one cell right of the figure, whatever the
-// figure's width in cells.
+// The offsets place the card one cell right of the figure, for a surface
+// that draws it where the tree says; the desktop app floats it above the
+// bar instead (see the tips above).
 function drawTip({ Box, Text }: Table, words: string): RenderElement {
   return (
     <Box
