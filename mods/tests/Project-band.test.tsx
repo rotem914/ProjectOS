@@ -16,7 +16,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On, RenderElement } from 'claude-code'
 import type { Engine, MockClock } from 'claude-code/testing'
 
-import { buttonsOfConversation, sessionRing } from '../hooks/Project-band'
+import { buttonsOfConversation, sessionRing, sessionTipOf } from '../hooks/Project-band'
 
 const PLUGIN = 'project-os'
 const SURFACES = ['terminal', 'desktop'] as const
@@ -118,6 +118,8 @@ type World = {
   fill: number | null
   /** The five-hour window used, in percent; null off a subscription. */
   session: number | null
+  /** When that window resets, as the engine reports it; null for none. */
+  sessionResets: string | null
   /** What the project's listing of heavy files prints. */
   heavyOut: string
   /** Whether the project's local address answers, and every address asked. */
@@ -227,6 +229,7 @@ function worldOf(changes: Partial<World> = {}): World {
     promptHoldMs: 0,
     fill: null,
     session: null,
+    sessionResets: null,
     heavyOut: '',
     isServerUp: false,
     stop: 'end_turn',
@@ -493,7 +496,16 @@ function install(on: On, changes: Partial<World> = {}): Kit {
     value: {
       startedAt: startOfTime,
       context: { window: 200_000, ...(world.fill === null ? {} : { percent: world.fill }) },
-      rateLimits: world.session === null ? [] : [{ kind: 'five_hour', percentUsed: world.session }],
+      rateLimits:
+        world.session === null
+          ? []
+          : [
+              {
+                kind: 'five_hour',
+                percentUsed: world.session,
+                ...(world.sessionResets === null ? {} : { resetsAt: world.sessionResets }),
+              },
+            ],
       cost: { usd: 0 },
     },
   }))
@@ -2379,6 +2391,41 @@ describe('the shortcut buttons', () => {
     const ui = await bandOn($, surface)
 
     expect(await buttonsOn(ui)).toEqual(['Figma', 'Build it', 'Go commit \u00b7 2', '\u22ee'])
+    await ui.unmount()
+  })
+
+  // The ring's card says when the window resets, as the owner wrote it:
+  // "Usage limit \u00b7 Resets 1hr, 20m \u00b7 23:40", in this computer's clock.
+  test('the ring\'s card says the time left and the clock time of the reset', () => {
+    const now = Date.UTC(2026, 10, 4, 20, 0, 0)
+    const clockOf = (at: number) => {
+      const local = new Date(at)
+
+      return `${String(local.getHours()).padStart(2, '0')}:${String(local.getMinutes()).padStart(2, '0')}`
+    }
+    const in80 = now + 80 * 60_000
+    const in20 = now + 20 * 60_000
+
+    expect(sessionTipOf(new Date(in80).toISOString(), now)).toBe(`Usage limit \u00b7 Resets 1hr, 20m \u00b7 ${clockOf(in80)}`)
+    expect(sessionTipOf(new Date(in20).toISOString(), now)).toBe(`Usage limit \u00b7 Resets 20m \u00b7 ${clockOf(in20)}`)
+    expect(sessionTipOf(new Date(now - 60_000).toISOString(), now)).toBe('Usage limit')
+    expect(sessionTipOf(null, now)).toBe('Usage limit')
+    expect(sessionTipOf('not a time', now)).toBe('Usage limit')
+  })
+
+  onEachSurface('the ring\'s card carries the reset the engine reports', async ($, on, surface) => {
+    const kit = install(on, { changed: 2, fill: 23, session: 73.4 })
+
+    kit.world.sessionResets = new Date(kit.clock.now() + 80 * 60_000).toISOString()
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    if (surface === 'desktop') {
+      const drawn = JSON.stringify(await ui.findAll({ type: 'Box' }))
+
+      expect(drawn).toContain('Usage limit \u00b7 Resets 1hr, 20m \u00b7 ')
+    }
     await ui.unmount()
   })
 

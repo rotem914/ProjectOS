@@ -79,6 +79,18 @@ export type ProjectBandFacts = {
    */
   session?: number | null
   /**
+   * When that window resets, as the engine's ISO 8601 timestamp; null or no
+   * such key when it reported none (owner, 2026-11-04: the ring's card says
+   * when it resets).
+   */
+  sessionResets?: string | null
+  /**
+   * The minute of the last timed pass, written only while a reset time is
+   * known, so the row draws again each minute and the card's time left stays
+   * true. No such key reads as none.
+   */
+  minute?: number
+  /**
    * How many heavy things in the project wait for the owner's word: leftovers
    * and backups over 1 GB, as the kit's own listing counts them. Null when
    * there are none, when the project has no such listing, and until it ran.

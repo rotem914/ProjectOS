@@ -330,6 +330,8 @@ type Look = {
   reserve: number
   /** True where a check mark stands in for the words "All committed". */
   isCheckDrawn: boolean
+  /** When this drawing is made, for the time left on the ring's card. */
+  now: number
 }
 
 type RowPlan = {
@@ -1818,6 +1820,28 @@ const FIGURE_GAP_SVG = spacerSvg(FIGURE_GAP_PIXELS)
 const FIGURE_GAP_ALT = 'Figure gap'
 
 /** A ring, faint, with an arc from the top filled to `percent` of the way round. */
+/**
+ * The ring's card: its name, then, once the engine has said when the window
+ * resets, the time left and the clock time, as the owner wrote it on
+ * 2026-11-04: "Usage limit \u00b7 Resets 1hr, 20m \u00b7 23:40". The clock time
+ * is this computer's own; a reset already past says the name alone.
+ */
+export function sessionTipOf(resetsAt: string | null | undefined, now: number): string {
+  const at = typeof resetsAt === 'string' ? Date.parse(resetsAt) : Number.NaN
+
+  if (!Number.isFinite(at) || at <= now) {
+    return SESSION_TIP
+  }
+
+  const minutes = Math.ceil((at - now) / 60_000)
+  const hours = Math.floor(minutes / 60)
+  const left = hours > 0 ? `${hours}hr, ${minutes % 60}m` : `${minutes}m`
+  const local = new Date(at)
+  const clock = `${String(local.getHours()).padStart(2, '0')}:${String(local.getMinutes()).padStart(2, '0')}`
+
+  return `${SESSION_TIP} \u00b7 Resets ${left} \u00b7 ${clock}`
+}
+
 export function sessionRing(percent: number): string {
   const share = Math.min(100, Math.max(0, percent)) / 100
   const r = 4.6
@@ -2022,7 +2046,7 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
               <table.Svg source={FIGURE_GAP_SVG} alt={FIGURE_GAP_ALT} width={FIGURE_GAP_PIXELS} height={8} />
             )}
             <Text>{plan.session}</Text>
-            {table.Svg !== undefined && drawTip(table, SESSION_TIP)}
+            {table.Svg !== undefined && drawTip(table, sessionTipOf(known.sessionResets, look.now))}
           </Box>
         )}
         {plan.session !== '' && plan.fill !== '' && table.Svg !== undefined && (
@@ -2894,10 +2918,14 @@ async function passRepo($: Dollar): Promise<void> {
 // its kind, read loosely: "five_hour" today, and any spelling that names five
 // hours tomorrow. Null when no window is reported, off a subscription or
 // before the first reading.
-function sessionWindowOf(limits: ReadonlyArray<{ kind: string; percentUsed: number }>): number | null {
+type SessionWindow = { percent: number; resetsAt: string | null }
+
+function sessionWindowOf(
+  limits: ReadonlyArray<{ kind: string; percentUsed: number; resetsAt?: string }>,
+): SessionWindow | null {
   const window = limits.find(limit => /five|5/i.test(limit.kind))
 
-  return window === undefined ? null : window.percentUsed
+  return window === undefined ? null : { percent: window.percentUsed, resetsAt: window.resetsAt ?? null }
 }
 
 // The window is the account's, not one conversation's, so its last reading
@@ -2909,23 +2937,25 @@ function sessionWindowOf(limits: ReadonlyArray<{ kind: string; percentUsed: numb
 const SESSION_WINDOW_KEY = 'session-window'
 const SESSION_WINDOW_MS = 5 * 60 * 60_000
 
-type SessionWindowKept = { percent: number; at: number }
+type SessionWindowKept = SessionWindow & { at: number }
 
 function asSessionWindow(value: unknown): SessionWindowKept | null {
   if (typeof value !== 'object' || value === null) {
     return null
   }
 
-  const { percent, at } = value as Partial<SessionWindowKept>
+  const { percent, at, resetsAt } = value as Partial<SessionWindowKept>
 
-  return typeof percent === 'number' && typeof at === 'number' ? { percent, at } : null
+  return typeof percent === 'number' && typeof at === 'number'
+    ? { percent, at, resetsAt: typeof resetsAt === 'string' ? resetsAt : null }
+    : null
 }
 
 /** The window's reading to show: the reported one, else the kept one while it is fresh. */
-async function sessionWindowShown($: Dollar, reported: number | null): Promise<number | null> {
+async function sessionWindowShown($: Dollar, reported: SessionWindow | null): Promise<SessionWindow | null> {
   try {
     if (reported !== null) {
-      await $.store.set(SESSION_WINDOW_KEY, { percent: reported, at: await $.clock.now() })
+      await $.store.set(SESSION_WINDOW_KEY, { ...reported, at: await $.clock.now() })
 
       return reported
     }
@@ -2938,11 +2968,27 @@ async function sessionWindowShown($: Dollar, reported: number | null): Promise<n
 
     const age = (await $.clock.now()) - kept.at
 
-    return age >= 0 && age < SESSION_WINDOW_MS ? kept.percent : null
+    return age >= 0 && age < SESSION_WINDOW_MS ? { percent: kept.percent, resetsAt: kept.resetsAt } : null
   } catch (error) {
     note($, 'keeping the window\'s reading failed', error)
 
     return reported
+  }
+}
+
+// The facts a window's reading writes: its percentage, its reset time, and,
+// while a reset time is known, the minute, so the row draws each minute and
+// the card's time left stays true.
+async function sessionFacts(
+  $: Dollar,
+  shown: SessionWindow | null,
+): Promise<Pick<ProjectBandFacts, 'session' | 'sessionResets' | 'minute'>> {
+  const resetsAt = shown?.resetsAt ?? null
+
+  return {
+    session: shown?.percent ?? null,
+    sessionResets: resetsAt,
+    ...(resetsAt === null ? {} : { minute: Math.floor((await $.clock.now()) / 60_000) }),
   }
 }
 
@@ -2954,9 +3000,9 @@ async function passFill($: Dollar): Promise<void> {
   try {
     const usage = await $.session.usage()
     const fill = usage.context.percent ?? null
-    const session = await sessionWindowShown($, sessionWindowOf(usage.rateLimits))
+    const window = await sessionFacts($, await sessionWindowShown($, sessionWindowOf(usage.rateLimits)))
 
-    await writeFacts($, now => (now === null ? now : { ...now, fill, session }))
+    await writeFacts($, now => (now === null ? now : { ...now, fill, ...window }))
   } catch (error) {
     note($, 'reading how full the conversation is failed', error)
   }
@@ -3664,9 +3710,9 @@ export function registerProjectBand(on: On): void {
       const fill = e.context.percent ?? null
 
       inBackground($, 'writing the measurement failed', async () => {
-        const session = await sessionWindowShown($, reported)
+        const window = await sessionFacts($, await sessionWindowShown($, reported))
 
-        await writeFacts($, now => (now === null ? now : { ...now, fill, session }))
+        await writeFacts($, now => (now === null ? now : { ...now, fill, ...window }))
       })
     } catch (error) {
       note($, 'reading the measurement failed', error)
@@ -3813,6 +3859,7 @@ export function registerProjectBand(on: On): void {
             columns,
             reserve,
             isCheckDrawn,
+            now: await $.clock.now(),
           }
 
           // The presses that ask are handed back to the engine, which waits
