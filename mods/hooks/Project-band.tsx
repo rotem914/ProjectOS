@@ -1823,14 +1823,15 @@ export function sessionRing(percent: number): string {
 }
 
 // The rounded square: two pixels narrower than square, 8.5 pixels to the
-// ring's 10.5, and a pixel higher than centred, so it sits level with the
-// ring beside it (owner, 2026-11-04, on sight). Its outline is faint, as the
+// ring's 10.5, its top and bottom on the ring's own, 1.4 and 10.6 on the
+// grid, so the two sit level (owner, 2026-11-04, on sight: first a pixel
+// higher than centred, then, zoomed in, a pixel lower and a pixel taller). Its outline is faint, as the
 // ring's track, and the fill solid, measured on the square's own height, so
 // the room left is the faint outline above the fill and nothing crosses its
 // top. The shape is closed, so the fill can be clipped to it.
-const SQUARE_SHAPE = 'M4.35 0.65h3.3a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-3.3a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2z'
-const SQUARE_TOP = 0.65
-const SQUARE_BOTTOM = 9.65
+const SQUARE_SHAPE = 'M4.35 1.4h3.3a2 2 0 0 1 2 2v5.2a2 2 0 0 1-2 2h-3.3a2 2 0 0 1-2-2v-5.2a2 2 0 0 1 2-2z'
+const SQUARE_TOP = 1.4
+const SQUARE_BOTTOM = 10.6
 
 /** A rounded square, filled from its bottom to `percent` of its height. */
 export function fillSquare(percent: number): string {

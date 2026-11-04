@@ -2253,7 +2253,7 @@ describe('the shortcut buttons', () => {
       // outline faint as the ring's track (owner, 2026-11-04, picked as 2b
       // on a second board).
       const square = (await ui.findAll({ type: 'Svg' })).find(one => one.props.alt === 'Conversation')
-      expect(String(square?.props.source)).toContain('<path d="M4.35 0.65h3.3')
+      expect(String(square?.props.source)).toContain('<path d="M4.35 1.4h3.3')
       expect(String(square?.props.source)).toContain('stroke-opacity="0.35"')
       expect(String(square?.props.source)).toContain('clip-path="url(#fill-clip)"')
     } else {
