@@ -610,7 +610,22 @@ type Drawing = Awaited<ReturnType<typeof bandOn>>
 // its check mark in place of "All committed", the words are put back where
 // the terminal has them, at the head of the waiting words.
 async function wordsOn(ui: Drawing): Promise<string> {
-  const texts = await ui.findAll({ type: 'Text' })
+  // A card hidden until the pointer rests on a button or a figure says
+  // nothing in the row.
+  const hidden = (await ui.findAll({ type: 'Box' }))
+    .filter(box => box.props.display === 'none')
+    .map(box => box.text)
+  const texts = (await ui.findAll({ type: 'Text' })).filter(text => {
+    const at = hidden.indexOf(text.text)
+
+    if (at < 0) {
+      return true
+    }
+
+    hidden.splice(at, 1)
+
+    return false
+  })
   const said = texts.map(text => text.text)
   const hasCheck = (await ui.findAll({ type: 'Svg' })).some(svg => svg.props.alt === 'All committed')
 
@@ -2094,10 +2109,9 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
-  // The age shows as words in the row, and the button waits behind More
-  // (owner, 2026-11-04: it sat in the row until the app drew every button
-  // larger).
-  onEachSurface('the row is silent about a backup until it is 30 days old, then says its age', async ($, on, surface) => {
+  // The row says nothing of the backup at any age, and Go backup waits
+  // behind More (owner, 2026-11-04: not in the row at all, only in the menu).
+  onEachSurface('the row says nothing of a backup at any age, and Go backup waits behind More', async ($, on, surface) => {
     const kit = install(on, {
       backups: [
         { name: 'Site_2026-08-01_10-00.zip', daysOld: 60 },
@@ -2123,7 +2137,7 @@ describe('the shortcut buttons', () => {
     expect(await buttonsOn(ui)).toEqual(['\u22ee'])
     kit.world.backups = [{ name: 'Site_2026-09-03_10-00.zip', daysOld: 30 }]
     await endTurn($, kit)
-    expect(await wordsOn(ui)).toBe('site-web | All committed \u00b7 Backup 30d')
+    expect(await wordsOn(ui)).toBe('site-web | All committed')
     expect(await buttonsOn(ui)).toEqual(['\u22ee'])
 
     // The button is behind More, and a press there sends the phrase.
@@ -2150,7 +2164,7 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
-  onEachSurface('a backup that is due stays in the words where the row is narrow', async ($, on, surface) => {
+  onEachSurface('a due backup says nothing in a narrow row either', async ($, on, surface) => {
     const kit = install(on, {
       changed: 3,
       backups: [{ name: 'Site_2026-08-01_10-00.zip', daysOld: 45 }],
@@ -2160,8 +2174,8 @@ describe('the shortcut buttons', () => {
 
     const narrow = await bandOn($, surface, width(surface, 44))
 
-    // Without a backup button the row keeps Go commit, and the age its words.
-    expect(await wordsOn(narrow)).toBe('site-web | Backup 45d')
+    // Without a backup in the row, the row keeps Go commit and no age.
+    expect(await wordsOn(narrow)).toBe('site-web')
     expect(await buttonsOn(narrow)).toEqual(['Go commit \u00b7 3', '\u22ee'])
     await narrow.press({ key: 'more' })
     expect(await buttonsOn(narrow)).toContain('Go backup')
@@ -2466,6 +2480,56 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
+  // What a button does, as a card over it, in the owner's words: only the
+  // twelve he kept (2026-11-04). The terminal draws none.
+  onEachSurface('the buttons he kept carry what they do as a card', async ($, on, surface) => {
+    const kit = install(on, {
+      changed: 2,
+      offered: ['compact', 'deep-research'],
+      files: {
+        'D:/Work/Site/CLAUDE.md': [
+          '### `Go commit`',
+          '### `FAST MODE`',
+          '### `Go backup`',
+          '### `Go audit`',
+          '### `Update rule`',
+          '### `Go code review`',
+          '### `GO visual qa`',
+        ].join('\n'),
+      },
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+    type Drawn = { props: Record<string, unknown>; hover?: { display?: string }; children?: Drawn[] }
+    const cardOf = async (key: string) => {
+      const groups = (await ui.findAll({ type: 'Box' })) as unknown as Drawn[]
+      const card = groups.find(one => one.props.key === key)?.children?.find(child => child.hover?.display === 'flex')
+
+      return card === undefined ? null : JSON.stringify(card)
+    }
+
+    if (surface === 'desktop') {
+      expect(await cardOf('tip-fast-mode')).toContain('Quick rounds, no checks or paperwork until you end it')
+      expect(await cardOf('tip-more')).toContain('More commands')
+      expect(await cardOf('tip-go-commit')).toBeNull()
+    }
+    await ui.press({ key: 'more' })
+    if (surface === 'desktop') {
+      expect(await cardOf('spaced-go-backup')).toContain('Zip the whole project into the backups folder')
+      expect(await cardOf('spaced-go-audit')).toContain('Count the gaps in the project')
+      expect(await cardOf('spaced-update-rule')).toContain('Write the rule change I proposed')
+      expect(await cardOf('spaced-go-code-review')).toContain('Review the whole codebase for bugs')
+      expect(await cardOf('spaced-go-visual-qa')).toContain('Test the site in the browser as a visitor would')
+      expect(await cardOf('spaced-/deep-research')).toContain('Research a topic across many sources')
+      expect(await cardOf('spaced-cancel')).toContain('Close the list')
+    } else {
+      expect(JSON.stringify(await ui.findAll({ type: 'Box' }))).not.toContain('"hover"')
+    }
+    await ui.unmount()
+  })
+
   test('the ring fills to the percentage: nothing, a short arc, a long arc, the whole ring', () => {
     expect(sessionRing(0)).not.toContain('<path')
     expect(sessionRing(25)).toContain('A4.6 4.6 0 0 1 10.60 6.00')
@@ -2590,7 +2654,7 @@ describe('the shortcut buttons', () => {
     const check = drawn.findIndex(one => one.type === 'Svg' && one.props.alt === 'All committed')
     const first = drawn.findIndex(one => one.type === 'Button' && one.props.label === '\u22ee')
 
-    expect((await desktop.findAll({ type: 'Text' })).map(text => text.text)).toEqual(['site-web'])
+    expect(await wordsOn(desktop)).toBe('site-web | All committed')
     expect(drawn[check]?.props).toMatchObject({ width: 20, height: 20 })
     expect(check).toBeGreaterThan(-1)
     expect(check).toBeLessThan(first)
@@ -4049,8 +4113,8 @@ describe('a narrow row', () => {
       expect(label.startsWith('N'), `${usable} cells`).toBe(true)
 
       // The name and the buttons fit the cells there are, and no words are
-      // squeezed in between them.
-      expect(await ui.findAll({ type: 'Text' })).toHaveLength(1)
+      // squeezed in between them; a card hidden over a button says nothing.
+      expect(await wordsOn(ui)).toBe(label)
       expect(label.length + buttons.reduce((sum, text) => sum + 1 + text.length + 4, 0)).toBeLessThanOrEqual(usable)
       await ui.unmount()
     }
