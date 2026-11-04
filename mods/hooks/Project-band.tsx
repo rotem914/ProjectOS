@@ -2226,6 +2226,35 @@ function drawQuestion(
   )
 }
 
+// The gap between the rows of More's buttons, on a surface that draws
+// pictures: the row gap of one cell came out a third of the gap between two
+// buttons on the desktop, so each button carries a transparent spacer this
+// tall above it, and the two gaps read the same (owner, 2026-11-04: "the same
+// gap as between the buttons"). The terminal keeps its row of gap.
+const MORE_ROW_GAP_PIXELS = 5
+const MORE_ROW_GAP_SVG =
+  `<svg xmlns="http://www.w3.org/2000/svg" width="1" height="${MORE_ROW_GAP_PIXELS}" ` +
+  `viewBox="0 0 1 ${MORE_ROW_GAP_PIXELS}">` +
+  `<rect width="1" height="${MORE_ROW_GAP_PIXELS}" fill="#000000" fill-opacity="0"/>` +
+  '</svg>'
+const MORE_ROW_GAP_ALT = 'Row gap'
+
+// One of More's buttons, with the spacer above it where pictures are drawn.
+function spacedInMore(table: Table, key: string, button: RenderElement): RenderElement {
+  const { Box, Svg } = table
+
+  if (Svg === undefined) {
+    return button
+  }
+
+  return (
+    <Box key={`spaced-${key}`} flexDirection="column" alignItems="flex-end" flexShrink={0}>
+      <Svg source={MORE_ROW_GAP_SVG} alt={MORE_ROW_GAP_ALT} width={1} height={MORE_ROW_GAP_PIXELS} />
+      {button}
+    </Box>
+  )
+}
+
 // More lists the shortcuts that have no room in the row, in the row's place.
 // The buttons wrap onto further rows where one row is too narrow for them.
 function drawMore(
@@ -2253,37 +2282,47 @@ function drawMore(
       >
         {open.phrases
           .filter(phrase => phrase !== UPDATE_SHORTCUT)
-          .map(phrase => (
+          .map(phrase =>
+            spacedInMore(
+              table,
+              keyOf(phrase),
+              <Button
+                key={keyOf(phrase)}
+                label={sendingOr(
+                  look.state,
+                  phrase,
+                  buttonTextOf(phrase, look.known.isFast === true),
+                )}
+                onPress={() => acts.shortcut(phrase)}
+              />,
+            ),
+          )}
+        {open.hasUpdate &&
+          spacedInMore(
+            table,
+            'update-plugin',
             <Button
-              key={keyOf(phrase)}
+              key="update-plugin"
+              label={updateLabelOf(look.state, look.known)}
+              onPress={() => acts.askUpdate()}
+            />,
+          )}
+        {/* The kit's update comes last, beside the button that closes the list. */}
+        {open.phrases.includes(UPDATE_SHORTCUT) &&
+          spacedInMore(
+            table,
+            keyOf(UPDATE_SHORTCUT),
+            <Button
+              key={keyOf(UPDATE_SHORTCUT)}
               label={sendingOr(
                 look.state,
-                phrase,
-                buttonTextOf(phrase, look.known.isFast === true),
+                UPDATE_SHORTCUT,
+                buttonTextOf(UPDATE_SHORTCUT, false, isKitUpdateWaiting(look.known)),
               )}
-              onPress={() => acts.shortcut(phrase)}
-            />
-          ))}
-        {open.hasUpdate && (
-          <Button
-            key="update-plugin"
-            label={updateLabelOf(look.state, look.known)}
-            onPress={() => acts.askUpdate()}
-          />
-        )}
-        {/* The kit's update comes last, beside the button that closes the list. */}
-        {open.phrases.includes(UPDATE_SHORTCUT) && (
-          <Button
-            key={keyOf(UPDATE_SHORTCUT)}
-            label={sendingOr(
-              look.state,
-              UPDATE_SHORTCUT,
-              buttonTextOf(UPDATE_SHORTCUT, false, isKitUpdateWaiting(look.known)),
-            )}
-            onPress={() => acts.shortcut(UPDATE_SHORTCUT)}
-          />
-        )}
-        <Button key="cancel" label={CLOSE_LABEL} onPress={() => acts.cancel()} />
+              onPress={() => acts.shortcut(UPDATE_SHORTCUT)}
+            />,
+          )}
+        {spacedInMore(table, 'cancel', <Button key="cancel" label={CLOSE_LABEL} onPress={() => acts.cancel()} />)}
       </Box>
     </Box>
   )

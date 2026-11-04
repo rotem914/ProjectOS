@@ -2429,6 +2429,28 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
+  // More's rows sit as far apart as its buttons: on the desktop each button
+  // carries a spacer above it (owner, 2026-11-04); the terminal keeps its row
+  // of gap and has no pictures.
+  onEachSurface('More\'s buttons carry a spacer above them on the desktop', async ($, on, surface) => {
+    const kit = install(on, { changed: 2 })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    await ui.press({ key: 'more' })
+
+    const buttons = await buttonsOn(ui)
+    const spacers = (await ui.findAll({ type: 'Svg' })).filter(one => one.props.alt === 'Row gap')
+
+    expect(spacers).toHaveLength(surface === 'desktop' ? buttons.length : 0)
+    if (surface === 'desktop') {
+      expect(spacers[0]?.props).toMatchObject({ width: 1, height: 5 })
+    }
+    await ui.unmount()
+  })
+
   test('the ring fills to the percentage: nothing, a short arc, a long arc, the whole ring', () => {
     expect(sessionRing(0)).not.toContain('<path')
     expect(sessionRing(25)).toContain('A4.6 4.6 0 0 1 10.60 6.00')
@@ -3953,7 +3975,9 @@ describe('a narrow row', () => {
     expect(marks).toHaveLength(1)
     expect(marks[0]?.props).toMatchObject({ alt: 'Rotem E', width: 25, height: 25 })
     await desktop.press({ key: 'more' })
-    expect(await desktop.findAll({ type: 'Svg' })).toHaveLength(1)
+    // More's row spacers are pictures too; the mark is still the one picture
+    // that shows.
+    expect((await desktop.findAll({ type: 'Svg' })).filter(one => one.props.alt !== 'Row gap')).toHaveLength(1)
     await desktop.unmount()
 
     const terminal = await bandOn($, 'terminal')
