@@ -1762,10 +1762,12 @@ const NAME_COLOR = '#B3B4BC'
 const FILL_HIGH = 80
 const FILL_HIGH_COLOR = '#F5BE8C'
 // The two small pictures before the percentages, in the row's own grey: a
-// ring whose arc fills to the five-hour window's percentage, and a storage
-// cylinder that fills from its bottom to the conversation's (owner,
-// 2026-11-04, picked as 7 of 10 on a board; the speech bubble it replaces,
-// picked 2026-10-17 on a board of four, did not read as "context").
+// ring whose arc fills to the five-hour window's percentage, and a rounded
+// square that fills from its bottom to the conversation's (owner,
+// 2026-11-04, picked as 2b on a second board of ten; the storage cylinder
+// picked on the first board that day carried a rim line the eye read as a
+// mess, and the speech bubble before it, picked 2026-10-17 on a board of
+// four, did not read as "context").
 // Drawn at 14 pixels on a 12-unit grid: 12 read as tiny (owner, 2026-10-17).
 const FIGURE_PIXELS = 14
 const FIGURE_COLOR = NAME_COLOR
@@ -1809,32 +1811,31 @@ export function sessionRing(percent: number): string {
   return `${head}<path d="M${cx} ${(cy - r).toFixed(2)}A${r} ${r} 0 ${large} 1 ${x} ${y}"/></svg>`
 }
 
-// The cylinder's body, closed, so the fill can be clipped to it; the top rim
-// is drawn over it. The fill is measured from the body's bottom to the rim's
-// lower edge, not to the top of the box: measured to the top, a 70 percent
-// fill reached under the rim and read as full, since the rim's ellipse looks
-// like part of the body (owner, 2026-11-04). Now the room left is the dark
-// band between the rim and the fill, and a full cylinder is filled to its rim.
-const CYLINDER_BODY =
-  'M1.7 2.8v6.4c0 .8 1.9 1.5 4.3 1.5s4.3-.7 4.3-1.5V2.8c0-.8-1.9-1.5-4.3-1.5S1.7 2 1.7 2.8z'
-const CYLINDER_TOP = 4.3
-const CYLINDER_BOTTOM = 10.7
+// The rounded square: two pixels narrower than square, 8.5 pixels to the
+// ring's 10.5, and a pixel higher than centred, so it sits level with the
+// ring beside it (owner, 2026-11-04, on sight). Its outline is faint, as the
+// ring's track, and the fill solid, measured on the square's own height, so
+// the room left is the faint outline above the fill and nothing crosses its
+// top. The shape is closed, so the fill can be clipped to it.
+const SQUARE_SHAPE = 'M4.35 0.65h3.3a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-3.3a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2z'
+const SQUARE_TOP = 0.65
+const SQUARE_BOTTOM = 9.65
 
-/** A storage cylinder, filled from its bottom to `percent` of its height. */
-export function fillCylinder(percent: number): string {
+/** A rounded square, filled from its bottom to `percent` of its height. */
+export function fillSquare(percent: number): string {
   const share = Math.min(100, Math.max(0, percent)) / 100
-  const height = (CYLINDER_BOTTOM - CYLINDER_TOP) * share
+  const height = (SQUARE_BOTTOM - SQUARE_TOP) * share
   const fill =
     share <= 0
       ? ''
-      : `<clipPath id="fill-clip"><path d="${CYLINDER_BODY}"/></clipPath>` +
-        `<rect x="0" y="${(CYLINDER_BOTTOM - height).toFixed(2)}" width="12" height="${height.toFixed(2)}" ` +
+      : `<clipPath id="fill-clip"><path d="${SQUARE_SHAPE}"/></clipPath>` +
+        `<rect x="0" y="${(SQUARE_BOTTOM - height).toFixed(2)}" width="12" height="${height.toFixed(2)}" ` +
         `fill="${FIGURE_COLOR}" fill-opacity="0.9" stroke="none" clip-path="url(#fill-clip)"/>`
 
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${FIGURE_PIXELS}" height="${FIGURE_PIXELS}" viewBox="0 0 12 12" ` +
     `fill="none" stroke="${FIGURE_COLOR}" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">` +
-    `<path d="${CYLINDER_BODY}"/><ellipse cx="6" cy="2.8" rx="4.3" ry="1.5"/>${fill}</svg>`
+    `<path d="${SQUARE_SHAPE}" stroke-opacity="0.35"/>${fill}</svg>`
   )
 }
 
@@ -1975,7 +1976,7 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
                 padding, which pushed the picture away from its number). */}
             {table.Svg !== undefined ? (
               <table.Svg
-                source={fillCylinder(known.fill ?? 0)}
+                source={fillSquare(known.fill ?? 0)}
                 alt={FILL_ALT}
                 width={FIGURE_PIXELS}
                 height={FIGURE_PIXELS}

@@ -2209,11 +2209,13 @@ describe('the shortcut buttons', () => {
       const ring = (await ui.findAll({ type: 'Svg' })).find(one => one.props.alt === 'Session limit')
       expect(String(ring?.props.source)).toContain('<path d="M6 1.40A4.6 4.6 0 1 1')
       expect(ring?.props).toMatchObject({ width: 14, height: 14 })
-      // The conversation's picture is a storage cylinder filled to the fill
-      // (owner, 2026-11-04, picked as 7 of 10 on a board).
-      const cylinder = (await ui.findAll({ type: 'Svg' })).find(one => one.props.alt === 'Conversation')
-      expect(String(cylinder?.props.source)).toContain('<ellipse cx="6" cy="2.8"')
-      expect(String(cylinder?.props.source)).toContain('clip-path="url(#fill-clip)"')
+      // The conversation's picture is a rounded square filled to the fill, its
+      // outline faint as the ring's track (owner, 2026-11-04, picked as 2b
+      // on a second board).
+      const square = (await ui.findAll({ type: 'Svg' })).find(one => one.props.alt === 'Conversation')
+      expect(String(square?.props.source)).toContain('<path d="M4.35 0.65h3.3')
+      expect(String(square?.props.source)).toContain('stroke-opacity="0.35"')
+      expect(String(square?.props.source)).toContain('clip-path="url(#fill-clip)"')
     } else {
       expect(await ui.find({ type: 'Text', text: 'S:' })).toBeTruthy()
       expect(await ui.find({ type: 'Text', text: 'C:' })).toBeTruthy()
