@@ -47,10 +47,6 @@ const busy = atom({ plugin: 'project-os', key: 'bandBusy' } as const, {
   isUpdating: false,
   sending: [],
 })
-// Which opening of More the pointer rested long enough in, on the button with
-// the delayed card. A list that closes under a resting pointer hears no
-// leave, and naming the opening keeps that rest out of the next one.
-const tipRested = atom({ plugin: 'project-os', key: 'bandTipRestedFor' } as const, null)
 
 // The engine lets one module put a single hook without a matcher on an event,
 // and refuses to load the whole module on a second one. The other parts of
@@ -339,8 +335,6 @@ type Look = {
   isCheckDrawn: boolean
   /** When this drawing is made, for the time left on the ring's card. */
   now: number
-  /** The opening of More the pointer rested long enough in. */
-  tipRestedFor: number | null
 }
 
 type RowPlan = {
@@ -1936,6 +1930,36 @@ function drawTip({ Box, Text }: Table, words: string): RenderElement {
   )
 }
 
+// The same card with the wait inside: the module paints the background and
+// the words, so nothing shows until it does. Its size is set here, since an
+// open card that has drawn nothing yet must still take room to be measured.
+function drawWaitingTip(table: Table, key: string, words: string): RenderElement {
+  const { Box, Client } = table
+
+  if (Client === undefined) {
+    return drawTip(table, words)
+  }
+
+  return (
+    <Box
+      position="absolute"
+      top={0}
+      right={-(words.length + 3)}
+      display="none"
+      hover={{ display: 'flex' }}
+      flexShrink={0}
+    >
+      <Client
+        key={`waiting-${key}`}
+        module="./Delayed-tip-card.tsx"
+        props={{ words, background: TIP_BACKGROUND, color: TIP_COLOR }}
+        width={words.length + 2}
+        height={1}
+      />
+    </Box>
+  )
+}
+
 // What a button does, as a card over it while the pointer rests on it, in
 // the owner's words (2026-11-04, picked from a list of sixteen: only these).
 // A button with no entry here has no card: Go commit, Push, Continue,
@@ -1947,11 +1971,11 @@ const MORE_TIP = 'More commands'
 const CLOSE_TIP = 'Close the list'
 // The trial of a card that waits (owner, 2026-11-05: a second's rest, on one
 // button first). The app shows a card at once, has no delay to set and tells
-// the mod nothing of a hover, so this button alone is drawn by a module that
-// hears the pointer, Delayed-tip-button.tsx. A second into a rest it tells
-// the row, and only then does the drawing carry the card, which the app
-// shows at once since the pointer already rests there. The card stays the
-// app's own, so it looks and floats as every other card does.
+// the mod nothing of a hover. So the button stays the app's own and the card
+// around it stays hidden until hover as any other, but what it holds is a
+// module, Delayed-tip-card.tsx, which draws the words a second after the
+// card opens. A first try drew the button itself in such a module, and the
+// desktop drew that as bare text (seen 2026-11-05).
 const DELAYED_TIP_SHORTCUT = BACKUP_SHORTCUT
 const SHORTCUT_TIPS: Readonly<Record<string, string>> = {
   'Go backup': 'Zip the whole project into the backups folder',
@@ -2336,7 +2360,8 @@ function spacedInMore(table: Table, key: string, button: RenderElement, tip: str
     <Box key={`spaced-${key}`} flexDirection="column" alignItems="flex-end" flexShrink={0}>
       <Svg source={MORE_ROW_GAP_SVG} alt={MORE_ROW_GAP_ALT} width={1} height={MORE_ROW_GAP_PIXELS} />
       {button}
-      {tip !== null && drawTip(table, tip)}
+      {tip !== null &&
+        (key === keyOf(DELAYED_TIP_SHORTCUT) ? drawWaitingTip(table, key, tip) : drawTip(table, tip))}
     </Box>
   )
 }
@@ -2349,7 +2374,7 @@ function drawMore(
   open: Extract<ProjectBandAsk, { kind: 'more' }>,
   acts: Acts,
 ): RenderElement {
-  const { Box, Button, Client } = table
+  const { Box, Button } = table
   const name = labelOf(look.known)
 
   return (
@@ -2368,34 +2393,22 @@ function drawMore(
       >
         {open.phrases
           .filter(phrase => phrase !== UPDATE_SHORTCUT)
-          .map(phrase => {
-            const label = sendingOr(
-              look.state,
-              phrase,
-              buttonTextOf(phrase, look.known.isFast === true),
-            )
-            const tip = shortcutTipOf(phrase, look.known.isFast === true)
-
-            if (phrase === DELAYED_TIP_SHORTCUT && Client !== undefined && table.Svg !== undefined) {
-              return spacedInMore(
-                table,
-                keyOf(phrase),
-                <Client
-                  key={keyOf(phrase)}
-                  module="./Delayed-tip-button.tsx"
-                  props={{ label, name: keyOf(phrase) }}
-                />,
-                look.tipRestedFor === open.askedAt ? tip : null,
-              )
-            }
-
-            return spacedInMore(
+          .map(phrase =>
+            spacedInMore(
               table,
               keyOf(phrase),
-              <Button key={keyOf(phrase)} label={label} onPress={() => acts.shortcut(phrase)} />,
-              tip,
-            )
-          })}
+              <Button
+                key={keyOf(phrase)}
+                label={sendingOr(
+                  look.state,
+                  phrase,
+                  buttonTextOf(phrase, look.known.isFast === true),
+                )}
+                onPress={() => acts.shortcut(phrase)}
+              />,
+              shortcutTipOf(phrase, look.known.isFast === true),
+            ),
+          )}
         {open.hasUpdate &&
           spacedInMore(
             table,
@@ -2508,11 +2521,8 @@ const work: {
   lastStop: string | null
   /** Prompts entered so far: a read of the conversation started before one is stale. */
   prompts: number
-  /** The cells of the last drawing, for a press the module reports. */
-  columns: number
 } = {
   startFolder: '',
-  columns: 0,
   isSeen: false,
   wake: null,
   bandId: 'above-prompt',
@@ -3951,29 +3961,6 @@ export function registerProjectBand(on: On): void {
     return result
   })
 
-  // What the button with the delayed card tells the row: its module hears the
-  // pointer, and the row owns the card and the press.
-  on('ui.message', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.element === keyOf(DELAYED_TIP_SHORTCUT)) {
-      const told = e.data as { kind?: unknown; isOn?: unknown } | null
-
-      try {
-        if (told?.kind === 'press') {
-          await submitShortcut($, DELAYED_TIP_SHORTCUT, work.columns)
-        } else if (told?.kind === 'tip') {
-          const open = await read($, ask)
-          const askedAt = open?.kind === 'more' ? open.askedAt : null
-
-          await update($, tipRested, () => (told.isOn === true ? askedAt : null))
-        }
-      } catch (error) {
-        note($, 'the delayed card failed', error)
-      }
-    }
-
-    return await next(e)
-  })
-
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const isFirstLook = !work.isSeen
     const passesBefore = work.passes
@@ -4031,10 +4018,7 @@ export function registerProjectBand(on: On): void {
             reserve,
             isCheckDrawn,
             now: await $.clock.now(),
-            tipRestedFor: await read($, tipRested),
           }
-
-          work.columns = columns
 
           // The presses that ask are handed back to the engine, which waits
           // for them. The two that push or pull run on in the background:

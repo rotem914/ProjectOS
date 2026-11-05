@@ -642,13 +642,8 @@ async function wordsOn(ui: Drawing): Promise<string> {
   return said.join(' | ')
 }
 
-// A button a module draws stands in the tree as its Client, label in its props.
 async function buttonsOn(ui: Drawing): Promise<string[]> {
-  return (await ui.findAll({}))
-    .filter(one => one.type === 'Button' || one.type === 'Client')
-    .map(one =>
-      String(one.type === 'Client' ? (one.props.props as { label: string }).label : one.props.label),
-    )
+  return (await ui.findAll({ type: 'Button' })).map(button => String(button.props.label))
 }
 
 // A yes pressed right after its question is taken for a double press, so a
@@ -2520,6 +2515,7 @@ describe('the shortcut buttons', () => {
     }
     await ui.press({ key: 'more' })
     if (surface === 'desktop') {
+      expect(await cardOf('spaced-go-backup')).toContain('Zip the whole project into the backups folder')
       expect(await cardOf('spaced-go-audit')).toContain('Count the gaps in the project')
       expect(await cardOf('spaced-go-code-review')).toContain('Review the whole codebase for bugs')
       expect(await cardOf('spaced-go-visual-qa')).toContain('Test the site in the browser as a visitor would')
@@ -2531,9 +2527,10 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
-  // The app shows a card at once and has no delay to set, so Go backup alone
-  // is drawn by a module that hears the pointer (owner, 2026-11-05).
-  onEachSurface('Go backup shows its card after a second of rest', async ($, on, surface) => {
+  // The app shows a card at once and has no delay to set, so Go backup's card
+  // holds a module that draws the words a second after it opens (owner,
+  // 2026-11-05). The button itself stays the app's own.
+  onEachSurface('Go backup shows its words a second after its card opens', async ($, on, surface) => {
     const kit = install(on, {
       folder: 'D:\\Work\\Site',
       files: { 'D:/Work/Site/CLAUDE.md': '### `Go commit`\n### `Go backup`\n' },
@@ -2542,37 +2539,33 @@ describe('the shortcut buttons', () => {
     await start($, kit)
 
     const ui = await bandOn($, surface)
-    const words = 'Zip the whole project into the backups folder'
-    const isCardDrawn = async () => JSON.stringify(await ui.findAll({})).includes(words)
 
     await ui.press({ key: 'more' })
+    expect(await buttonsOn(ui)).toContain('Go backup')
 
     if (surface === 'desktop') {
-      expect(await isCardDrawn()).toBe(false)
-      await ui.pointer({ type: 'enter', x: 1, y: 0 })
-      await ui.advance(999)
-      expect(await isCardDrawn()).toBe(false)
-      await ui.advance(1)
-      expect(await isCardDrawn()).toBe(true)
-      await ui.pointer({ type: 'leave', x: 1, y: 0 })
-      expect(await isCardDrawn()).toBe(false)
+      const inCard = { in: 'waiting-go-backup' }
+      const words = 'Zip the whole project into the backups folder'
+      const isShown = async () => (await ui.find({ type: 'Text', text: words, ...inCard })) !== undefined
 
-      // A rest cut short shows nothing, however long the list then stays open.
-      await ui.pointer({ type: 'enter', x: 1, y: 0 })
-      await ui.advance(500)
-      await ui.pointer({ type: 'leave', x: 1, y: 0 })
+      // Closed, the card has no room, and no time passes for it.
+      await ui.resize({ columns: 0, rows: 0, ...inCard })
       await ui.advance(5_000)
-      expect(await isCardDrawn()).toBe(false)
+      expect(await isShown()).toBe(false)
 
-      // A list that closes under a resting pointer hears no leave: the rest
-      // stays out of the next opening.
-      await ui.post({ kind: 'tip', isOn: true })
-      expect(await isCardDrawn()).toBe(true)
-      await kit.clock.advance(1_000)
-      await ui.press({ key: 'cancel' })
-      await kit.clock.advance(1_000)
-      await ui.press({ key: 'more' })
-      expect(await isCardDrawn()).toBe(false)
+      await ui.resize({ columns: 47, rows: 1, ...inCard })
+      await ui.advance(900)
+      expect(await isShown()).toBe(false)
+      await ui.advance(100)
+      expect(await isShown()).toBe(true)
+
+      // Closed again, the words go, and the next opening waits again.
+      await ui.resize({ columns: 0, rows: 0, ...inCard })
+      await ui.advance(100)
+      expect(await isShown()).toBe(false)
+      await ui.resize({ columns: 47, rows: 1, ...inCard })
+      await ui.advance(500)
+      expect(await isShown()).toBe(false)
     } else {
       expect(await ui.findAll({ type: 'Client' })).toEqual([])
     }

@@ -195,7 +195,6 @@ declare module 'claude-code' {
       bandFacts: ProjectBandFacts | null
       bandAsk: ProjectBandAsk | null
       bandBusy: ProjectBandBusy
-      bandTipRestedFor: number | null
     }
   }
 }
