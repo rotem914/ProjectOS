@@ -226,7 +226,6 @@ type Dollar = EngineInterface
 // is drawn only where the surface offers the element.
 type Table = Pick<Elements['mobile'], 'Box' | 'Text' | 'Button'> & {
   Svg?: Elements['desktop']['Svg']
-  Client?: Elements['desktop']['Client']
 }
 
 // The Rotem E mark: the light triangle on its blue tile, so it reads on a
@@ -1930,88 +1929,6 @@ function drawTip({ Box, Text }: Table, words: string): RenderElement {
   )
 }
 
-// The same card with the wait inside: the module paints the background and
-// the words, so nothing shows until it does. Its size is set here, since an
-// open card that has drawn nothing yet must still take room to be measured.
-function drawWaitingTip(table: Table, key: string, words: string): RenderElement {
-  const { Box, Client } = table
-
-  if (Client === undefined) {
-    return drawTip(table, words)
-  }
-
-  return (
-    <Box
-      position="absolute"
-      top={0}
-      right={-(words.length + 3)}
-      display="none"
-      hover={{ display: 'flex' }}
-      flexShrink={0}
-    >
-      <Client
-        key={`waiting-${key}`}
-        module="./Delayed-tip-card.tsx"
-        props={{ words, background: TIP_BACKGROUND, color: TIP_COLOR }}
-        width={words.length + 2}
-        height={1}
-      />
-    </Box>
-  )
-}
-
-// What a button does, as a card over it while the pointer rests on it, in
-// the owner's words (2026-11-04, picked from a list of sixteen: only these).
-// A button with no entry here has no card: Go commit, Push, Continue,
-// Compact, Go rule and the asked words keep their label alone.
-const FAST_TIP = 'Quick rounds, no checks or paperwork until you end it'
-const FAST_OFF_TIP = 'End fast mode and write the skipped paperwork'
-const UPDATE_PLUGIN_TIP = 'Bring this computer\u2019s kit copy up to date'
-const MORE_TIP = 'More commands'
-const CLOSE_TIP = 'Close the list'
-// The trial of a card that waits (owner, 2026-11-05: a second's rest, on one
-// button first). The app shows a card at once, has no delay to set and tells
-// the mod nothing of a hover. So the button stays the app's own and the card
-// around it stays hidden until hover as any other, but what it holds is a
-// module, Delayed-tip-card.tsx, which draws the words a second after the
-// card opens. A first try drew the button itself in such a module, and the
-// desktop drew that as bare text (seen 2026-11-05).
-const DELAYED_TIP_SHORTCUT = BACKUP_SHORTCUT
-const SHORTCUT_TIPS: Readonly<Record<string, string>> = {
-  'Go backup': 'Zip the whole project into the backups folder',
-  'Go audit': 'Count the gaps in the project\u2019s records',
-  'Go code review': 'Review the whole codebase for bugs',
-  'GO visual qa': 'Test the site in the browser as a visitor would',
-  [RESEARCH_SHORTCUT]: 'Research a topic across many sources',
-  [UPDATE_SHORTCUT]: 'Bring this project up to the newest kit',
-}
-
-/** A shortcut's card words, or null for a button that has none. */
-export function shortcutTipOf(phrase: string, isFast: boolean): string | null {
-  if (phrase === FAST_SHORTCUT) {
-    return isFast ? FAST_OFF_TIP : FAST_TIP
-  }
-
-  return SHORTCUT_TIPS[phrase] ?? null
-}
-
-// A button with its card, where the surface has a pointer to rest: a keyed
-// Box makes the hover scope. The terminal draws the button alone.
-function tipped(table: Table, key: string, button: RenderElement, tip: string | null): RenderElement {
-  const { Box, Svg } = table
-
-  if (Svg === undefined || tip === null) {
-    return button
-  }
-
-  return (
-    <Box key={`tip-${key}`} flexShrink={0}>
-      {button}
-      {drawTip(table, tip)}
-    </Box>
-  )
-}
-
 function drawLabel({ Box, Text, Svg }: Table, name: string): RenderElement {
   return (
     <Box flexDirection="row" alignItems="center" gap={1} flexShrink={0}>
@@ -2233,39 +2150,27 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
             {canPush && !isPushArmed && (
               <Button key="push" label={pushLabelOf(state, known)} onPress={() => acts.askPush()} />
             )}
-            {plan.hasFast &&
-              tipped(
-                table,
-                keyOf(FAST_SHORTCUT),
-                <Button
-                  key={keyOf(FAST_SHORTCUT)}
-                  label={plan.fastLabel}
-                  onPress={() => acts.shortcut(FAST_SHORTCUT)}
-                />,
-                shortcutTipOf(FAST_SHORTCUT, known.isFast === true),
-              )}
-            {plan.hasUpdate &&
-              tipped(
-                table,
-                'update-plugin',
-                <Button
-                  key="update-plugin"
-                  label={updateLabelOf(state, known)}
-                  onPress={() => acts.askUpdate()}
-                />,
-                UPDATE_PLUGIN_TIP,
-              )}
-            {hasMore &&
-              tipped(
-                table,
-                'more',
-                <Button
-                  key="more"
-                  label={MORE_LABEL}
-                  onPress={() => acts.askMore(plan.more, plan.moreHasUpdate)}
-                />,
-                MORE_TIP,
-              )}
+            {plan.hasFast && (
+              <Button
+                key={keyOf(FAST_SHORTCUT)}
+                label={plan.fastLabel}
+                onPress={() => acts.shortcut(FAST_SHORTCUT)}
+              />
+            )}
+            {plan.hasUpdate && (
+              <Button
+                key="update-plugin"
+                label={updateLabelOf(state, known)}
+                onPress={() => acts.askUpdate()}
+              />
+            )}
+            {hasMore && (
+              <Button
+                key="more"
+                label={MORE_LABEL}
+                onPress={() => acts.askMore(plan.more, plan.moreHasUpdate)}
+              />
+            )}
           </Box>
         )}
       </Box>
@@ -2349,7 +2254,7 @@ const MORE_ROW_GAP_SVG =
 const MORE_ROW_GAP_ALT = 'Row gap'
 
 // One of More's buttons, with the spacer above it where pictures are drawn.
-function spacedInMore(table: Table, key: string, button: RenderElement, tip: string | null = null): RenderElement {
+function spacedInMore(table: Table, key: string, button: RenderElement): RenderElement {
   const { Box, Svg } = table
 
   if (Svg === undefined) {
@@ -2360,8 +2265,6 @@ function spacedInMore(table: Table, key: string, button: RenderElement, tip: str
     <Box key={`spaced-${key}`} flexDirection="column" alignItems="flex-end" flexShrink={0}>
       <Svg source={MORE_ROW_GAP_SVG} alt={MORE_ROW_GAP_ALT} width={1} height={MORE_ROW_GAP_PIXELS} />
       {button}
-      {tip !== null &&
-        (key === keyOf(DELAYED_TIP_SHORTCUT) ? drawWaitingTip(table, key, tip) : drawTip(table, tip))}
     </Box>
   )
 }
@@ -2406,7 +2309,6 @@ function drawMore(
                 )}
                 onPress={() => acts.shortcut(phrase)}
               />,
-              shortcutTipOf(phrase, look.known.isFast === true),
             ),
           )}
         {open.hasUpdate &&
@@ -2418,7 +2320,6 @@ function drawMore(
               label={updateLabelOf(look.state, look.known)}
               onPress={() => acts.askUpdate()}
             />,
-            UPDATE_PLUGIN_TIP,
           )}
         {/* The kit's update comes last, beside the button that closes the list. */}
         {open.phrases.includes(UPDATE_SHORTCUT) &&
@@ -2434,13 +2335,11 @@ function drawMore(
               )}
               onPress={() => acts.shortcut(UPDATE_SHORTCUT)}
             />,
-            shortcutTipOf(UPDATE_SHORTCUT, false),
           )}
         {spacedInMore(
           table,
           'cancel',
           <Button key="cancel" label={CLOSE_LABEL} onPress={() => acts.cancel()} />,
-          CLOSE_TIP,
         )}
       </Box>
     </Box>
