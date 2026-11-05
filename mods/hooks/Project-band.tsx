@@ -2279,9 +2279,9 @@ function drawMore(
   const { Box, Button } = table
   const name = labelOf(look.known)
 
+  // The logo and the name stay at the top, however many rows the buttons wrap
+  // onto (owner, 2026-11-05).
   return (
-    {/* The logo and the name stay at the top, however many rows the buttons
-        wrap onto (owner, 2026-11-05). */}
     <Box flexDirection="row" alignItems="flex-start" gap={1} paddingRight={look.reserve}>
       {name !== '' && drawLabel(table, name)}
       {/* The buttons sit at the far end, as in the plain row (owner, 2026-10-04). */}
