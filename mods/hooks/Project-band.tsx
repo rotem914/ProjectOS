@@ -2252,6 +2252,38 @@ const MORE_ROW_GAP_SVG =
   `<rect width="1" height="${MORE_ROW_GAP_PIXELS}" fill="#000000" fill-opacity="0"/>` +
   '</svg>'
 const MORE_ROW_GAP_ALT = 'Row gap'
+// How far the logo and the name sit below the top of More, so they stay level
+// with the first row of buttons: that row's spacer, plus half of what a
+// button is taller than the logo, measured on a screenshot (2026-11-05).
+const MORE_LABEL_GAP_PIXELS = 6.5
+const MORE_LABEL_GAP_SVG =
+  `<svg xmlns="http://www.w3.org/2000/svg" width="1" height="${MORE_LABEL_GAP_PIXELS}" ` +
+  `viewBox="0 0 1 ${MORE_LABEL_GAP_PIXELS}">` +
+  `<rect width="1" height="${MORE_LABEL_GAP_PIXELS}" fill="#000000" fill-opacity="0"/>` +
+  '</svg>'
+const MORE_LABEL_GAP_ALT = 'Label gap'
+
+// The logo and the name in More: at the top, beside the first row, however
+// many rows the buttons wrap onto (owner, 2026-11-05).
+function drawTopLabel(table: Table, name: string): RenderElement {
+  const { Box, Svg } = table
+
+  if (Svg === undefined) {
+    return drawLabel(table, name)
+  }
+
+  return (
+    <Box flexDirection="column" flexShrink={0}>
+      <Svg
+        source={MORE_LABEL_GAP_SVG}
+        alt={MORE_LABEL_GAP_ALT}
+        width={1}
+        height={MORE_LABEL_GAP_PIXELS}
+      />
+      {drawLabel(table, name)}
+    </Box>
+  )
+}
 
 // One of More's buttons, with the spacer above it where pictures are drawn.
 function spacedInMore(table: Table, key: string, button: RenderElement): RenderElement {
@@ -2281,8 +2313,8 @@ function drawMore(
   const name = labelOf(look.known)
 
   return (
-    <Box flexDirection="row" alignItems="center" gap={1} paddingRight={look.reserve}>
-      {name !== '' && drawLabel(table, name)}
+    <Box flexDirection="row" alignItems="flex-start" gap={1} paddingRight={look.reserve}>
+      {name !== '' && drawTopLabel(table, name)}
       {/* The buttons sit at the far end, as in the plain row (owner, 2026-10-04). */}
       <Box
         flexDirection="row"

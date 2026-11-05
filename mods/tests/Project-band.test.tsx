@@ -2486,6 +2486,25 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
+  // However many rows the buttons wrap onto, the logo and the name stay at
+  // the top, level with the first (owner, 2026-11-05).
+  onEachSurface('More keeps the logo and the name at the top', async ($, on, surface) => {
+    const kit = install(on, { changed: 2 })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    await ui.press({ key: 'more' })
+
+    const boxes = await ui.findAll({ type: 'Box' })
+    const gaps = (await ui.findAll({ type: 'Svg' })).filter(one => one.props.alt === 'Label gap')
+
+    expect(boxes.some(one => one.props.alignItems === 'flex-start')).toBe(true)
+    expect(gaps).toHaveLength(surface === 'desktop' ? 1 : 0)
+    await ui.unmount()
+  })
+
   test('the ring fills to the percentage: nothing, a short arc, a long arc, the whole ring', () => {
     expect(sessionRing(0)).not.toContain('<path')
     expect(sessionRing(25)).toContain('A4.6 4.6 0 0 1 10.60 6.00')
@@ -4010,7 +4029,7 @@ describe('a narrow row', () => {
     await desktop.press({ key: 'more' })
     // More's row spacers are pictures too; the mark is still the one picture
     // that shows.
-    expect((await desktop.findAll({ type: 'Svg' })).filter(one => one.props.alt !== 'Row gap')).toHaveLength(1)
+    expect((await desktop.findAll({ type: 'Svg' })).filter(one => one.props.alt !== 'Row gap' && one.props.alt !== 'Label gap')).toHaveLength(1)
     await desktop.unmount()
 
     const terminal = await bandOn($, 'terminal')
