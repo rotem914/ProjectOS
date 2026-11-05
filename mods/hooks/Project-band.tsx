@@ -2253,9 +2253,9 @@ const MORE_ROW_GAP_SVG =
   '</svg>'
 const MORE_ROW_GAP_ALT = 'Row gap'
 // How far the logo and the name sit below the top of More, so they stay level
-// with the first row of buttons: that row's spacer, plus half of what a
-// button is taller than the logo, measured on a screenshot (2026-11-05).
-const MORE_LABEL_GAP_PIXELS = 6.5
+// with the first row of buttons, centre on centre as in the plain row.
+// Measured in the window: 6.5 sat about four pixels low (owner, 2026-11-05).
+const MORE_LABEL_GAP_PIXELS = 2.5
 const MORE_LABEL_GAP_SVG =
   `<svg xmlns="http://www.w3.org/2000/svg" width="1" height="${MORE_LABEL_GAP_PIXELS}" ` +
   `viewBox="0 0 1 ${MORE_LABEL_GAP_PIXELS}">` +
