@@ -1568,6 +1568,23 @@ function commitLabelOf(known: ProjectBandFacts): string {
   return files > 0 ? `${MAIN_SHORTCUT} · ${files}` : MAIN_SHORTCUT
 }
 
+function canCommitOf(known: ProjectBandFacts): boolean {
+  return (
+    known.repo !== null && known.shortcuts.includes(MAIN_SHORTCUT) && (known.repo?.files ?? 0) > 0
+  )
+}
+
+function isCommitWord(word: string): boolean {
+  return word.toLowerCase() === MAIN_SHORTCUT.toLowerCase()
+}
+
+// What an asked word reads on its button. Go commit asked by name stands in
+// for the row's own button, so it carries that button's count (owner,
+// 2026-11-06). The press still sends the word as the reply wrote it.
+function askedLabelOf(known: ProjectBandFacts, word: string): string {
+  return isCommitWord(word) && canCommitOf(known) ? commitLabelOf(known) : word
+}
+
 function sentOf(phrase: string, isFast: boolean, isUpdateByLink = false): string {
   if (phrase === UPDATE_SHORTCUT && isUpdateByLink) {
     return UPDATE_BY_LINK
@@ -1601,12 +1618,9 @@ function planOf(
   // neither the row nor the More list. A reply that asks for it already
   // offers it at the left, so its button at the far end steps aside until
   // the next message (owner, 2026-11-06): it is not moved behind More, and
-  // its count does not turn into words.
-  const isCommitAsked = askedOf(known).some(
-    word => word.toLowerCase() === MAIN_SHORTCUT.toLowerCase(),
-  )
-  const canCommit =
-    isInRepo && known.shortcuts.includes(MAIN_SHORTCUT) && (known.repo?.files ?? 0) > 0
+  // the asked button carries its count.
+  const isCommitAsked = askedOf(known).some(isCommitWord)
+  const canCommit = canCommitOf(known)
   const hasMain = canCommit && !isCommitAsked
   const hasFast = isInRepo && known.shortcuts.includes(FAST_SHORTCUT)
   const others: string[] = isInRepo
@@ -1696,7 +1710,7 @@ function planOf(
     ]
     const moreHasUpdate = canUpdate && !step.hasUpdate
     const buttons = [
-      ...askedOf(known).map(word => sendingOr(state, word, word)),
+      ...askedOf(known).map(word => sendingOr(state, word, askedLabelOf(known, word))),
       ...(step.hasCommit ? [sendingOr(state, MAIN_SHORTCUT, commitLabelOf(known))] : []),
       ...(isFastInRow ? [fastLabel] : []),
       ...(canPush ? [pushLabelOf(state, known)] : []),
@@ -2018,7 +2032,7 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
           {asked.map((word, at) => (
             <Button
               key={`asked-${at}`}
-              label={sendingOr(state, word, word)}
+              label={sendingOr(state, word, askedLabelOf(known, word))}
               onPress={() => acts.shortcut(word)}
             />
           ))}

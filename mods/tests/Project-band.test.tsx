@@ -1771,8 +1771,8 @@ describe('the shortcut buttons', () => {
 
   // A reply that asks for Go commit puts the word at the left, so the row's
   // own Go commit at the far end steps aside until the next message (owner,
-  // 2026-11-06). It does not move behind More, and its count does not turn
-  // into words.
+  // 2026-11-06). It does not move behind More, and the asked button carries
+  // its count, so the row reads the same with the button at the other end.
   onEachSurface('Go commit asked by name takes the place of its own button', async ($, on, surface) => {
     const kit = install(on, {
       changed: 3,
@@ -1790,7 +1790,9 @@ describe('the shortcut buttons', () => {
 
     expect(await buttonsOn(ui)).toEqual(own)
     await reply('It is done.\n\nSay `Go commit` and I commit it.')
-    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Fast mode', '\u22ee'])
+    expect(await buttonsOn(ui)).toEqual(own)
+    expect((await ui.find({ key: 'asked-0' }))?.props.label).toBe('Go commit \u00b7 3')
+    expect(await ui.find({ key: 'go-commit' })).toBeFalsy()
     expect(await wordsOn(ui)).not.toContain('to commit')
 
     await ui.press({ key: 'more' })
@@ -1801,10 +1803,12 @@ describe('the shortcut buttons', () => {
     await $.prompt.submit(typed('not yet'))
     await kit.clock.settle()
     expect(await buttonsOn(ui)).toEqual(own)
+    expect(await ui.find({ key: 'go-commit' })).toBeTruthy()
 
     // In capitals it is the same word.
     await reply('Say GO COMMIT and I commit it.')
-    expect(await buttonsOn(ui)).toEqual(['GO COMMIT', 'Fast mode', '\u22ee'])
+    expect(await buttonsOn(ui)).toEqual(own)
+    expect(await ui.find({ key: 'go-commit' })).toBeFalsy()
     await $.prompt.submit(typed('later'))
     await kit.clock.settle()
 
@@ -2053,7 +2057,7 @@ describe('the shortcut buttons', () => {
     // as the row's own button does.
     await reply('1) Say `Type tokens` to wire them.\n2) Say `Go commit` to commit everything.')
     await kit.clock.settle()
-    expect(await buttonsOn(ui)).toEqual(['Type tokens', 'Go commit', '\u22ee'])
+    expect(await buttonsOn(ui)).toEqual(['Type tokens', 'Go commit \u00b7 2', '\u22ee'])
     await ui.press({ key: 'asked-1' })
     await kit.clock.settle()
     expect(kit.world.prompts.at(-1)?.text).toBe('Go commit')
