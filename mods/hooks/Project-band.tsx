@@ -738,9 +738,10 @@ const APPROVE_WORDS = ['Approve', 'Approve all'] as const
 const VERDICT_WORDS = ['Fix all', 'Drop all', 'Backlog all'] as const
 const FIX_ALL = VERDICT_WORDS[0]
 // The shortcuts with a button of their own in the row that are not offered
-// twice. Go commit is offered again among the asked words when a reply asks
-// for it: its own button at the far end was missed beside the asked ones
-// (owner, 2026-10-20, "Say Type tokens, say Go commit" read as one button).
+// twice. Go commit is offered among the asked words when a reply asks for
+// it: its own button at the far end was missed beside the asked ones (owner,
+// 2026-10-20, "Say Type tokens, say Go commit" read as one button), and that
+// button then steps aside (planOf; owner, 2026-11-06).
 const ROW_SHORTCUTS = [FAST_SHORTCUT] as const
 const FIX_WORD = /^fix\s/i
 const SAY_GO_KIT = /\bsay\s+`?go kit`?(?![\w])/gi
@@ -1597,9 +1598,16 @@ function planOf(
   const isInRepo = known.repo !== null
   // Go commit shows only while there is something to commit (owner,
   // 2026-10-04): with nothing waiting, or before git has counted, it is in
-  // neither the row nor the More list.
-  const hasMain =
+  // neither the row nor the More list. A reply that asks for it already
+  // offers it at the left, so its button at the far end steps aside until
+  // the next message (owner, 2026-11-06): it is not moved behind More, and
+  // its count does not turn into words.
+  const isCommitAsked = askedOf(known).some(
+    word => word.toLowerCase() === MAIN_SHORTCUT.toLowerCase(),
+  )
+  const canCommit =
     isInRepo && known.shortcuts.includes(MAIN_SHORTCUT) && (known.repo?.files ?? 0) > 0
+  const hasMain = canCommit && !isCommitAsked
   const hasFast = isInRepo && known.shortcuts.includes(FAST_SHORTCUT)
   const others: string[] = isInRepo
     ? [
@@ -1680,7 +1688,7 @@ function planOf(
     // commit the next. The backup says nothing in the row; its button is
     // behind More.
     const isFastInRow = step.hasFast
-    const words = wordsOf(known, step.isShort, step.hasCommit, '', isCheckDrawn).join(' \u00b7 ')
+    const words = wordsOf(known, step.isShort, step.hasCommit || (canCommit && isCommitAsked), '', isCheckDrawn).join(' \u00b7 ')
     const more = [
       ...(hasMain && !step.hasCommit ? [MAIN_SHORTCUT] : []),
       ...(hasFast && !isFastInRow ? [FAST_SHORTCUT] : []),

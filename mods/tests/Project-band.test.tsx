@@ -1769,6 +1769,76 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
+  // A reply that asks for Go commit puts the word at the left, so the row's
+  // own Go commit at the far end steps aside until the next message (owner,
+  // 2026-11-06). It does not move behind More, and its count does not turn
+  // into words.
+  onEachSurface('Go commit asked by name takes the place of its own button', async ($, on, surface) => {
+    const kit = install(on, {
+      changed: 3,
+      files: { 'D:/Work/Site/CLAUDE.md': '### `Go commit`\n### `FAST MODE`\n### `Go audit`\n' },
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface, width(surface, 120))
+    const reply = async (answer: string) => {
+      await $.turn.complete({ answer, durationMs: 1200, isAborted: false, turnId: 'turn-1', reason: 'answer' })
+      await kit.clock.settle()
+    }
+    const own = ['Go commit \u00b7 3', 'Fast mode', '\u22ee']
+
+    expect(await buttonsOn(ui)).toEqual(own)
+    await reply('It is done.\n\nSay `Go commit` and I commit it.')
+    expect(await buttonsOn(ui)).toEqual(['Go commit', 'Fast mode', '\u22ee'])
+    expect(await wordsOn(ui)).not.toContain('to commit')
+
+    await ui.press({ key: 'more' })
+    expect(await buttonsOn(ui)).not.toContain('Go commit')
+    await ui.press({ key: 'cancel' })
+
+    // The next message takes the asked word away, and the button is back.
+    await $.prompt.submit(typed('not yet'))
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(own)
+
+    // In capitals it is the same word.
+    await reply('Say GO COMMIT and I commit it.')
+    expect(await buttonsOn(ui)).toEqual(['GO COMMIT', 'Fast mode', '\u22ee'])
+    await $.prompt.submit(typed('later'))
+    await kit.clock.settle()
+
+    // Any other asked word leaves the button where it is.
+    await reply('Say `Approve` and I write it.')
+    expect(await buttonsOn(ui)).toEqual(['Approve', ...own])
+    await ui.unmount()
+  })
+
+  // Where the project has no Go commit of its own there is no button to step
+  // aside, so the count stays in the words.
+  onEachSurface('Go commit asked where the project has none keeps the count', async ($, on, surface) => {
+    const kit = install(on, {
+      changed: 3,
+      files: { 'D:/Work/Site/CLAUDE.md': '### `FAST MODE`\n' },
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface, width(surface, 120))
+
+    await $.turn.complete({
+      answer: 'Say `Go commit` and I commit it.',
+      durationMs: 1200,
+      isAborted: false,
+      turnId: 'turn-1',
+      reason: 'answer',
+    })
+    await kit.clock.settle()
+    expect((await buttonsOn(ui))[0]).toBe('Go commit')
+    expect(await wordsOn(ui)).toContain('3 to commit')
+    await ui.unmount()
+  })
+
   // Each figure carries its name as a card, hidden until the pointer rests on
   // the figure (owner, 2026-11-04, through a side chat): the name and nothing
   // more. The desktop app floats it above the bar. The terminal has no pointer
@@ -1977,12 +2047,13 @@ describe('the shortcut buttons', () => {
     await kit.clock.settle()
     expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 2', '\u22ee'])
 
-    // Go commit asked by name is offered beside the other asked words all
-    // the same, its own button at the far end having been missed (owner,
-    // 2026-10-20); the press sends the word as the row's own button does.
+    // Go commit asked by name is offered beside the other asked words, its
+    // own button at the far end having been missed (owner, 2026-10-20), and
+    // that button steps aside (owner, 2026-11-06); the press sends the word
+    // as the row's own button does.
     await reply('1) Say `Type tokens` to wire them.\n2) Say `Go commit` to commit everything.')
     await kit.clock.settle()
-    expect(await buttonsOn(ui)).toEqual(['Type tokens', 'Go commit', 'Go commit \u00b7 2', '\u22ee'])
+    expect(await buttonsOn(ui)).toEqual(['Type tokens', 'Go commit', '\u22ee'])
     await ui.press({ key: 'asked-1' })
     await kit.clock.settle()
     expect(kit.world.prompts.at(-1)?.text).toBe('Go commit')
