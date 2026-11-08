@@ -1,5 +1,5 @@
-// Wrap-up.test.ts - tests for the refusal of a wrap-up box that carries a
-// question, the third part of hooks/Reply-check.ts.
+// Wrap-up.test.ts - tests for the refusal of the wrap-up box, in every
+// project, the third part of hooks/Reply-check.ts.
 //
 // Run with the engine itself, from anywhere:
 //
@@ -186,48 +186,50 @@ describe('the question panel after a report', () => {
   })
 })
 
+// The box is refused in every project, whatever it carries (owner,
+// 2026-11-09): the turn ends on the reply itself.
 describe('the wrap-up box through the engine', () => {
   onEachSurface('a call that carries a question is refused, with the reason', async ($, on, surface) => {
     const { reached } = world(on, WITH_RULE)
     await open($, surface)
 
     const answer = await wrapUp($, { recap: 'The lock is in.', question: 'Push it now?', options: ['Yes', 'No'] })
-    expect('deny' in answer ? answer.deny : '').toMatch(/carries the recap only.*this call carries its question/)
+    expect('deny' in answer ? answer.deny : '').toMatch(/turned the wrap-up box off in every project.*Do not call it again/)
     expect(reached).toEqual([])
   })
 
-  onEachSurface('a question inside the recap is refused too', async ($, on, surface) => {
-    const { reached } = world(on, WITH_RULE)
-    await open($, surface)
-
-    const answer = await wrapUp($, { recap: 'The lock is in.\nShall I push it?' })
-    expect('deny' in answer ? answer.deny : '').toMatch(/a question in its recap/)
-    expect(reached).toEqual([])
-  })
-
-  onEachSurface('the recap alone reaches the app', async ($, on, surface) => {
+  onEachSurface('the recap alone is refused too', async ($, on, surface) => {
     const { reached } = world(on, WITH_RULE)
     await open($, surface)
 
     const answer = await wrapUp($, { recap: 'The lock is in. Both suites pass.', question: '' })
-    expect('deny' in answer).toBe(false)
-    expect(reached.map(call => call.recap)).toEqual(['The lock is in. Both suites pass.'])
+    expect('deny' in answer).toBe(true)
+    expect(reached).toEqual([])
   })
 
-  onEachSurface('a project whose rules say nothing of the box lets every call through', async ($, on, surface) => {
+  onEachSurface('a project whose rules say nothing of the box refuses it as well', async ($, on, surface) => {
     const { reached } = world(on, { [RULES_PATH]: DASH_RULE })
     await open($, surface)
 
     const answer = await wrapUp($, { recap: 'Done.', question: 'Push it now?' })
-    expect('deny' in answer).toBe(false)
-    expect(reached).toHaveLength(1)
+    expect('deny' in answer).toBe(true)
+    expect(reached).toEqual([])
   })
 
-  onEachSurface('a folder with no rules file lets every call through', async ($, on, surface) => {
+  onEachSurface('a folder with no rules file refuses it as well', async ($, on, surface) => {
     const { reached } = world(on, {})
     await open($, surface)
 
-    const answer = await wrapUp($, { recap: 'Done.', question: 'Push it now?' })
+    const answer = await wrapUp($, { recap: 'Done.' })
+    expect('deny' in answer).toBe(true)
+    expect(reached).toEqual([])
+  })
+
+  onEachSurface("a subagent's call is its own conversation's, and passes", async ($, on, surface) => {
+    const { reached } = world(on, WITH_RULE)
+    await open($, surface)
+
+    const answer = await wrapUp($, { agentId: 'agent-1', recap: 'Done.' })
     expect('deny' in answer).toBe(false)
     expect(reached).toHaveLength(1)
   })

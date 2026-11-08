@@ -184,12 +184,11 @@ a path relative to the project (`project-os/History.md`) gets the project
 folder in front of it, written as this computer writes paths. A first folder
 the project does not have is left as written: the fix never guesses.
 
-**A wrap-up box that carries a question is refused**, in a project whose
-`project-os/Conversations.md` says the wrap-up box carries the recap only. The
-desktop app ends a turn with that box, filled by a tool call, and with a
-question or buttons in it the app shows a paragraph of its own in place of the
-reply. The plugin refuses such a call with the reason, and the assistant calls
-again with the recap alone and puts the question in the reply. In a project
+**The wrap-up box is refused**, in every project. The desktop app ends a turn
+with that box, filled by a tool call, and with a question or buttons in it the
+app shows a paragraph of its own in place of the reply. The owner wants the box
+gone, so the plugin refuses every such call with the reason, and the assistant
+ends the turn on its reply, any question in it as the last lines. In a project
 whose `project-os/Conversations.md` says a report never ends on the question
 panel, the plugin also refuses that panel once the turn already holds a
 report, with the reason: the options go under Next as Say words.

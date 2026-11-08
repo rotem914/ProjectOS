@@ -562,11 +562,10 @@ const panelRefused = (): string =>
   'the report is already in this turn, so number the options under Next, each as Say `X`, ' +
   'and end the turn on that text. The panel is for a question that blocks the work before it is done.'
 
-const wrapUpRefused = (asks: string): string =>
-  'The wrap-up box carries the recap only, never a question or buttons ' +
-  `(project-os/Conversations.md, the wrap-up rule), and this call carries ${asks}. ` +
-  'Call it again with the recap alone, two sentences at most, and put the question ' +
-  'in the reply, under its last headline.'
+const wrapUpRefused = (): string =>
+  'The owner turned the wrap-up box off in every project, recap and question alike. ' +
+  'Do not call it again in this session: end the turn on the reply itself, ' +
+  'with any question for the owner as its last lines.'
 
 // ---------------------------------------------------------------------------
 // The hooks
@@ -705,21 +704,13 @@ export const registerReplyCheck = (on: On): void => {
     return message === e.message ? next(e) : next({ ...e, message })
   })
 
-  // The app's wrap-up call, on the main loop, in a project whose rules keep
-  // the question out of the box. A call the check cannot read passes.
-  on('tool.call', { tool: WRAP_UP_TOOL }, (_$, e, next) => {
-    const now = found
-    if (now === undefined || !now.rules.hasWrapUpRule || e.agentId !== undefined) return next(e)
-
-    let asks: string | null = null
-    try {
-      asks = wrapUpAsks(e as unknown as Readonly<Record<string, unknown>>)
-    } catch {
-      asks = null
-    }
-
-    return asks === null ? next(e) : { deny: wrapUpRefused(asks) }
-  })
+  // The app's wrap-up call, on the main loop, refused in every project and
+  // whatever it carries: the owner wants the box gone, recap and question
+  // alike (owner, 2026-11-09), so the turn ends on the reply itself. The
+  // reading of a call above stays for the day the recap may come back.
+  on('tool.call', { tool: WRAP_UP_TOOL }, (_$, e, next) =>
+    e.agentId !== undefined ? next(e) : { deny: wrapUpRefused() },
+  )
 
   // The question panel after a report, on the main loop, in a project whose
   // rules say a report never ends on it.
