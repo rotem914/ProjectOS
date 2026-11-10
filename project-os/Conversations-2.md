@@ -101,3 +101,10 @@ When a reply answers a side question while the last report's asks wait, it ends 
 Each is a Say word, numbered, as the last lines, so the row keeps their buttons.
 Only asks still open come back: one the owner answered, or the work closed, is dropped.
 Rule 20 holds: no headline and no divider above them, rule 8 aside.
+
+### 28 · The first label names the point
+
+`Problem:` opens a point only when something is broken, wrong or at risk.
+`Status:` opens a point that says where a piece of work stands.
+`Decision:` opens a point that waits on a call of the owner's.
+`Proposal:` and `Your workflow:` follow as before.

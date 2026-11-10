@@ -523,6 +523,21 @@ test('a project that renamed rule 10\'s labels has its findings lists read by it
   assert.equal(flags('Text.\n\n**Glued headline**\n\nIssue:\nIt breaks.', 'Rule 10 (', { root }), true);
 });
 
+test('a point that is no fault opens on Status or Decision, and the list is still a findings list', () => {
+  const item = (i, label) => `----\n**${i} · Item ${i}**\n\n${label}\nIt waits.\n\nProposal:\nBuild it next.\nIt works.`;
+  const list = ['Status:', 'Decision:', '**Status:**', '**Decision:**'].map((label, i) => item(i + 1, label)).join('\n\n');
+
+  assert.equal(flags(list, 'Rule 1 (cut hard)'), false);
+  assert.equal(flags('Text.\n\n**Glued headline**\n\nStatus:\nNo code yet.', 'Rule 10 ('), true);
+});
+
+test('a project whose rules name no other opening label reads Status as plain text', () => {
+  const root = project({ second: null });
+  const item = (i) => `----\n**${i} · Item ${i}**\n\nStatus:\nIt waits.\n\nProposal:\nBuild it next.\nIt works.`;
+
+  assert.equal(flags([1, 2, 3].map(item).join('\n\n'), 'Rule 1 (cut hard)', { root }), true);
+});
+
 test('rule 5: one initial alone still ends a sentence', () => {
   assert.equal(flags('I would ship B. It keeps the old links.', 'Rule 5 ('), true);
 });

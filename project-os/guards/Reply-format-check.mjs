@@ -164,7 +164,12 @@ export function readReplyRules(text) {
   const point = find(text, /\*\*bold\*\* headline with `-{3,}` above it/);
   const ruleTen = point ? text.slice(point.match.index).split(/\n#{2,4}\s/)[0] : '';
   const named = backticked(ruleTen).filter((label) => /^[^`\n]{1,30}:$/.test(label));
-  const labels = named.length >= 2 ? named.slice(0, 2) : ['Problem:', 'Proposal:'];
+  const [first, second] = named.length >= 2 ? named.slice(0, 2) : ['Problem:', 'Proposal:'];
+  // A point that is no fault opens on another label, each named by its own
+  // sentence ("`Status:` opens a point that ..."; owner, 2026-11-10). Every
+  // one of them stands where rule 10's first label does.
+  const openers = [...text.matchAll(/`([^`\n]{1,30}:)`[ \t]+opens a point\b/g)].map((m) => m[1]);
+  const labels = [[...new Set([first, ...openers])], second];
   const paths = find(text, /\bFULL\b[^\n]{0,40}\bpath\b/);
   const routes = find(text, /\bFULL\b[^\n]{0,40}\b(?:address|URL)\b/);
 
@@ -408,8 +413,9 @@ const countWords = (line) =>
 
 const DEFAULT_LABELS = ['Problem:', 'Proposal:'];
 const escaped = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-// A label alone on its line, bold or plain.
-const labelLine = (labels) => new RegExp(`^(?:\\*\\*)?(?:${labels.map(escaped).join('|')})(?:\\*\\*)?$`);
+// A label alone on its line, bold or plain. A place in the list holds one
+// label or the several that may stand there (the first label of a point).
+const labelLine = (labels) => new RegExp(`^(?:\\*\\*)?(?:${labels.flat().map(escaped).join('|')})(?:\\*\\*)?$`);
 
 const isFindingsList = (view, labels = DEFAULT_LABELS) =>
   labels.every((label) => view.lines.some((line, i) => !view.skipped[i] && labelLine([label]).test(line.trim())));
