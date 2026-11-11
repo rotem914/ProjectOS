@@ -655,6 +655,30 @@ test('plugin: the kit\'s own script wired in settings has nowhere to leave a not
   assert.match(prompt(root, 'session-h').out, /reply-format-check/);
 });
 
+// ---------------------------------------------------------------------------
+// Go conversation: a reply in the mode is not judged
+// ---------------------------------------------------------------------------
+
+test('go conversation: a reply that ends on the mode line is not judged, where the project has the mode', () => {
+  const root = project();
+
+  fs.appendFileSync(path.join(root, 'CLAUDE.md'), '\n### `Go conversation`\n\nReplies ignore every Conversations file.\n');
+
+  const free = `${lines(9)}\n\nConversation mode on`;
+
+  assert.notEqual(check(lines(9), { root }).note, '');
+  assert.equal(check(free, { root }).note, '');
+  // Fast mode on too: its footer and divider still follow the mode's line.
+  assert.equal(check(`${free}\n\n----\n\nFast mode on`, { root }).note, '');
+  // The line anywhere but last, or inside a fence, switches nothing.
+  assert.notEqual(check(`Conversation mode on\n\n${lines(9)}`, { root }).note, '');
+  assert.notEqual(check(`${lines(9)}\n\n~~~\nConversation mode on\n~~~`, { root }).note, '');
+});
+
+test('go conversation: a project without the shortcut has no such mode', () => {
+  assert.notEqual(check(`${lines(9)}\n\nConversation mode on`).note, '');
+});
+
 test('plugin: a project that wires its own reply check on Stop keeps it', () => {
   const root = project({ marker: true });
 

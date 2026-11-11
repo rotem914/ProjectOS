@@ -583,6 +583,11 @@ What the catch-up does NOT resurrect: the per-round QA and the auto review.
 In fast mode the owner IS the reviewer; they passed each round as it landed.
 If a round left something genuinely unverified, say so in one line.
 
+### `Go conversation`
+
+Replies ignore every Conversations file until the owner says `Conversations off`, or the chat ends.
+Each reply in the mode ends on the line `Conversation mode on`.
+
 ### `Go commit`
 
 Commit everything accumulated up to now, across sessions, not only this chat.

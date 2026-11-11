@@ -869,6 +869,25 @@ function writeNote(text, keepEarlier) {
   }
 }
 
+// Go conversation (the CLAUDE.md shortcut; owner, 2026-11-12). A reply in the
+// mode ignores every Conversations file and ends on the mode's line, alone
+// and outside a fence, so nothing here judges it. When fast mode is on too,
+// its own footer and divider still follow that line. Only a project whose
+// CLAUDE.md carries the shortcut has the mode.
+const CONVERSATION_SHORTCUT = /^###[ \t]+`Go conversation`(?=[ \t\r]|$)/im;
+const CONVERSATION_FOOTER = /^conversation mode on\.?$/i;
+const FAST_FOOTER = /^fast mode on\.?$/i;
+
+export const hasConversationMode = (claudeMd) => CONVERSATION_SHORTCUT.test(claudeMd);
+
+export function endsOnConversationMode({ lines, fenced }) {
+  const tail = lines
+    .map((line, i) => (fenced[i] ? '```' : line.trim()))
+    .filter((t) => t !== '' && !isGap(t) && !isDivider(t) && !FAST_FOOTER.test(t));
+
+  return tail.length > 0 && CONVERSATION_FOOTER.test(tail[tail.length - 1]);
+}
+
 function main() {
   let payload = {};
 
@@ -900,6 +919,8 @@ function main() {
   } catch {
     // No CLAUDE.md: no local address to suggest.
   }
+
+  if (hasConversationMode(claudeMd) && endsOnConversationMode(linesOf(reply))) process.exit(ALLOW);
 
   const note = noteFor(reply, asked, readReplyRules(text), {
     root: ROOT,

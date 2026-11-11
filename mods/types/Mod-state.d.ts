@@ -104,6 +104,12 @@ export type ProjectBandFacts = {
    */
   isFast?: boolean
   /**
+   * Whether Go conversation is on in this conversation: replies leave the
+   * reply format until the owner says Conversations off. A value kept by an
+   * earlier version of the mod has no such key, and reads the same as false.
+   */
+  isConversation?: boolean
+  /**
    * The words the last reply asked the owner to say, three at most, until
    * the next prompt enters; the row offers each as a button. A value kept by
    * an earlier version of the mod has no such key, and reads as none.

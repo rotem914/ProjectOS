@@ -75,6 +75,7 @@ const NEW_CONVERSATION = { source: ['clear', 'resume', 'compact', 'fork'] } as c
 const SHORTCUTS = [
   'Go commit',
   'FAST MODE',
+  'Go conversation',
   'Go backup',
   'Go audit',
   'Go update kit',
@@ -132,6 +133,14 @@ const FAST_SENT = 'FAST ON'
 // mode off (owner, 2026-10-04; it first read "Fast on").
 const FAST_ON_LABEL = 'Fast Off'
 const FAST_OFF_SENT = 'FAST OFF'
+// Go conversation (owner, 2026-11-12): replies leave the reply format until
+// the owner says Conversations off. Its button waits behind the three dots.
+// While the mode is on, the button that switches it off stands where Fast
+// mode does in the row, in ordinary letters, and the list no longer offers
+// the mode. A press sends the words the kit's shortcut answers to.
+const CONVERSATION_SHORTCUT = 'Go conversation'
+const CONVERSATION_OFF_LABEL = 'Conversations off'
+const CONVERSATION_OFF_SENT = 'Conversations off'
 // The backup's age is read from the newest ZIP in the project's backups
 // folder, where the kit's backup puts it. The row says nothing of it: Go
 // backup waits behind the three dots (owner, 2026-11-04: not in the row at
@@ -352,6 +361,8 @@ type RowPlan = {
   hasFast: boolean
   /** What the Fast button reads: the mode's state rides in it. */
   fastLabel: string
+  /** The shortcut that button stands for: Go conversation while that mode is on. */
+  fastPhrase: string
   /** The backup's age as quiet words a press hides; empty when not shown. */
   backupQuiet: string
   /** True once the newest backup is old enough to call for a new one. */
@@ -625,6 +636,23 @@ function fastAfter(text: string, isOn: boolean): boolean {
   return isOn
 }
 
+// Whether Go conversation is on after a prompt: the shortcut switches it on,
+// and its off words switch it off, with the s or without. Any other prompt
+// leaves the mode as it was.
+function conversationAfter(text: string, isOn: boolean): boolean {
+  const said = text.trim().replace(/\s+/g, ' ').replace(/[.!]+$/, '').toLowerCase()
+
+  if (said === 'go conversation') {
+    return true
+  }
+
+  if (said === 'conversations off' || said === 'conversation off') {
+    return false
+  }
+
+  return isOn
+}
+
 // The words a reply asks the owner to say are buttons, first in the row,
 // until the next prompt enters (owner, 2026-10-09 for Go kit, 2026-10-11 for
 // every word): "Say `Approve all`", "Say GO", "Say `Go kit`". A list of
@@ -754,7 +782,8 @@ const SAY_CHAINED = /^\s*(?:,|or|\/)\s*`([^`\n]{1,24})`/i
 // ("I would say Fast mode") is no ask. Any other word is asked in backticks.
 const SAY_BARE = /\b[Ss]ay\s+([A-Z]{2,}(?:\s+[A-Z]{2,})?)(?=[\s,.!?;:]|$)/g
 const VERDICTS = /\bfix\s*(?:\/|,)\s*drop\s*(?:\/|,|\s+or)\s*backlog\b/i
-const FAST_FOOTER = /^fast mode on\.?$/i
+// The line a reply in a mode ends on: fast mode's, or Go conversation's.
+const FAST_FOOTER = /^(?:fast|conversation) mode on\.?$/i
 
 /**
  * The words a turn asks for: those of the last text block that asks any,
@@ -863,6 +892,19 @@ function isFastFooterIn(answer: string): boolean {
   const last = lines.at(-1) ?? ''
 
   return last.replace(/[.!]+$/, '').toLowerCase() === 'fast mode on'
+}
+
+// A reply in Go conversation ends on the line "Conversation mode on", and
+// puts the row on the mode the same way. When fast mode is on too, its own
+// footer and the divider above it still follow that line.
+function isConversationFooterIn(answer: string): boolean {
+  const lines = answer
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line !== '' && !/^-{3,}$/.test(line) && !/^fast mode on[.!]*$/i.test(line))
+  const last = lines.at(-1) ?? ''
+
+  return last.replace(/[.!]+$/, '').toLowerCase() === 'conversation mode on'
 }
 
 // How the row reads a backup's age: today, or its count of days.
@@ -1538,9 +1580,18 @@ function isKitUpdateWaiting(known: ProjectBandFacts): boolean {
   return !head.startsWith(commit)
 }
 
-function buttonTextOf(phrase: string, isFast: boolean, isUpdateWaiting = false): string {
+function buttonTextOf(
+  phrase: string,
+  isFast: boolean,
+  isUpdateWaiting = false,
+  isTalking = false,
+): string {
   if (phrase === FAST_SHORTCUT) {
     return fastLabelOf(isFast)
+  }
+
+  if (phrase === CONVERSATION_SHORTCUT) {
+    return isTalking ? CONVERSATION_OFF_LABEL : phrase
   }
 
   if (phrase === VISUAL_SHORTCUT) {
@@ -1585,9 +1636,18 @@ function askedLabelOf(known: ProjectBandFacts, word: string): string {
   return isCommitWord(word) && canCommitOf(known) ? commitLabelOf(known) : word
 }
 
-function sentOf(phrase: string, isFast: boolean, isUpdateByLink = false): string {
+function sentOf(
+  phrase: string,
+  isFast: boolean,
+  isUpdateByLink = false,
+  isTalking = false,
+): string {
   if (phrase === UPDATE_SHORTCUT && isUpdateByLink) {
     return UPDATE_BY_LINK
+  }
+
+  if (phrase === CONVERSATION_SHORTCUT) {
+    return isTalking ? CONVERSATION_OFF_SENT : phrase
   }
 
   if (phrase !== FAST_SHORTCUT) {
@@ -1622,7 +1682,14 @@ function planOf(
   const isCommitAsked = askedOf(known).some(isCommitWord)
   const canCommit = canCommitOf(known)
   const hasMain = canCommit && !isCommitAsked
-  const hasFast = isInRepo && known.shortcuts.includes(FAST_SHORTCUT)
+  // Go conversation is a mode only where the project carries its shortcut.
+  // While it is on, the button that switches it off stands where Fast mode
+  // does, in the row and behind More, and the list no longer offers the
+  // mode (owner, 2026-11-12).
+  const isTalking =
+    isInRepo && known.isConversation === true && known.shortcuts.includes(CONVERSATION_SHORTCUT)
+  const hasFast = isInRepo && (isTalking || known.shortcuts.includes(FAST_SHORTCUT))
+  const fastPhrase = isTalking ? CONVERSATION_SHORTCUT : FAST_SHORTCUT
   const others: string[] = isInRepo
     ? [
         ...SHORTCUTS.filter(
@@ -1630,6 +1697,7 @@ function planOf(
             phrase !== MAIN_SHORTCUT &&
             phrase !== FAST_SHORTCUT &&
             phrase !== UPDATE_SHORTCUT &&
+            (phrase !== CONVERSATION_SHORTCUT || !isTalking) &&
             known.shortcuts.includes(phrase),
         ),
         ...(known.hasResearch === true ? [RESEARCH_SHORTCUT] : []),
@@ -1644,7 +1712,11 @@ function planOf(
     : []
   const canPush = pushTarget(known.repo) !== null
   const canUpdate = isInRepo && known.pluginUpdate !== null
-  const fastLabel = sendingOr(state, FAST_SHORTCUT, fastLabelOf(known.isFast === true))
+  const fastLabel = sendingOr(
+    state,
+    fastPhrase,
+    isTalking ? CONVERSATION_OFF_LABEL : fastLabelOf(known.isFast === true),
+  )
   // The backup's age shows only where the project carries the shortcut that
   // makes one, and only once a backup was found.
   const backupDays =
@@ -1689,6 +1761,7 @@ function planOf(
     hasCommit: false,
     hasFast: false,
     fastLabel,
+    fastPhrase,
     backupQuiet,
     isBackupDue,
     hasUpdate: false,
@@ -1705,7 +1778,7 @@ function planOf(
     const words = wordsOf(known, step.isShort, step.hasCommit || (canCommit && isCommitAsked), '', isCheckDrawn).join(' \u00b7 ')
     const more = [
       ...(hasMain && !step.hasCommit ? [MAIN_SHORTCUT] : []),
-      ...(hasFast && !isFastInRow ? [FAST_SHORTCUT] : []),
+      ...(hasFast && !isFastInRow ? [fastPhrase] : []),
       ...others,
     ]
     const moreHasUpdate = canUpdate && !step.hasUpdate
@@ -1736,6 +1809,7 @@ function planOf(
       hasCommit: step.hasCommit,
       hasFast: isFastInRow,
       fastLabel,
+      fastPhrase,
       backupQuiet,
       isBackupDue,
       hasUpdate: step.hasUpdate,
@@ -1774,7 +1848,7 @@ function keysOf(known: ProjectBandFacts, state: ProjectBandBusy, columns: number
     ...(plan.backupQuiet !== '' ? ['backup-age'] : []),
     ...(plan.hasCommit ? ['go-commit'] : []),
     ...(pushTarget(known.repo) !== null ? ['push'] : []),
-    ...(plan.hasFast ? [keyOf(FAST_SHORTCUT)] : []),
+    ...(plan.hasFast ? [keyOf(plan.fastPhrase)] : []),
     ...(plan.hasUpdate ? ['update-plugin'] : []),
     ...(plan.more.length > 0 || plan.moreHasUpdate ? ['more'] : []),
   ]
@@ -2174,9 +2248,9 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
             )}
             {plan.hasFast && (
               <Button
-                key={keyOf(FAST_SHORTCUT)}
+                key={keyOf(plan.fastPhrase)}
                 label={plan.fastLabel}
-                onPress={() => acts.shortcut(FAST_SHORTCUT)}
+                onPress={() => acts.shortcut(plan.fastPhrase)}
               />
             )}
             {plan.hasUpdate && (
@@ -2328,7 +2402,12 @@ function drawMore(
                 label={sendingOr(
                   look.state,
                   phrase,
-                  buttonTextOf(phrase, look.known.isFast === true),
+                  buttonTextOf(
+                    phrase,
+                    look.known.isFast === true,
+                    false,
+                    look.known.isConversation === true,
+                  ),
                 )}
                 onPress={() => acts.shortcut(phrase)}
               />,
@@ -2437,6 +2516,8 @@ const work: {
    * compaction empties the session's values while the mode goes on.
    */
   isFast: boolean
+  /** Whether Go conversation is on in this conversation; kept here the same way. */
+  isConversation: boolean
   /** The backup's age the owner hid its words at; kept here the same way. */
   backupHidden: number | null
   /** Why the main loop's last model response stopped, until its turn ends. */
@@ -2468,6 +2549,7 @@ const work: {
   afterDrawing: [],
   project: null,
   isFast: false,
+  isConversation: false,
   backupHidden: null,
   lastStop: null,
   prompts: 0,
@@ -2862,6 +2944,12 @@ async function setAsked($: Dollar, asked: readonly string[]): Promise<void> {
 async function setFast($: Dollar, isFast: boolean): Promise<void> {
   work.isFast = isFast
   await writeFacts($, now => (now === null ? now : { ...now, isFast }))
+}
+
+// Writes whether Go conversation is on, here and in the session's values.
+async function setConversation($: Dollar, isConversation: boolean): Promise<void> {
+  work.isConversation = isConversation
+  await writeFacts($, now => (now === null ? now : { ...now, isConversation }))
 }
 
 // A press on the backup's quiet words: they leave the row at the age they
@@ -3331,7 +3419,8 @@ async function submitShortcut($: Dollar, phrase: string, columns: number): Promi
   // turn, so nothing here waits for it to enter.
   const knownNow = await read($, facts)
   const isFastNow = knownNow?.isFast === true
-  const sent = sentOf(phrase, isFastNow, knownNow?.isUpdateByLink === true)
+  const isTalkingNow = knownNow?.isConversation === true
+  const sent = sentOf(phrase, isFastNow, knownNow?.isUpdateByLink === true, isTalkingNow)
 
   // The words of an earlier press are still on their way: a reply is running,
   // and the engine holds a plugin's prompt until it ends. A second press
@@ -3371,6 +3460,12 @@ async function submitShortcut($: Dollar, phrase: string, columns: number): Promi
 
       if (isFast !== isFastNow) {
         await setFast($, isFast)
+      }
+
+      const isTalking = conversationAfter(sent, isTalkingNow)
+
+      if (isTalking !== isTalkingNow) {
+        await setConversation($, isTalking)
       }
     } catch (error) {
       // A press that did nothing would leave the owner waiting for a commit
@@ -3685,14 +3780,17 @@ async function begin($: Dollar, isNewCode: boolean, keepsFast: boolean): Promise
     const kept = await read($, facts)
 
     work.isFast = kept?.isFast === true
+    work.isConversation = kept?.isConversation === true
     work.backupHidden = kept?.backupHidden ?? null
   } else if (!keepsFast) {
     work.isFast = false
+    work.isConversation = false
     work.backupHidden = null
   }
 
   await writeStart($)
   await setFast($, work.isFast)
+  await setConversation($, work.isConversation)
   await writeFacts($, now =>
     now === null ? now : { ...now, backupHidden: work.backupHidden },
   )
@@ -3772,6 +3870,15 @@ export function registerProjectBand(on: On): void {
       if (!('drop' in entered) && isFast !== work.isFast) {
         work.isFast = isFast
         inBackground($, 'writing the fast mode failed', () => setFast($, isFast))
+      }
+
+      const isTalking = conversationAfter(e.text, work.isConversation)
+
+      if (!('drop' in entered) && isTalking !== work.isConversation) {
+        work.isConversation = isTalking
+        inBackground($, 'writing the conversation mode failed', () =>
+          setConversation($, isTalking),
+        )
       }
     } catch (error) {
       note($, 'following the fast mode failed', error)
@@ -3860,6 +3967,20 @@ export function registerProjectBand(on: On): void {
         }
       } catch (error) {
         note($, 'following the fast mode failed', error)
+      }
+    }
+
+    // A reply that ends on "Conversation mode on" does the same for that mode.
+    if (e.agentId === undefined && !e.isAborted && !work.isConversation) {
+      try {
+        if (isConversationFooterIn(e.answer)) {
+          work.isConversation = true
+          inBackground($, 'writing the conversation mode failed', () =>
+            setConversation($, true),
+          )
+        }
+      } catch (error) {
+        note($, 'following the conversation mode failed', error)
       }
     }
 

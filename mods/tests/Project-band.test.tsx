@@ -2190,6 +2190,160 @@ describe('the shortcut buttons', () => {
     await ui.unmount()
   })
 
+  // Go conversation (owner, 2026-11-12): its button waits behind the three
+  // dots, and while the mode is on, the button that switches it off stands
+  // where Fast mode does, in ordinary letters.
+  const TALK_HEADINGS = `${FAST_HEADINGS}\n### \`Go conversation\`\n`
+
+  onEachSurface('Go conversation waits behind More, and its off button stands where Fast mode does', async ($, on, surface) => {
+    const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': TALK_HEADINGS } })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await buttonsOn(ui)).toEqual(['Fast mode', '\u22ee'])
+    await ui.press({ key: 'more' })
+    expect(await buttonsOn(ui)).toEqual(['Go conversation', 'Go backup', 'X'])
+    await ui.press({ key: 'go-conversation' })
+    await kit.clock.settle()
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go conversation'])
+
+    // The mode is on: its off button took Fast mode's place, and the list
+    // no longer offers the mode.
+    expect(await buttonsOn(ui)).toEqual(['Conversations off', '\u22ee'])
+    await ui.press({ key: 'more' })
+    expect(await buttonsOn(ui)).toEqual(['Go backup', 'X'])
+    await ui.press({ key: 'cancel' })
+
+    // A later press is a new one, and sends the words that end the mode.
+    await kit.clock.advance(5_000)
+    await ui.press({ key: 'go-conversation' })
+    await kit.clock.settle()
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Go conversation', 'Conversations off'])
+    expect(await buttonsOn(ui)).toEqual(['Fast mode', '\u22ee'])
+    await ui.unmount()
+  })
+
+  onEachSurface('Go conversation follows the words the owner types', async ($, on, surface) => {
+    const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': TALK_HEADINGS } })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+    const after = async (text: string): Promise<string | undefined> => {
+      await $.prompt.submit(typed(text))
+      await kit.clock.settle()
+
+      return (await buttonsOn(ui))[0]
+    }
+
+    // The mode's name in a sentence is talk about it, and switches nothing.
+    expect(await after('what does go conversation do?')).toBe('Fast mode')
+    expect(await after('Go conversation')).toBe('Conversations off')
+    expect(await after('so what do you think of the hero?')).toBe('Conversations off')
+    expect(await after('Conversations off')).toBe('Fast mode')
+    expect(await after('go conversation')).toBe('Conversations off')
+    // The off word without its s ends the mode too.
+    expect(await after('conversation off')).toBe('Fast mode')
+
+    // Fast mode keeps its own state under the mode, and shows again after it.
+    expect(await after('FAST ON')).toBe('Fast Off')
+    expect(await after('Go conversation')).toBe('Conversations off')
+    expect(await after('Conversations off')).toBe('Fast Off')
+    await ui.unmount()
+  })
+
+  onEachSurface('a project with Go conversation and no fast mode still gets the off button in the row', async ($, on, surface) => {
+    const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': '### `Go conversation`\n### `Go backup`\n' } })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await buttonsOn(ui)).toEqual(['\u22ee'])
+    await $.prompt.submit(typed('Go conversation'))
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Conversations off', '\u22ee'])
+    await ui.unmount()
+  })
+
+  test('the mode switches nothing in a project that does not carry Go conversation', async ($, on) => {
+    const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': FAST_HEADINGS } })
+
+    await start($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    await $.prompt.submit(typed('Go conversation'))
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Fast mode', '\u22ee'])
+    await ui.unmount()
+  })
+
+  test('a reply that ends on "Conversation mode on" puts the row on the mode', async ($, on) => {
+    const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': TALK_HEADINGS } })
+
+    await start($, kit)
+
+    const ui = await bandOn($, 'desktop')
+    const reply = (answer: string, extra: Partial<{ isAborted: boolean; agentId: string }> = {}) =>
+      $.turn.complete({
+        answer,
+        durationMs: 1200,
+        isAborted: false,
+        turnId: 'turn-1',
+        reason: 'answer',
+        ...extra,
+      })
+
+    // The line inside a reply, a subagent's answer, or an interrupted turn: no change.
+    await reply('I would say Conversation mode on later.\n\nDone.')
+    await reply('I would keep it.\n\nConversation mode on', { agentId: 'helper-1' })
+    await reply('I would keep it.\n\nConversation mode on', { isAborted: true })
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Fast mode', '\u22ee'])
+
+    // A reply that ends on it: the row follows.
+    await reply('I would keep the hero as it is.\n\nConversation mode on\n')
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Conversations off', '\u22ee'])
+
+    // A later reply without the line does not turn it off, and a press does.
+    await reply('One more thought.')
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Conversations off', '\u22ee'])
+    await ui.press({ key: 'go-conversation' })
+    await kit.clock.settle()
+    expect(kit.world.prompts.map(prompt => prompt.text)).toEqual(['Conversations off'])
+    expect(await buttonsOn(ui)).toEqual(['Fast mode', '\u22ee'])
+
+    // With fast mode on too, its footer still follows the mode's line.
+    await reply('I would keep it.\n\nConversation mode on\n\n----\n\nFast mode on')
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Conversations off', '\u22ee'])
+    await ui.unmount()
+  })
+
+  test('Go conversation is kept through a compaction, and a cleared conversation starts without it', async ($, on) => {
+    const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': TALK_HEADINGS } })
+
+    await start($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    await $.prompt.submit(typed('Go conversation'))
+    await kit.clock.settle()
+    await $.classic.SessionStart({ source: 'compact', cwd: kit.world.folder })
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Conversations off', '\u22ee'])
+
+    await $.classic.SessionStart({ source: 'clear', cwd: kit.world.folder })
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toEqual(['Fast mode', '\u22ee'])
+    await ui.unmount()
+  })
+
   // The row says nothing of the backup at any age, and Go backup waits
   // behind More (owner, 2026-11-04: not in the row at all, only in the menu).
   onEachSurface('the row says nothing of a backup at any age, and Go backup waits behind More', async ($, on, surface) => {
