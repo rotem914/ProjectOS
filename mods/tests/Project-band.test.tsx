@@ -2807,10 +2807,13 @@ describe('the shortcut buttons', () => {
     await kit.clock.advance(31 * 60_000)
     await kit.clock.settle()
 
-    // The count is words of its own, with no mark beside it, and can be pressed.
+    // The count is words of its own, with no mark beside it. It waits behind
+    // More, not in the row (owner, 2026-11-12), and can be pressed there.
     expect(await wordsOn(ui)).toBe('site-web | All committed')
-    expect(await buttonsOn(ui)).toContain('2 heavy files')
+    expect(await buttonsOn(ui)).not.toContain('2 heavy files')
     expect(await ui.findAll({ type: 'Svg' })).toHaveLength(surface === 'terminal' ? 0 : 2)
+    await ui.press({ key: 'more' })
+    expect((await buttonsOn(ui))[0]).toBe('2 heavy files')
     await ui.unmount()
   })
 
@@ -2827,12 +2830,17 @@ describe('the shortcut buttons', () => {
 
     const ui = await bandOn($, surface)
 
+    expect(await buttonsOn(ui)).not.toContain('1 heavy file')
+    await ui.press({ key: 'more' })
     expect(await buttonsOn(ui)).toContain('1 heavy file')
 
-    // Still there: the press says so, and the row keeps its words.
+    // Still there: the press says so, the list closes as it does for every
+    // button in it, and the words still wait behind More.
     await ui.press({ key: 'heavy' })
     await kit.clock.settle()
     expect(kit.world.toasts).toEqual(['Checking for heavy files...', 'Still 1 heavy file.'])
+    expect(await buttonsOn(ui)).not.toContain('X')
+    await ui.press({ key: 'more' })
     expect(await buttonsOn(ui)).toContain('1 heavy file')
 
     // The file is gone, minutes after the last listing: a press finds out now.
@@ -2841,7 +2849,24 @@ describe('the shortcut buttons', () => {
     await ui.press({ key: 'heavy' })
     await kit.clock.settle()
     expect(kit.world.toasts.slice(2)).toEqual(['Checking for heavy files...', 'No heavy files any more.'])
+    await ui.press({ key: 'more' })
     expect(await buttonsOn(ui)).not.toContain('1 heavy file')
+    await ui.unmount()
+  })
+
+  onEachSurface('the heavy words alone bring the three dots, where nothing else waits behind them', async ($, on, surface) => {
+    const kit = install(on, {
+      files: { 'D:/Work/Site/project-os/Find-heavy-files.mjs': '' },
+      heavyOut: '   12.00 GB  leftover    old-render.mov',
+    })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await buttonsOn(ui)).toEqual(['\u22ee'])
+    await ui.press({ key: 'more' })
+    expect(await buttonsOn(ui)).toEqual(['1 heavy file', 'X'])
     await ui.unmount()
   })
 

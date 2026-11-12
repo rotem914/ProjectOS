@@ -355,7 +355,7 @@ type RowPlan = {
   /** True from 80% full: the number is orange words and Compact follows it. */
   isFillHigh: boolean
   words: string
-  /** The count of heavy things, as words a press lists again; empty when none. */
+  /** The count of heavy things, as the words of a button behind More; empty when none. */
   heavy: string
   hasCommit: boolean
   hasFast: boolean
@@ -1489,15 +1489,17 @@ function wordsOf(
 }
 
 // The heavy things are words of their own, with no mark beside them (owner,
-// 2026-10-06): a press on them lists again. Empty when nothing heavy is known.
-function heavyWordsOf(known: ProjectBandFacts, isShort: boolean): string {
+// 2026-10-06): a press on them lists again. They wait behind the three dots,
+// no longer in the row (owner, 2026-11-12), so they are never shortened.
+// Empty when nothing heavy is known.
+function heavyWordsOf(known: ProjectBandFacts): string {
   const heavy = known.repo === null ? 0 : (known.heavy ?? 0)
 
   if (heavy <= 0) {
     return ''
   }
 
-  return isShort ? `${heavy} heavy` : countOf(heavy, 'heavy file')
+  return countOf(heavy, 'heavy file')
 }
 
 // Push carries the count of commits waiting, after a middle dot, as Go commit
@@ -1769,6 +1771,8 @@ function planOf(
     moreHasUpdate: false,
   }
   let fixed = 0
+  // The heavy things wait behind More, so they alone are a reason for it.
+  const heavyWords = heavyWordsOf(known)
 
   for (const step of steps) {
     // Fast mode is the first button behind More when the row is crowded, Go
@@ -1788,16 +1792,13 @@ function planOf(
       ...(isFastInRow ? [fastLabel] : []),
       ...(canPush ? [pushLabelOf(state, known)] : []),
       ...(step.hasUpdate ? [updateLabelOf(state, known)] : []),
-      ...(more.length > 0 || moreHasUpdate ? [MORE_LABEL] : []),
+      ...(more.length > 0 || moreHasUpdate || heavyWords !== '' ? [MORE_LABEL] : []),
     ]
-
-    const heavyWords = heavyWordsOf(known, step.isShort)
 
     fixed =
       buttonsWidth(buttons) +
       fillCells +
       quietCells +
-      (heavyWords === '' ? 0 : heavyWords.length + 1) +
       (askedOf(known).length > 0 ? ASKED_GAP_CELLS : 0)
     plan = {
       name: fullName,
@@ -1844,13 +1845,12 @@ function keysOf(known: ProjectBandFacts, state: ProjectBandBusy, columns: number
 
   return [
     ...askedOf(known).map((_word, at) => `asked-${at}`),
-    ...(plan.heavy !== '' ? ['heavy'] : []),
     ...(plan.backupQuiet !== '' ? ['backup-age'] : []),
     ...(plan.hasCommit ? ['go-commit'] : []),
     ...(pushTarget(known.repo) !== null ? ['push'] : []),
     ...(plan.hasFast ? [keyOf(plan.fastPhrase)] : []),
     ...(plan.hasUpdate ? ['update-plugin'] : []),
-    ...(plan.more.length > 0 || plan.moreHasUpdate ? ['more'] : []),
+    ...(plan.more.length > 0 || plan.moreHasUpdate || plan.heavy !== '' ? ['more'] : []),
   ]
 }
 
@@ -2048,7 +2048,7 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
   const files = known.repo?.files ?? null
   const isPushArmed = look.open !== null && look.open.kind === 'push'
   const canPush = isPushArmed || pushTarget(known.repo) !== null
-  const hasMore = plan.more.length > 0 || plan.moreHasUpdate
+  const hasMore = plan.more.length > 0 || plan.moreHasUpdate || plan.heavy !== ''
   const isHeavy = known.repo !== null && (known.heavy ?? 0) > 0
   const server = known.repo !== null ? (known.server ?? null) : null
   // Nothing waiting reads quieter than something waiting.
@@ -2192,11 +2192,6 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
         )}
         {plan.fill !== '' && table.Svg !== undefined && (
           <table.Svg source={GROUP_GAP_SVG} alt={GROUP_GAP_ALT} width={GROUP_GAP_PIXELS} height={8} />
-        )}
-        {plan.heavy !== '' && (
-          <Box flexShrink={0}>
-            <Button key="heavy" plain label={plan.heavy} onPress={() => acts.recheckHeavy()} />
-          </Box>
         )}
         {plan.words !== '' && (
           <Box flexShrink={1}>
@@ -2374,6 +2369,7 @@ function drawMore(
 ): RenderElement {
   const { Box, Button } = table
   const name = labelOf(look.known)
+  const heavy = heavyWordsOf(look.known)
 
   // The logo and the name stay at the top, however many rows the buttons wrap
   // onto (owner, 2026-11-05).
@@ -2391,6 +2387,14 @@ function drawMore(
         flexGrow={1}
         flexShrink={1}
       >
+        {/* The heavy things wait here, first in the list, and not in the row
+            (owner, 2026-11-12). A press lists them again. */}
+        {heavy !== '' &&
+          spacedInMore(
+            table,
+            'heavy',
+            <Button key="heavy" label={heavy} onPress={() => acts.recheckHeavy()} />,
+          )}
         {open.phrases
           .filter(phrase => phrase !== UPDATE_SHORTCUT)
           .map(phrase =>
@@ -2874,9 +2878,15 @@ function startHeavyPass($: Dollar, top: string, isAsked = false): void {
 }
 
 // A press on the heavy words lists again, at once. The listing runs once per
-// half hour on its own, so without this the row goes on naming a heavy file
+// half hour on its own, so without this the list goes on naming a heavy file
 // for up to half an hour after it is gone.
-async function recheckHeavy($: Dollar): Promise<void> {
+async function recheckHeavy($: Dollar, columns: number): Promise<void> {
+  // Pressed in More: the list has done its job and the row comes back.
+  if ((await read($, ask)) !== null) {
+    await closeAsk($)
+    await ringBack($, ['more'], columns)
+  }
+
   const top = (await read($, facts))?.repo?.top ?? null
 
   if (top === null) {
@@ -3714,7 +3724,7 @@ async function askMore($: Dollar, phrases: string[], hasUpdate: boolean): Promis
   const first = phrases[0]
 
   await writeAsk($, { kind: 'more', phrases, hasUpdate, askedAt })
-  await moveRing($, first === undefined ? 'update-plugin' : keyOf(first))
+  await moveRing($, first !== undefined ? keyOf(first) : hasUpdate ? 'update-plugin' : 'heavy')
 }
 
 // Cancel, and Back in More: the question goes and the row comes back.
@@ -4081,7 +4091,7 @@ export function registerProjectBand(on: On): void {
             hideBackup: () =>
               hideBackup($).catch(error => note($, 'hiding the backup words failed', error)),
             recheckHeavy: () =>
-              recheckHeavy($).catch(error =>
+              recheckHeavy($, columns).catch(error =>
                 note($, 'listing the heavy files again failed', error),
               ),
             confirmPush: () =>
