@@ -126,7 +126,9 @@ own window, in the desktop app and in the terminal, in every folder you open.
   answers, grey while it does not, whoever started the server.
 - Buttons. One for each kit shortcut the project's `CLAUDE.md` carries:
   `Go commit` in the row, only while files wait, with their count inside it
-  (`Go commit · 1`), the rest behind the three dots, where `Compact` always
+  (`Go commit · 1`, and `Go commit · 3 · 7 e` where seven of them were
+  changed elsewhere, by another chat or by hand, and not by this
+  conversation), the rest behind the three dots, where `Compact` always
   waits too and runs `/compact`. `Go conversation` waits there as well, and
   while that mode is on, `Conversations off` stands in the row where
   `Fast mode` does. When that list wraps onto a second row, the

@@ -16,7 +16,14 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On, RenderElement } from 'claude-code'
 import type { Engine, MockClock } from 'claude-code/testing'
 
-import { buttonsOfConversation, sessionLeftOf, sessionRing, sessionTipOf } from '../hooks/Project-band'
+import {
+  buttonsOfConversation,
+  changedPathsIn,
+  sessionLeftOf,
+  sessionRing,
+  sessionTipOf,
+  wroteNothing,
+} from '../hooks/Project-band'
 
 const PLUGIN = 'project-os'
 const SURFACES = ['terminal', 'desktop'] as const
@@ -94,6 +101,14 @@ type World = {
   slow: Record<string, number>
   /** True when the list of changed files is longer than the engine reads. */
   isStatusCut: boolean
+  /** The conversation's id, as Claude Code names it; '' when it does not say. */
+  chat: string
+  /** How many prompts the conversation holds. */
+  turns: number
+  /** When each file or folder was last written, by path; one not listed cannot be read. */
+  written: Record<string, number>
+  /** What one of the conversation's tools does to the world while it runs. */
+  duringTool: ((now: number) => void) | null
   plugin: {
     dir: string
     isClone: boolean
@@ -212,6 +227,10 @@ function worldOf(changes: Partial<World> = {}): World {
     silent: [],
     slow: {},
     isStatusCut: false,
+    chat: 'chat-1',
+    turns: 0,
+    written: {},
+    duringTool: null,
     plugin: {
       dir: 'C:\\ClaudeConfigs\\Darrow\\skills\\projectos',
       isClone: true,
@@ -426,7 +445,23 @@ function install(on: On, changes: Partial<World> = {}): Kit {
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('classic.SessionStart', () => ({}))
   on('session.root', () => ({ value: world.folder }))
+  on('session.id', () => ({ value: world.chat }))
+  on('session.turns', () => ({ value: world.turns }))
   on('session.messages', () => ({ value: world.messages }))
+  // A tool of the conversation: it does what the test gave it to do, at
+  // the moment the test's clock shows.
+  on('tool.call', async () => {
+    world.duringTool?.(await clock.now())
+
+    return { result: 'done' }
+  })
+  on('fs.stat', (_, e) => {
+    const found = Object.entries(world.written).find(([path]) => isAt(e.path, path))
+
+    return found === undefined
+      ? { deny: `ENOENT: no such file or directory, stat '${e.path}'` }
+      : { value: { kind: 'file' as const, size: 1, mtimeMs: found[1], isLink: false } }
+  })
   on('turn.complete', (_, e) => ({ text: e.answer }))
   on('turn.step', async function* (_, e) {
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: world.stop, usage: null }
@@ -1123,6 +1158,303 @@ describe('what is waiting', () => {
       await ui.unmount()
     })
   }
+})
+
+// Go commit counts apart the files this conversation did not change, with an
+// "e" for elsewhere (owner, 2026-11-12). A file is the conversation's own
+// when it was last written while one of its tools ran.
+describe('whose the waiting files are', () => {
+  // The file git names on each line of the world's status, by its number.
+  const fileOf = (n: number): string =>
+    `D:/Work/Site/${['src/page', 'new', 'clash', 'notes/new'][n % 4]} ${n}.txt`
+  // Another chat wrote these an hour before this session started.
+  const writtenBefore = (kit: Kit, count: number): void => {
+    for (let n = 0; n < count; n += 1) {
+      kit.world.written[fileOf(n)] = startOfTime - 3_600_000
+    }
+  }
+  // One of this conversation's tools runs, and writes the paths named.
+  const toolWrites = async ($: Engine, kit: Kit, paths: string[], tool = 'Bash'): Promise<void> => {
+    kit.world.duringTool = now => {
+      for (const path of paths) {
+        kit.world.written[path] = now
+      }
+    }
+    await $.tool.call({ tool, command: 'node build.mjs' } as never)
+    kit.world.duringTool = null
+  }
+  // Another chat writes the paths named, a minute after whatever came before.
+  const anotherChatWrites = async (kit: Kit, paths: string[]): Promise<void> => {
+    await kit.clock.advance(60_000)
+
+    const now = await kit.clock.now()
+
+    for (const path of paths) {
+      kit.world.written[path] = now
+    }
+  }
+  const commitOn = async (ui: Drawing): Promise<string | undefined> =>
+    (await buttonsOn(ui)).find(label => label.startsWith('Go commit'))
+
+  onEachSurface('files this conversation never wrote are counted with an e', async ($, on, surface) => {
+    const kit = install(on, { changed: 3 })
+
+    writtenBefore(kit, 3)
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 3 e', '\u22ee'])
+    await ui.unmount()
+  })
+
+  onEachSurface('a file one of its tools wrote is its own, and the two counts stand apart', async ($, on, surface) => {
+    const kit = install(on, { changed: 3 })
+
+    writtenBefore(kit, 3)
+    await start($, kit)
+    await kit.clock.advance(60_000)
+
+    kit.world.changed = 4
+    await toolWrites($, kit, [fileOf(3)])
+    await endTurn($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await buttonsOn(ui)).toEqual(['Go commit \u00b7 1 \u00b7 3 e', '\u22ee'])
+    await ui.unmount()
+  })
+
+  test('with every waiting file its own, the count reads as it always did', async ($, on) => {
+    const kit = install(on)
+
+    await start($, kit)
+    await kit.clock.advance(60_000)
+
+    kit.world.changed = 2
+    await toolWrites($, kit, [fileOf(0), fileOf(1)])
+    await endTurn($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    expect(await commitOn(ui)).toBe('Go commit \u00b7 2')
+    await ui.unmount()
+  })
+
+  test('a file another chat writes later joins the e, and one this conversation writes again leaves it', async ($, on) => {
+    const kit = install(on, { changed: 3 })
+
+    writtenBefore(kit, 3)
+    await start($, kit)
+    await kit.clock.advance(60_000)
+
+    kit.world.changed = 4
+    await toolWrites($, kit, [fileOf(3)])
+    await endTurn($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    await anotherChatWrites(kit, [fileOf(4)])
+    kit.world.changed = 5
+    await endTurn($, kit)
+    expect(await commitOn(ui)).toBe('Go commit \u00b7 1 \u00b7 4 e')
+
+    // This conversation writes a file the other chat had changed: both
+    // changed it now, and it is counted as this conversation's.
+    await kit.clock.advance(60_000)
+    await toolWrites($, kit, [fileOf(0)])
+    await endTurn($, kit)
+    expect(await commitOn(ui)).toBe('Go commit \u00b7 2 \u00b7 3 e')
+
+    // What the other chat writes again after that stays this conversation's too.
+    await anotherChatWrites(kit, [fileOf(0)])
+    await endTurn($, kit)
+    expect(await commitOn(ui)).toBe('Go commit \u00b7 2 \u00b7 3 e')
+
+    // Committed files leave both counts.
+    kit.world.changed = 0
+    await endTurn($, kit)
+    expect(await commitOn(ui)).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('a conversation already at work when first met takes what waits as its own', async ($, on) => {
+    const kit = install(on, { changed: 3, turns: 5 })
+
+    writtenBefore(kit, 3)
+    await start($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    expect(await commitOn(ui)).toBe('Go commit \u00b7 3')
+
+    // From here on it is followed like any other.
+    await anotherChatWrites(kit, [fileOf(3)])
+    kit.world.changed = 4
+    await endTurn($, kit)
+    expect(await commitOn(ui)).toBe('Go commit \u00b7 3 \u00b7 1 e')
+    await ui.unmount()
+  })
+
+  test('what the conversation changed is kept for a window closed and opened again', async ($, on) => {
+    const kit = install(on, { changed: 3 })
+
+    writtenBefore(kit, 3)
+    await start($, kit)
+    await kit.clock.advance(60_000)
+
+    kit.world.changed = 4
+    await toolWrites($, kit, [fileOf(3)])
+    await endTurn($, kit)
+
+    // The window opens again on the same conversation, which holds prompts
+    // by now: the record decides, not a guess.
+    kit.world.turns = 4
+    await kit.clock.advance(600_000)
+    await start($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    expect(await commitOn(ui)).toBe('Go commit \u00b7 1 \u00b7 3 e')
+    await ui.unmount()
+  })
+
+  test('another conversation in the same window starts with nothing of its own', async ($, on) => {
+    const kit = install(on)
+
+    await start($, kit)
+    await kit.clock.advance(60_000)
+
+    kit.world.changed = 2
+    await toolWrites($, kit, [fileOf(0), fileOf(1)])
+    await endTurn($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    expect(await commitOn(ui)).toBe('Go commit \u00b7 2')
+
+    kit.world.chat = 'chat-2'
+    await kit.clock.advance(60_000)
+    await $.classic.SessionStart({ source: 'clear', cwd: kit.world.folder })
+    await kit.clock.settle()
+    expect(await commitOn(ui)).toBe('Go commit \u00b7 2 e')
+    await ui.unmount()
+  })
+
+  test('a file whose time cannot be read is never called another chat\'s', async ($, on) => {
+    const kit = install(on, { changed: 3 })
+
+    writtenBefore(kit, 1)
+    await start($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    expect(await commitOn(ui)).toBe('Go commit \u00b7 2 \u00b7 1 e')
+    await ui.unmount()
+  })
+
+  test('a deleted file is read by the folder it was in', async ($, on) => {
+    const kit = install(on, { changed: 1 })
+
+    kit.world.written['D:/Work/Site/src'] = startOfTime - 3_600_000
+    await start($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    expect(await commitOn(ui)).toBe('Go commit \u00b7 1 e')
+
+    // This conversation deletes another in the same folder: the folder is
+    // written by its tool.
+    await kit.clock.advance(60_000)
+    await toolWrites($, kit, ['D:/Work/Site/src'])
+    await endTurn($, kit)
+    expect(await commitOn(ui)).toBe('Go commit \u00b7 1')
+    await ui.unmount()
+  })
+
+  test('a tool that hands its work on gives no time of its own', async ($, on) => {
+    const kit = install(on, { changed: 3 })
+
+    writtenBefore(kit, 3)
+    await start($, kit)
+    await kit.clock.advance(60_000)
+
+    // Another chat writes while this conversation's agent is at work.
+    kit.world.changed = 4
+    await toolWrites($, kit, [fileOf(3)], 'Agent')
+    await endTurn($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    expect(await commitOn(ui)).toBe('Go commit \u00b7 4 e')
+    await ui.unmount()
+  })
+
+  test('with too many files to ask about, nothing is said about whose they are', async ($, on) => {
+    const kit = install(on, { changed: 301 })
+
+    writtenBefore(kit, 301)
+    await start($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    expect(await commitOn(ui)).toBe('Go commit \u00b7 301')
+
+    kit.world.changed = 300
+    await endTurn($, kit)
+    expect(await commitOn(ui)).toBe('Go commit \u00b7 300 e')
+    await ui.unmount()
+  })
+
+  test('a project where Claude Code names no conversation is followed all the same', async ($, on) => {
+    const kit = install(on, { changed: 3, chat: '' })
+
+    writtenBefore(kit, 3)
+    await start($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    expect(await commitOn(ui)).toBe('Go commit \u00b7 3 e')
+    await ui.unmount()
+  })
+
+  test('the name of each changed file is read from git\'s status', () => {
+    const hash = 'c'.repeat(40)
+    const out = [
+      '# branch.head main',
+      `1 .M N... 100644 100644 100644 ${hash} ${hash} src/a page.txt`,
+      `2 R. N... 100644 100644 100644 ${hash} ${hash} R100 new name.txt\told name.txt`,
+      `u UU N... 100644 100644 100644 100644 ${hash} ${hash} ${hash} clash.txt`,
+      '? notes/new.txt',
+      // Hebrew letters, the way git writes them, and a quote inside a name.
+      '? "notes/\\327\\251\\327\\234\\327\\225\\327\\235.txt"',
+      '? "a \\"b\\".txt"',
+      // Lines that hold no name, or one that cannot be read.
+      '1 .M N... 100644',
+      '? "cut short',
+      '',
+    ].join('\n')
+
+    expect(changedPathsIn(out)).toEqual([
+      { name: 'src/a page.txt', onDisk: 'src/a page.txt' },
+      { name: 'new name.txt', onDisk: 'new name.txt' },
+      { name: 'clash.txt', onDisk: 'clash.txt' },
+      { name: 'notes/new.txt', onDisk: 'notes/new.txt' },
+      {
+        name: '"notes/\\327\\251\\327\\234\\327\\225\\327\\235.txt"',
+        onDisk: 'notes/\u05e9\u05dc\u05d5\u05dd.txt',
+      },
+      { name: '"a \\"b\\".txt"', onDisk: 'a "b".txt' },
+      { name: '"cut short', onDisk: null },
+    ])
+  })
+
+  test('a call refused, or held read-only by its tool, wrote nothing', () => {
+    expect(wroteNothing({ deny: 'not allowed' })).toBe(true)
+    expect(wroteNothing({ result: 'listing', isReadOnly: true } as never)).toBe(true)
+    expect(wroteNothing({ result: 'done' } as never)).toBe(false)
+    expect(wroteNothing({ result: 'failed', isError: true } as never)).toBe(false)
+  })
 })
 
 describe('the reply time under the message box', () => {

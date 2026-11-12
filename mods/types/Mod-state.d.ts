@@ -37,6 +37,12 @@ export type ProjectBandRepo = {
   branch: string | null
   /** Files with uncommitted changes; null when git did not answer in time. */
   files: number | null
+  /**
+   * How many of those files this conversation did not change: another chat's
+   * work, or the owner's own hand. Null, or absent in a value an earlier
+   * version kept, when that is not known, and read the same as none.
+   */
+  others?: number | null
   online: ProjectBandOnline
   /**
    * True when a push from the row does everything a push from the owner's git

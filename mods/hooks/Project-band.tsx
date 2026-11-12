@@ -58,6 +58,8 @@ const EVERY_TURN_END = { isAborted: [true, false] } as const
 const EVERY_PROMPT = { wait: [true, false] } as const
 // Every step of a turn carries its turn's id.
 const EVERY_STEP = { turnId: /^/ } as const
+// Every tool call names its tool.
+const EVERY_TOOL = { tool: /^/ } as const
 // Every measurement names at least one unit that moved.
 const EVERY_MEASURE = { changed: ['context', 'rateLimits', 'cost'] } as const
 // A conversation that takes the place of another in the same window: after
@@ -181,6 +183,30 @@ const FILES_LONGEST_WAIT_MS = 15 * 60_000
 // How long the rest of a pass waits for the count before it writes what it
 // already knows. The count follows when it lands.
 const FILES_GRACE_MS = 1_500
+
+// Whose the waiting files are (owner, 2026-11-12): a file is this
+// conversation's when it was last written while one of this conversation's
+// tools ran. Some disks keep a file's time as coarsely as two seconds, so a
+// tool's time is taken that much wider at both ends.
+const OWN_SLACK_MS = 2_000
+// The tool times kept between two counts, at most: past it the two oldest
+// that have ended are joined into one.
+const OWN_TIMES_KEPT = 200
+// How many waiting files one count asks the disk about, at most. With more
+// than that to ask, nothing is said about whose they are.
+const OWN_ASKED_AT_ONCE = 300
+// What a conversation changed is kept between sessions under its own id, so
+// a window closed and opened again still knows. A record nothing has
+// touched for this long is cleared away.
+const OWN_KEY = 'band.own:'
+const OWN_KEPT_MS = 30 * DAY_MS
+// A record longer than this is not kept: the store is small and shared by
+// every window. Such a conversation is then met again as one already at work.
+const OWN_KEPT_PATHS = 1_000
+// Tools that write no file themselves and can take minutes: some hand the
+// work to an agent, whose tools are heard on their own, and the others wait
+// for the owner.
+const NOT_WRITERS = new Set(['Agent', 'Task', 'Skill', 'AskUserQuestion', 'ExitPlanMode'])
 
 // A yes this soon after its question is the second half of a double press.
 // The question may be drawn right where the button was, so without this a
@@ -315,7 +341,19 @@ type PluginCheck = {
 }
 
 /** The repository without its count of files: all a press needs to know. */
-type BranchPart = Omit<ProjectBandRepo, 'files'>
+type BranchPart = Omit<ProjectBandRepo, 'files' | 'others'>
+
+/** A count of the waiting files, and how many of them another chat changed. */
+type Counted = { files: number; others: number | null }
+
+/** What the row shows before a count has landed. */
+const NOT_COUNTED: { files: number | null; others: number | null } = { files: null, others: null }
+
+/** When one of this conversation's tools ran; one still running has no end yet. */
+type ToolTime = { from: number; to: number | null }
+
+/** The waiting files this conversation changed, as git names them. */
+type OwnFiles = { id: string; top: string; paths: Set<string> }
 
 /** What a button does. A promise is handed back to the engine, which waits. */
 type Acts = {
@@ -918,6 +956,96 @@ function filesIn(out: string): number {
   return out.split(/\r?\n/).filter(line => /^[12u?] /.test(line)).length
 }
 
+/** A changed file as git names it, and its name on the disk when that can be read. */
+export type ChangedPath = { name: string; onDisk: string | null }
+
+// Git writes a name with unusual letters in quotes, each such letter as its
+// bytes in octal. The name as the disk has it, or null when it cannot be read.
+function unquoted(name: string): string | null {
+  if (!name.startsWith('"')) {
+    return name
+  }
+
+  if (name.length < 2 || !name.endsWith('"')) {
+    return null
+  }
+
+  const body = name.slice(1, -1)
+  const escapes: Record<string, string> = { n: '\n', t: '\t', '"': '"', '\\': '\\' }
+  let bytes = ''
+
+  try {
+    for (let at = 0; at < body.length; at += 1) {
+      if (body[at] !== '\\') {
+        const letter = String.fromCodePoint(body.codePointAt(at) ?? 0)
+
+        bytes += encodeURIComponent(letter)
+        at += letter.length - 1
+        continue
+      }
+
+      const octal = /^[0-7]{3}/.exec(body.slice(at + 1))
+
+      if (octal !== null) {
+        bytes += `%${Number.parseInt(octal[0], 8).toString(16).padStart(2, '0')}`
+        at += 3
+        continue
+      }
+
+      const plain = escapes[body[at + 1] ?? '']
+
+      if (plain === undefined) {
+        return null
+      }
+
+      bytes += encodeURIComponent(plain)
+      at += 1
+    }
+
+    return decodeURIComponent(bytes)
+  } catch {
+    return null
+  }
+}
+
+// The file of each line of that status: its name follows a fixed count of
+// fields, and a renamed file's old name follows a tab.
+export function changedPathsIn(out: string): ChangedPath[] {
+  const found: ChangedPath[] = []
+
+  for (const line of out.split(/\r?\n/)) {
+    const kind = line[0]
+    const fields = kind === '1' ? 8 : kind === '2' ? 9 : kind === 'u' ? 10 : kind === '?' ? 1 : 0
+    let isWhole = fields > 0 && line[1] === ' '
+    let cut = 0
+
+    for (let field = 0; isWhole && field < fields; field += 1) {
+      const space = line.indexOf(' ', cut)
+
+      isWhole = space >= 0
+      cut = space + 1
+    }
+
+    if (!isWhole) {
+      continue
+    }
+
+    const rest = line.slice(cut)
+    const name = kind === '2' ? (rest.split('\t')[0] ?? '') : rest
+
+    if (name !== '') {
+      found.push({ name, onDisk: unquoted(name) })
+    }
+  }
+
+  return found
+}
+
+/** True when a tool's call wrote no file: it was refused, or its tool held it read-only. */
+export function wroteNothing(result: { deny?: unknown; isReadOnly?: unknown }): boolean {
+  return result.deny !== undefined || result.isReadOnly === true
+}
+
 // How far the branch is ahead of its online copy, read from the words git's
 // own listing of branches uses: nothing when both are level, "ahead 2",
 // "behind 1", or both. Anything else is unknown and never read as zero:
@@ -1192,6 +1320,246 @@ async function branchPartOf(
   return { top: where.top, branch: named.branch, online: named.online, canPushHere }
 }
 
+// WHOSE THE WAITING FILES ARE (owner, 2026-11-12). Go commit says how many
+// of the waiting files this conversation did not change, with an "e" for
+// elsewhere: another chat's work, or the owner's own hand. A file is this
+// conversation's when it was last written while one of this conversation's
+// tools ran. A file whose time cannot be read is never called another
+// chat's: the mark is put only on what was read.
+
+type OwnKept = { top: string; paths: string[]; at: number }
+
+function asOwnKept(value: unknown): OwnKept | null {
+  if (typeof value !== 'object' || value === null) {
+    return null
+  }
+
+  const { top, paths, at } = value as Record<string, unknown>
+
+  if (typeof top !== 'string' || typeof at !== 'number' || !Array.isArray(paths)) {
+    return null
+  }
+
+  return { top, at, paths: paths.filter((path): path is string => typeof path === 'string') }
+}
+
+// The conversation's id, or nothing when Claude Code does not say: what the
+// conversation changed is then known for as long as this copy of the code runs.
+async function conversationOf($: Dollar): Promise<string> {
+  try {
+    return nonEmpty(await $.session.id()) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+async function keepOwn($: Dollar, own: OwnFiles): Promise<void> {
+  if (own.id === '') {
+    return
+  }
+
+  try {
+    if (own.paths.size > OWN_KEPT_PATHS) {
+      await $.store.delete(OWN_KEY + own.id)
+
+      return
+    }
+
+    await $.store.set(OWN_KEY + own.id, {
+      top: own.top,
+      paths: [...own.paths],
+      at: await $.clock.now(),
+    })
+  } catch (error) {
+    note($, 'keeping what this conversation changed failed', error)
+  }
+}
+
+// The records of conversations nobody came back to are cleared, once per
+// copy of the code and never in the way of a count.
+async function clearOldOwn($: Dollar, id: string): Promise<void> {
+  const now = await $.clock.now()
+
+  for (const key of await $.store.keys()) {
+    if (!key.startsWith(OWN_KEY) || key === OWN_KEY + id) {
+      continue
+    }
+
+    const kept = asOwnKept(await $.store.get(key))
+
+    if (kept === null || now - kept.at > OWN_KEPT_MS) {
+      await $.store.delete(key)
+    }
+  }
+}
+
+// What this conversation changed, read once per conversation and repository.
+// A conversation first met with prompts already in it was at work before the
+// row kept track: what waits then is taken as its own, so nothing is called
+// another chat's on a guess. A new conversation starts with nothing.
+async function ownOf($: Dollar, top: string, waiting: readonly string[]): Promise<OwnFiles> {
+  const id = await conversationOf($)
+  const held = work.own
+
+  if (held !== null && held.id === id && isSamePath(held.top, top)) {
+    return held
+  }
+
+  work.elsewhere = new Set()
+
+  let kept: OwnKept | null = null
+
+  if (id !== '') {
+    try {
+      kept = asOwnKept(await $.store.get(OWN_KEY + id))
+    } catch (error) {
+      note($, 'reading what this conversation changed failed', error)
+    }
+  }
+
+  let own: OwnFiles
+
+  if (kept !== null && isSamePath(kept.top, top)) {
+    own = { id, top, paths: new Set(kept.paths) }
+  } else {
+    // A count of prompts that cannot be read is taken as already at work.
+    let turns = 1
+
+    try {
+      turns = await $.session.turns()
+    } catch {
+      // Claude Code did not say.
+    }
+
+    own = { id, top, paths: new Set(turns > 0 ? waiting : []) }
+    await keepOwn($, own)
+  }
+
+  work.own = own
+
+  if (!work.isOwnCleared && id !== '') {
+    work.isOwnCleared = true
+    inBackground($, 'clearing old records failed', () => clearOldOwn($, id))
+  }
+
+  return own
+}
+
+// When a waiting file was last written: its own time, or its folder's when
+// the file is gone, since deleting a file writes its folder. Null when
+// neither can be read.
+async function writtenAt($: Dollar, top: string, onDisk: string | null): Promise<number | null> {
+  if (onDisk === null) {
+    return null
+  }
+
+  try {
+    return (await $.fs.stat(joinPath(top, onDisk))).mtimeMs
+  } catch {
+    // Gone, or not to be read: its folder is asked next.
+  }
+
+  const cut = onDisk.lastIndexOf('/')
+
+  try {
+    return (await $.fs.stat(cut < 0 ? top : joinPath(top, onDisk.slice(0, cut)))).mtimeMs
+  } catch {
+    return null
+  }
+}
+
+// How many of the waiting files another chat changed, or null when there are
+// too many to ask the disk about. `times` are the times this conversation's
+// tools ran since the last count.
+async function othersOf(
+  $: Dollar,
+  top: string,
+  changed: readonly ChangedPath[],
+  times: readonly { from: number; to: number }[],
+): Promise<number | null> {
+  const names = changed.map(one => one.name)
+  const own = await ownOf($, top, names)
+  const waiting = new Set(names)
+  let isOwnChanged = false
+
+  // A file that waits no more is forgotten on both sides.
+  for (const path of [...own.paths]) {
+    if (!waiting.has(path)) {
+      own.paths.delete(path)
+      isOwnChanged = true
+    }
+  }
+
+  for (const path of [...work.elsewhere]) {
+    if (!waiting.has(path)) {
+      work.elsewhere.delete(path)
+    }
+  }
+
+  // A file is asked about once, and again only after this conversation's
+  // tools ran: they may have written it since.
+  const asked = changed.filter(
+    one => !own.paths.has(one.name) && (times.length > 0 || !work.elsewhere.has(one.name)),
+  )
+
+  if (asked.length > OWN_ASKED_AT_ONCE) {
+    if (isOwnChanged) {
+      await keepOwn($, own)
+    }
+
+    return null
+  }
+
+  const written = await Promise.all(asked.map(one => writtenAt($, top, one.onDisk)))
+
+  asked.forEach((one, at) => {
+    const when = written[at] ?? null
+    const isOwn =
+      when === null ||
+      times.some(time => when >= time.from - OWN_SLACK_MS && when <= time.to + OWN_SLACK_MS)
+
+    if (isOwn) {
+      own.paths.add(one.name)
+      work.elsewhere.delete(one.name)
+      isOwnChanged = true
+    } else {
+      work.elsewhere.add(one.name)
+    }
+  })
+
+  if (isOwnChanged) {
+    await keepOwn($, own)
+  }
+
+  return work.elsewhere.size
+}
+
+// The list of tool times is kept short: past its length the two oldest that
+// have ended are joined, so what they covered stays covered.
+function noteToolTime(time: ToolTime): void {
+  work.toolTimes.push(time)
+
+  if (work.toolTimes.length <= OWN_TIMES_KEPT) {
+    return
+  }
+
+  const [first, second] = work.toolTimes.filter(one => one.to !== null)
+
+  if (first === undefined || second === undefined) {
+    work.toolTimes.shift()
+
+    return
+  }
+
+  first.from = Math.min(first.from, second.from)
+  first.to = Math.max(first.to ?? 0, second.to ?? 0)
+  work.toolTimes = work.toolTimes.filter(one => one !== second)
+}
+
+function dropToolTime(time: ToolTime): void {
+  work.toolTimes = work.toolTimes.filter(one => one !== time)
+}
+
 // How many files have uncommitted changes. Two choices in this status. It
 // takes no optional lock: a status run in the background must not hold the
 // index while the session commits, or that commit could fail. And it lists
@@ -1199,7 +1567,7 @@ async function branchPartOf(
 // one. After a count that ran out of time the next ones are skipped for a
 // while, longer each time, so a very large project is not asked again and
 // again for an answer it cannot give in time.
-async function filesOf($: Dollar, top: string): Promise<number | null> {
+async function filesOf($: Dollar, top: string): Promise<Counted | null> {
   try {
     const now = await $.clock.now()
 
@@ -1214,6 +1582,11 @@ async function filesOf($: Dollar, top: string): Promise<number | null> {
     if (wait > 0 && wait <= FILES_LONGEST_WAIT_MS) {
       return null
     }
+
+    // The times this conversation's tools ran, as they stand before git is
+    // asked: every file written in them is in git's answer.
+    const running = [...work.toolTimes]
+    const times = running.map(time => ({ from: time.from, to: time.to ?? now }))
 
     const asked = await git(
       $,
@@ -1236,7 +1609,28 @@ async function filesOf($: Dollar, top: string): Promise<number | null> {
     work.filesNotBefore = 0
 
     // A list too long to be read whole cannot be counted, so it is not.
-    return asked.code !== 0 || asked.isCut ? null : filesIn(asked.out)
+    if (asked.code !== 0 || asked.isCut) {
+      return null
+    }
+
+    let others: number | null = null
+
+    // Whose the files are is never in the way of their count. The times
+    // that had ended before git was asked are used up by this count.
+    try {
+      others = await othersOf($, top, changedPathsIn(asked.out), times)
+
+      if (others !== null) {
+        work.toolTimes = work.toolTimes.filter(
+          time => !(running.includes(time) && time.to !== null && time.to <= now),
+        )
+      }
+    } catch (error) {
+      note($, 'reading whose the files are failed', error)
+      others = null
+    }
+
+    return { files: filesIn(asked.out), others }
   } catch (error) {
     note($, 'counting the files failed', error)
 
@@ -1245,7 +1639,7 @@ async function filesOf($: Dollar, top: string): Promise<number | null> {
 }
 
 // One count at a time: a pass that finds one under way waits for that one.
-function countFiles($: Dollar, top: string): Promise<number | null> {
+function countFiles($: Dollar, top: string): Promise<Counted | null> {
   if (work.counting !== null && isSamePath(work.countingTop, top)) {
     return work.counting
   }
@@ -1266,26 +1660,26 @@ function countFiles($: Dollar, top: string): Promise<number | null> {
 // under way and the pass goes on without it.
 function countWithin(
   $: Dollar,
-  counting: Promise<number | null>,
+  counting: Promise<Counted | null>,
   ms: number,
-): Promise<{ isDone: boolean; files: number | null }> {
+): Promise<{ isDone: boolean; count: Counted | null }> {
   return new Promise(resolve => {
     let timer: { cancel: () => void } | null = null
 
     try {
-      timer = $.clock.after(ms, () => resolve({ isDone: false, files: null }))
+      timer = $.clock.after(ms, () => resolve({ isDone: false, count: null }))
     } catch {
       // No clock to wait on: the count alone decides.
     }
 
-    const done = (files: number | null): void => {
+    const done = (count: Counted | null): void => {
       try {
         timer?.cancel()
       } catch {
         // A timer that cannot be stopped fires into a settled promise.
       }
 
-      resolve({ isDone: true, files })
+      resolve({ isDone: true, count })
     }
 
     counting.then(done, () => done(null))
@@ -1614,11 +2008,26 @@ function buttonTextOf(
 
 // Go commit carries the count of files waiting, after a middle dot (owner,
 // 2026-10-03). With nothing waiting, or before git has answered, it reads the
-// phrase alone.
+// phrase alone. The files another chat changed are counted apart, with an
+// "e" for elsewhere (owner, 2026-11-12): "Go commit · 7 e" when none of the
+// waiting files is this conversation's, and "Go commit · 3 · 7 e" when
+// three of them are, this conversation's count first.
 function commitLabelOf(known: ProjectBandFacts): string {
   const files = known.repo?.files ?? 0
 
-  return files > 0 ? `${MAIN_SHORTCUT} · ${files}` : MAIN_SHORTCUT
+  if (files <= 0) {
+    return MAIN_SHORTCUT
+  }
+
+  const others = Math.min(files, Math.max(0, known.repo?.others ?? 0))
+
+  if (others === 0) {
+    return `${MAIN_SHORTCUT} · ${files}`
+  }
+
+  return others === files
+    ? `${MAIN_SHORTCUT} · ${others} e`
+    : `${MAIN_SHORTCUT} · ${files - others} · ${others} e`
 }
 
 function canCommitOf(known: ProjectBandFacts): boolean {
@@ -2504,7 +2913,7 @@ const work: {
   /** The push or update this copy of the code has in flight. */
   running: ProjectBandBusy
   /** The count of files under way, and the repository it counts. */
-  counting: Promise<number | null> | null
+  counting: Promise<Counted | null> | null
   countingTop: string
   /** How the last count ended decides when the next may start. */
   filesTop: string
@@ -2528,6 +2937,17 @@ const work: {
   lastStop: string | null
   /** Prompts entered so far: a read of the conversation started before one is stale. */
   prompts: number
+  /**
+   * The waiting files this conversation changed, with the conversation and
+   * the repository they belong to. Null until they are first read.
+   */
+  own: OwnFiles | null
+  /** The waiting files read as another chat's, as git names them. */
+  elsewhere: Set<string>
+  /** When this conversation's tools ran, since the last count used them. */
+  toolTimes: ToolTime[]
+  /** The records of old conversations were cleared by this copy of the code. */
+  isOwnCleared: boolean
 } = {
   startFolder: '',
   isSeen: false,
@@ -2557,6 +2977,10 @@ const work: {
   backupHidden: null,
   lastStop: null,
   prompts: 0,
+  own: null,
+  elsewhere: new Set(),
+  toolTimes: [],
+  isOwnCleared: false,
 }
 
 function note($: Dollar, what: string, error: unknown): void {
@@ -3065,11 +3489,13 @@ async function passRepo($: Dollar): Promise<void> {
     }
 
     const shown =
-      now.repo !== null && isSamePath(now.repo.top, part.top) ? now.repo.files : null
+      now.repo !== null && isSamePath(now.repo.top, part.top)
+        ? { files: now.repo.files, others: now.repo.others ?? null }
+        : NOT_COUNTED
 
     return {
       ...now,
-      repo: { ...part, files: counted.isDone ? counted.files : shown },
+      repo: { ...part, ...(counted.isDone ? (counted.count ?? NOT_COUNTED) : shown) },
       shortcuts,
       isUpdateByLink,
       hasKit,
@@ -3081,12 +3507,12 @@ async function passRepo($: Dollar): Promise<void> {
 
   if (!counted.isDone) {
     inBackground($, 'writing the count of files failed', async () => {
-      const files = await counting
+      const count = (await counting) ?? NOT_COUNTED
 
       await writeFacts($, now =>
         now === null || now.repo === null || !isSamePath(now.repo.top, part.top)
           ? now
-          : { ...now, repo: { ...now.repo, files } },
+          : { ...now, repo: { ...now.repo, ...count } },
       )
     })
   }
@@ -3252,9 +3678,11 @@ async function branchNow($: Dollar): Promise<BranchPart | null> {
     }
 
     const shown =
-      now.repo !== null && isSamePath(now.repo.top, part.top) ? now.repo.files : null
+      now.repo !== null && isSamePath(now.repo.top, part.top)
+        ? { files: now.repo.files, others: now.repo.others ?? null }
+        : NOT_COUNTED
 
-    return { ...now, repo: { ...part, files: shown } }
+    return { ...now, repo: { ...part, ...shown } }
   })
 
   return part
@@ -3798,6 +4226,15 @@ async function begin($: Dollar, isNewCode: boolean, keepsFast: boolean): Promise
     work.backupHidden = null
   }
 
+  // What a conversation changed belongs to that conversation: a new copy of
+  // the code, or another conversation in the window, reads it again from
+  // what was kept. A compaction goes on in the same one.
+  if (isNewCode || !keepsFast) {
+    work.own = null
+    work.elsewhere = new Set()
+    work.toolTimes = []
+  }
+
   await writeStart($)
   await setFast($, work.isFast)
   await setConversation($, work.isConversation)
@@ -3995,6 +4432,50 @@ export function registerProjectBand(on: On): void {
     }
 
     return next(e)
+  })
+
+  // When this conversation's tools ran: a waiting file last written in one
+  // of those times is this conversation's own, and Go commit counts the rest
+  // apart (owner, 2026-11-12). An agent's tools are heard here too. The time
+  // spans the owner's answer to a permission question, where one is asked.
+  // The call itself passes through untouched, whatever becomes of its note.
+  on('tool.call', EVERY_TOOL, async ($, e, next) => {
+    let time: ToolTime | null = null
+
+    try {
+      if (!NOT_WRITERS.has(e.tool)) {
+        time = { from: await $.clock.now(), to: null }
+        noteToolTime(time)
+      }
+    } catch {
+      time = null
+    }
+
+    let wrote = true
+
+    try {
+      const result = await next(e)
+
+      try {
+        wrote = !wroteNothing(result)
+      } catch {
+        // A result that cannot be read is taken as a write.
+      }
+
+      return result
+    } finally {
+      if (time !== null) {
+        try {
+          if (wrote) {
+            time.to = await $.clock.now()
+          } else {
+            dropToolTime(time)
+          }
+        } catch {
+          dropToolTime(time)
+        }
+      }
+    }
   })
 
   // Why the main loop's model stopped: a reply cut at the output limit, or
