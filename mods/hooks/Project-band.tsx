@@ -393,6 +393,11 @@ type RowPlan = {
   /** True from 80% full: the number is orange words and Compact follows it. */
   isFillHigh: boolean
   words: string
+  /**
+   * True when the words are longer than the room counted for them and the
+   * layout is left to cut them: the row then stays on one line.
+   */
+  isWordsCut: boolean
   /** The count of heavy things, as the words of a button behind More; empty when none. */
   heavy: string
   hasCommit: boolean
@@ -2076,6 +2081,10 @@ function sentOf(
 // Past that the layout cuts the words, down to a handful of cells and then
 // away, and when even the label and the buttons do not fit, the label's name
 // is cut. Push stays in every step.
+//
+// All of it is counted in cells, and a surface that draws in pixels can find
+// the row wider than the count said. The row then breaks onto a second line
+// (see drawRow). Only a row whose words the layout is cutting stays on one.
 function planOf(
   known: ProjectBandFacts,
   state: ProjectBandBusy,
@@ -2168,6 +2177,7 @@ function planOf(
     session: sessionText,
     isFillHigh,
     words: '',
+    isWordsCut: false,
     heavy: '',
     hasCommit: false,
     hasFast: false,
@@ -2215,6 +2225,7 @@ function planOf(
       session: sessionText,
       isFillHigh,
       words,
+      isWordsCut: false,
       heavy: heavyWords,
       hasCommit: step.hasCommit,
       hasFast: isFastInRow,
@@ -2244,6 +2255,8 @@ function planOf(
   return {
     ...plan,
     words,
+    // No step fitted them, so words that stay are longer than their room.
+    isWordsCut: words !== '',
     name: fullName.length <= room ? fullName : `${fullName.slice(0, room - 1)}\u2026`,
   }
 }
@@ -2492,8 +2505,21 @@ function drawRow(table: Table, look: Look, acts: Acts): RenderElement | null {
   // text, and the label and the words should sit level with it. The name
   // stays at the start of the row; the words and the buttons take the room
   // that is left and sit at its far end (owner, 2026-10-03).
+  //
+  // The row is planned in cells, and the surface that draws it may find it
+  // wider than the plan said: the answers were once drawn under the dot and
+  // the ring (owner, 2026-11-16). So the far end drops onto a second line
+  // where the row does not fit, and the surface decides that, not the plan.
+  // A row whose words the layout is cutting stays on one line: wrapping
+  // comes before shrinking, and the words would never be cut.
   return (
-    <Box flexDirection="row" alignItems="center" gap={1} paddingRight={look.reserve}>
+    <Box
+      flexDirection="row"
+      flexWrap={plan.isWordsCut ? 'nowrap' : 'wrap'}
+      alignItems="center"
+      gap={1}
+      paddingRight={look.reserve}
+    >
       {plan.name !== '' && drawLabel(table, plan.name)}
       {/* The answers to the reply's question, right after the name. */}
       {asked.length > 0 && (
@@ -4536,7 +4562,9 @@ export function registerProjectBand(on: On): void {
           // 2026-11-04). Measured on two screenshots, the desktop has a
           // fifth more room than its cells say, and everything the row draws
           // stays under four fifths of its estimate, so a fifth more budget
-          // never overflows. The terminal's cells are its own letters.
+          // never overflows. The terminal's cells are its own letters. It
+          // did overflow once, with three answers in the row (owner,
+          // 2026-11-16): the row breaks onto a second line then (drawRow).
           const reported = e.props.bodyColumns > 0 ? e.props.bodyColumns : 1_000
           const columns =
             Math.floor(e.surface === 'terminal' ? reported : reported * REMOTE_ROOM) -

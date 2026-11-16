@@ -4726,6 +4726,43 @@ describe('a narrow row', () => {
     await ui.unmount()
   })
 
+  // The row is planned in cells and drawn in pixels, so the surface may find
+  // it wider than the plan said: the answers were once drawn under the dot
+  // and the ring (owner, 2026-11-16). The far end drops onto a second line
+  // then, and the surface decides that, not the plan.
+  onEachSurface('breaks onto a second line where the surface finds it too wide', async ($, on, surface) => {
+    const kit = install(on, { changed: 3, ahead: 2 })
+
+    await start($, kit)
+
+    const ui = await bandOn($, surface)
+
+    expect(await ui.drawn()).toMatchObject({ type: 'Box', props: { flexWrap: 'wrap' } })
+    await ui.unmount()
+  })
+
+  // Wrapping comes before shrinking: a row that wrapped would never cut its
+  // words. So the row whose words the layout is cutting stays on one line.
+  onEachSurface('stays on one line while the layout cuts its words', async ($, on, surface) => {
+    const kit = install(on, { changed: 3, ahead: 2 })
+
+    await start($, kit)
+
+    const cut = await bandOn($, surface, width(surface, 36))
+
+    expect(await wordsOn(cut)).toBe('site-web | 3 to commit')
+    expect(await cut.drawn()).toMatchObject({ type: 'Box', props: { flexWrap: 'nowrap' } })
+    await cut.unmount()
+
+    // One cell fewer and the words are left out: nothing is being cut, and
+    // the row may break again.
+    const none = await bandOn($, surface, width(surface, 35))
+
+    expect(await wordsOn(none)).toBe('site-web')
+    expect(await none.drawn()).toMatchObject({ type: 'Box', props: { flexWrap: 'wrap' } })
+    await none.unmount()
+  })
+
   // The label is 8 cells and Push and More take 19. Beside them the words
   // need their own cell of space and at least 8 cells to say anything.
   onEachSurface('leaves the words out when too few cells are left to read them in', async ($, on, surface) => {
