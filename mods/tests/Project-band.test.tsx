@@ -4839,6 +4839,88 @@ describe('a new conversation in the same window', () => {
     expect(await buttonsOn(ui)).toEqual(['Approve', '\u22ee'])
     await ui.unmount()
   })
+
+  // The event above may never reach the plugin: one with more authority can
+  // send it on past (owner's picture, 2026-11-22, an account whose security
+  // plugin did, as the engine said in the transcript). A look at the row
+  // then finds the other conversation by itself.
+  const LOOK = {
+    hasSurvey: false,
+    isWorking: false,
+    maxRows: 12,
+    bodyColumns: 160,
+    scroll: { offset: 0, bodyRows: 12 },
+    view: {},
+  }
+  // A project whose rules carry a mode, and the words that switch it on.
+  const MODES = ['### `Go commit`', '### `FAST MODE` (also `FAST ON`)', '### `Go conversation`'].join('\n')
+  const said = (text: string) => ({ text, wait: false, origin: { kind: 'composer' as const } })
+
+  test('another conversation nobody announced is found by the next look', async ($, on) => {
+    const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': MODES }, changed: 3 })
+
+    await start($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    await $.prompt.submit(said('Go conversation'))
+    await kit.clock.settle()
+    expect(await buttonsOn(ui)).toContain('Conversations off')
+
+    // Another conversation takes the window, and no event says so.
+    kit.world.chat = 'chat-2'
+    kit.world.changed = 7
+    await ui.redraw(LOOK)
+    await kit.clock.settle()
+
+    // No turn ended and the clock did not move: the look alone did it. The
+    // files are counted again, and the last conversation's mode stayed behind.
+    const buttons = await buttonsOn(ui)
+
+    expect(buttons.some(label => label.startsWith('Go commit \u00b7 7'))).toBe(true)
+    expect(buttons).toContain('Fast mode')
+    expect(buttons).not.toContain('Conversations off')
+    await ui.unmount()
+  })
+
+  test('a look at the same conversation begins nothing again', async ($, on) => {
+    const kit = install(on, { files: { 'D:/Work/Site/CLAUDE.md': MODES }, changed: 3 })
+
+    await start($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    await $.prompt.submit(said('Go conversation'))
+    await kit.clock.settle()
+
+    const before = kit.world.git.length
+
+    await ui.redraw(LOOK)
+    await kit.clock.settle()
+    expect(kit.world.git.length).toBe(before)
+    expect(await buttonsOn(ui)).toContain('Conversations off')
+    await ui.unmount()
+  })
+
+  test('the other conversation is found once, however often the row is looked at', async ($, on) => {
+    const kit = install(on, { changed: 3 })
+
+    await start($, kit)
+
+    const ui = await bandOn($, 'desktop')
+
+    kit.world.chat = 'chat-2'
+    await ui.redraw(LOOK)
+    await kit.clock.settle()
+
+    const after = kit.world.git.length
+
+    await ui.redraw(LOOK)
+    await ui.redraw(LOOK)
+    await kit.clock.settle()
+    expect(kit.world.git.length).toBe(after)
+    await ui.unmount()
+  })
 })
 
 describe('a write Claude Code refuses for a moment', () => {

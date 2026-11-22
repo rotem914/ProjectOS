@@ -2974,6 +2974,16 @@ const work: {
   toolTimes: ToolTime[]
   /** The records of old conversations were cleared by this copy of the code. */
   isOwnCleared: boolean
+  /** The conversation the row last began in; empty until one is known. */
+  conversation: string
+  /** A start of the row has finished at least once. */
+  isBegun: boolean
+  /** How many starts of the row are under way. */
+  beginning: number
+  /** A look at the row is asking which conversation this is. */
+  isNoticing: boolean
+  /** A look found the window's values since they were last found gone. */
+  hadFacts: boolean
 } = {
   startFolder: '',
   isSeen: false,
@@ -3007,6 +3017,11 @@ const work: {
   elsewhere: new Set(),
   toolTimes: [],
   isOwnCleared: false,
+  conversation: '',
+  isBegun: false,
+  beginning: 0,
+  isNoticing: false,
+  hadFacts: false,
 }
 
 function note($: Dollar, what: string, error: unknown): void {
@@ -4235,6 +4250,25 @@ async function restoreButtons($: Dollar): Promise<void> {
 }
 
 async function begin($: Dollar, isNewCode: boolean, keepsFast: boolean): Promise<void> {
+  work.beginning += 1
+
+  try {
+    await beginNow($, isNewCode, keepsFast)
+  } finally {
+    // The conversation the row has begun in: a look at the row that finds
+    // another one begins it again (noticeConversation).
+    const id = await conversationOf($)
+
+    if (id !== '') {
+      work.conversation = id
+    }
+
+    work.isBegun = true
+    work.beginning -= 1
+  }
+}
+
+async function beginNow($: Dollar, isNewCode: boolean, keepsFast: boolean): Promise<void> {
   const passesBefore = work.passes
 
   await syncBusy($)
@@ -4274,6 +4308,41 @@ async function begin($: Dollar, isNewCode: boolean, keepsFast: boolean): Promise
   }
 }
 
+// Another conversation takes the window's place with no session start, after
+// /clear, a resume or a fork, and the window's values start empty then. The
+// classic hook says so where it is heard. A plugin with more authority can
+// send that event on past this one, though: an account's security plugin
+// did, and the engine said so in the transcript (owner's picture,
+// 2026-11-22). So every look at the row asks for itself. Another id is
+// another conversation, and the row begins again without the last one's
+// modes. The same id with its values gone is a compaction at most, and keeps
+// them. Nothing is asked before the first start has finished, or while one
+// is under way: a start begun too early would write over the modes the
+// session's own start is about to read. Values found gone begin the row once,
+// and not again until a look has found them back: values that cannot be
+// written must not start a pass at every look.
+async function noticeConversation($: Dollar): Promise<void> {
+  if (!work.isBegun || work.beginning > 0 || work.isNoticing) {
+    return
+  }
+
+  work.isNoticing = true
+
+  try {
+    const id = await conversationOf($)
+    const isOther = id !== '' && work.conversation !== '' && work.conversation !== id
+    const isEmptied = !isOther && work.hadFacts && (await read($, facts)) === null
+
+    // A start that began while the two were asked has it in hand.
+    if ((isOther || isEmptied) && work.beginning === 0) {
+      work.hadFacts = false
+      await begin($, false, !isOther)
+    }
+  } finally {
+    work.isNoticing = false
+  }
+}
+
 /**
  * Registers the band above the message box. The plugin's hooks module calls
  * this once, from its own `register(on)`.
@@ -4302,7 +4371,9 @@ export function registerProjectBand(on: On): void {
 
   // /clear, a resume, a compaction or a fork puts another conversation in
   // the same window with no session start. The window's values start empty
-  // then, so the label and the counts are gathered again at once.
+  // then, so the label and the counts are gathered again at once. Where this
+  // event is sent on past the plugin, the next look at the row notices the
+  // other conversation by itself (noticeConversation).
   on('classic.SessionStart', NEW_CONVERSATION, ($, e, next) => {
     try {
       work.startFolder = e.cwd
@@ -4538,6 +4609,7 @@ export function registerProjectBand(on: On): void {
         const known = e.props.hasSurvey ? null : await read($, facts)
 
         if (known !== null) {
+          work.hadFacts = true
           const reserve = e.surface === 'terminal' ? TERMINAL_MARK_CELLS : 0
           const resolved: Table = $.ui.resolve(e)
           // The terminal has no drawing to show, whatever its table holds.
@@ -4666,6 +4738,10 @@ export function registerProjectBand(on: On): void {
           // The next pass comes with the timer or the next finished turn.
         }
       }
+
+      // Every look also asks which conversation this is: the event that
+      // says so may never reach the plugin.
+      inBackground($, 'noticing another conversation failed', () => noticeConversation($))
     }
   })
 }
