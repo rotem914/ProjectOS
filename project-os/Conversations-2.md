@@ -105,6 +105,8 @@ Rule 20 holds: no headline and no divider above them, rule 8 aside.
 ### 28 · The first label names the point
 
 `Problem:` opens a point only when something is broken, wrong or at risk.
+A need, a goal or a piece not built yet is never a problem.
 `Status:` opens a point that says where a piece of work stands.
-`Decision:` opens a point that waits on a call of the owner's.
+`Decision:` opens a point that waits on the owner's call, and names that call.
+A plan's points open on `Decision:`, never on `Problem:`, whatever rule 10 lists.
 `Proposal:` and `Your workflow:` follow as before.
